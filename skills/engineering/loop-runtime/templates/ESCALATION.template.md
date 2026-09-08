@@ -48,6 +48,11 @@
   "lifetime": "goal",
   "allow": ["Bash(<exact rule>)"],
   "target_ledger": ".harness/run/capabilities.json"
+  // target_ledger is DERIVED from lifetime, never chosen separately:
+  //   "goal"      -> ".harness/run/capabilities.json"       (expires with run/)
+  //   "permanent" -> ".harness/knowledge/capabilities.json" (survives future runs)
+  // Proposing "goal" against the knowledge ledger makes the grant permanent in
+  // fact while calling itself temporary. Nothing downstream cross-checks it.
 }
 ```
 

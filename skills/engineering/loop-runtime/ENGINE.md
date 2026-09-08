@@ -311,6 +311,8 @@ You operate under permissions compiled by the Runtime from human-approved Capabi
 
 A denied-but-needed action is a discovery → reconcile → queued decision proposing the capability: intent (why), command (what), scope (where), lifetime (default: this goal), and the exact permission rule string for the human to approve. The human may narrow your proposal, never you widening a grant.
 
+**Lifetime determines the ledger; they are not two independent choices.** A `goal` lifetime targets `.harness/run/capabilities.json`, so the grant expires when `run/` is removed at completion. A `permanent` lifetime targets `.harness/knowledge/capabilities.json` and survives future runs, which is why it needs separate explicit justification. Proposing `goal` while pointing at the standing ledger would make the grant permanent in fact while calling itself temporary — observed in the field, and nothing downstream cross-checks the two fields, so a human approving quickly would not catch it.
+
 Workers are granted strictly less than you: no git, no build, no test, enforced by their own tool list rather than by instruction. Do not attempt to delegate around your own limits.
 
 ---
