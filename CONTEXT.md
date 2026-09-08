@@ -24,6 +24,14 @@ _Avoid_: Task, step, turn
 A set of tasks with no unmet dependencies and no overlapping Declared File Scope, executed by a single Iteration. A Phase may hold one task or many. Grouping tasks into Phases is what reduces the number of Iterations — and therefore the orientation cost paid per Iteration; running a Phase's tasks concurrently only reduces wall-clock. Not to be confused with the run's **Stage**.
 _Avoid_: Batch, sprint, stage, round
 
+**Model Tier**:
+One of two capability levels — Fast or Capable — assigned to a Worker's task at planning time by the arm's-length fan-out roles (never by the Worker itself), and always Capable for the Reviewer, the Verifier, and the Orchestrator. A failed Fast-tier attempt escalates the task to Capable for its remaining attempts. Named abstractly on purpose: neither `ENGINE.md` nor `POLICIES.md` ever names a vendor model.
+_Avoid_: Model, model choice (too generic — always say which tier)
+
+**Model Tier Map**:
+`.loop/models.json`, the one file mapping a Model Tier name to a concrete vendor model identifier. The engine reads it, never writes it. Porting to another engine means editing this file, not the specification — the same adapter-boundary principle as ADR-006, applied to model naming.
+_Avoid_: Model config, model settings (implies something richer than a two-entry mapping)
+
 **Stage**:
 Where a run currently sits in its lifecycle: bootstrap, executing, done-candidate, or escalated. Recorded in `STATE.md`. Named `Phase` in V1 and renamed to free that word for the task group (ADR-008).
 _Avoid_: Phase (its former name), state (overloaded)

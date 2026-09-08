@@ -36,6 +36,22 @@
   separate task and separate review/checkpoint overhead for no independent behavior.
 - Every task carries a **Declared File Scope**: the files it is permitted to write. Determine it during decomposition, because Phase grouping depends on it.
 
+## Model Tier Criteria
+
+Two tiers exist: **Fast** and **Capable**, mapped to concrete model identifiers in `.loop/models.json` — the only place a vendor model name appears. `ENGINE.md` and this file never name one directly.
+
+**Always Capable, no exception:** the Reviewer, the Verifier, the Orchestrator (the top-level Iteration itself, in every capacity), and every bootstrap fan-out analysis role (ADR-009). These are judgment-heavy roles by definition; tiering applies only to Worker implementation.
+
+**A Worker's task may be classified Fast only if all of the following hold**, assessed by the arm's-length planning roles at bootstrap or Phase re-grouping — never by the Worker itself, and never by the role that proposed the task:
+
+- its Declared File Scope is bounded and contains no shared/integration file (those already belong to no Worker, per ADR-008);
+- its acceptance criteria are exactly checkable — a literal output string, an exit code, an existing pattern to extend — not an open-ended judgment call ("well-structured", "handles edge cases" without enumerating them);
+- it embeds no architecture decision, no new external dependency, no new cross-module contract.
+
+Everything else defaults to **Capable**. When genuinely uncertain, classify Capable — the cost of a wrong Fast classification is a wasted attempt at the wrong tier; the cost of a wrong Capable classification is a few cents.
+
+**A failed Fast-tier attempt escalates the task to Capable for its remaining attempts** (`ENGINE.md` §8) — mechanical, not re-judged, and free: it does not consume an extra attempt beyond the normal three.
+
 ## Phase Grouping
 
 - A **Phase** is a set of tasks executed by one Iteration. It may hold one task or several.

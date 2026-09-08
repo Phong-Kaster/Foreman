@@ -8,6 +8,7 @@
 <!-- Description and acceptance criteria, copied from the task file. -->
 
 - **Attempt:** N of 3
+- **Model Tier:** Fast | Capable <!-- assigned at planning; escalates to Capable after a failed Fast attempt -->
 - **Previous attempt failed with:** <!-- error tail, when this is a re-dispatch. Your scope has been
      reverted to the last checkpoint, so you are starting clean, not on top of the failed work. -->
 

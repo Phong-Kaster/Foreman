@@ -9,9 +9,10 @@
 
 ## Task Graph
 
-<!-- Task ids with dependencies and Declared File Scopes. Detail lives in TASKS/<id>.md. -->
-- T-001 - ... (depends on: -) - scope: `src/...`
-- T-002 - ... (depends on: T-001) - scope: `src/...`
+<!-- Task ids with dependencies, Declared File Scopes, and Model Tier (ADR-013).
+     Detail lives in TASKS/<id>.md. -->
+- T-001 - ... (depends on: -) - scope: `src/...` - tier: Fast
+- T-002 - ... (depends on: T-001) - scope: `src/...` - tier: Capable
 
 ## Phase Grouping
 

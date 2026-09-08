@@ -18,7 +18,7 @@ use whichever exists; call it `<SkillDir>` below. It contains `ENGINE.md`, `POLI
 
 ## 2. Sync .loop/ at the repo root
 
-Copy `<SkillDir>/ENGINE.md`, `POLICIES.md`, `agents/`, `capabilities/`, `templates/`, and
+Copy `<SkillDir>/ENGINE.md`, `POLICIES.md`, `models.json`, `agents/`, `capabilities/`, `templates/`, and
 `scripts/run.ps1` (as `.loop/run.ps1`) into `.loop/` at the repository root, overwriting existing
 copies there.
 Never touch `.ai/`, `knowledge/`, or `PRD.md` — those are per-repo runtime state, not part of

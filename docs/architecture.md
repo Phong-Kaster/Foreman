@@ -113,7 +113,7 @@ This runtime is an application of Addy Osmani's [Loop Engineering](https://addyo
 
 The article's three warnings map onto specific mechanisms rather than good intentions: **verification stays human** (the human merges, always), **comprehension debt** is fought by the Cleanup Commit summary and the Issues Report, and **cognitive surrender** is resisted by the DoD gate and Tier 3 -- intent never becomes the machine's to decide.
 
-Two places where this runtime goes further than the article: completion is certified by a mind that wrote none of the code ([ADR-005](./adr/ADR-005-fresh-context-review-done-candidate.md)), and the loop's resource bounds are read from structured signal rather than guessed ([ADR-012](./adr/ADR-012-runtime-safety-bounds.md)).
+Two places where this runtime goes further than the article: completion is certified by a mind that wrote none of the code ([ADR-005](./adr/ADR-005-fresh-context-review-done-candidate.md)), and the loop's resource bounds are read from structured signal rather than guessed ([ADR-012](./adr/ADR-012-runtime-safety-bounds.md)). A third: model capability is matched to the role doing the work rather than applied uniformly, with the checker roles never downgraded ([ADR-013](./adr/ADR-013-model-tiers-by-role.md)).
 
 ---
 
