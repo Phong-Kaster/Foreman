@@ -17,3 +17,8 @@
 - **Abandoned:** none <!-- task ids -->
 - **Unreachable:** none <!-- task ids, and the abandonment blocking each -->
 - **Verified commands:** build: `...` | test: `...` | lint: `...`
+- **Model tiers (resolved from `.harness/loop/models.json`):** fast: `<identifier>` | capable: `<identifier>`
+  <!-- Resolved here so a fresh Iteration can dispatch at a task's assigned tier without reading
+       models.json itself. Without this the tier LABEL survives in the task file but nothing can
+       resolve it, every dispatch silently inherits the Runtime's -Model, and the tier system is
+       inert: Capable tasks run below Capable and the Reviewer is downgraded. Seen in the field. -->

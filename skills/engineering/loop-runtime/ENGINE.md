@@ -128,7 +128,7 @@ Read `.harness/run/ESCALATION.md`. For every queued decision whose `## Decision`
 
 ## 6.3 Orient
 
-Read `.harness/run/RESUME.md` first: it names the current Stage, the next Phase's tasks with their Declared File Scopes, the queued-decision count, abandoned task ids, and the verified build/test commands. Then read only what it does not cover:
+Read `.harness/run/RESUME.md` first: it names the current Stage, the next Phase's tasks with their Declared File Scopes, the queued-decision count, abandoned task ids, the verified build/test commands, and the **resolved Model Tier identifiers** you dispatch with. Then read only what it does not cover:
 
 - the task files **of the current Phase only** — never completed tasks, never future ones
 - `.harness/knowledge/PROJECT.md` for commands and conventions
@@ -164,7 +164,7 @@ For each task in the Phase, dispatch one Worker subagent with a **Worker Brief**
 
 A Worker **holds no git, build, or test capability**. It edits files and reports back. Its report is a **manifest, not a payload**: the files it wrote, the behavior now working, anything it could not do, anything it learned. You read the diff from git — never from the Worker's report.
 
-Dispatch each Worker at its assigned Model Tier, read from `.harness/loop/models.json`: Fast for a task classified Fast at planning time, Capable otherwise. You yourself — in every capacity, including when you are the Verifier (§11) — always dispatch and act at the Capable tier.
+Dispatch each Worker at its assigned Model Tier, using the identifiers the Resume Block already resolved (falling back to `.harness/loop/models.json` if it does not carry them): Fast for a task classified Fast at planning time, Capable otherwise. **Pass the identifier explicitly on every dispatch.** Omitting it makes the subagent inherit the Runtime's `-Model`, which silently voids the whole tier system. You yourself — in every capacity, including when you are the Verifier (§11) — always dispatch and act at the Capable tier.
 
 Within a Phase, Workers cannot see each other's work and must not need to. That is exactly what the disjoint-scope rule guarantees.
 
@@ -202,7 +202,7 @@ Update, in one atomic checkpoint commit (code + `.harness/run/` + `.harness/know
 
 - `STATE.md` — Stage, progress table, assumptions, next Phase
 - the task files — status, attempts, and for each failed attempt **the command run and the tail of its error output, written now** (a failed attempt is reverted and enters no commit, so this is the only place its detail survives)
-- `RESUME.md` — regenerated for the next Iteration
+- `RESUME.md` — regenerated for the next Iteration, including the resolved Model Tier identifiers
 - `HISTORY.md` — one entry for this Iteration
 - `PLAN.md` and `AMENDMENTS.md` if amended
 - `.harness/knowledge/PROJECT.md` for operational discoveries
@@ -273,6 +273,7 @@ Abandonment is not failure of the run. It is how the loop keeps making progress 
 - count of queued decisions, and which tasks they block
 - abandoned and unreachable task ids
 - the verified build / test / lint commands
+- the Model Tier identifiers resolved from `.harness/loop/models.json` (fast and capable), so a fresh Iteration can dispatch at a task's assigned tier without reading that file itself. Omit these and the tier label survives in the task file while nothing can resolve it: every dispatch inherits the Runtime's `-Model`, Capable-tier work silently runs below Capable, and the Reviewer is downgraded to the builder's model. Observed in the field.
 
 It is a **derived cache**. It is never the source of truth, it never accumulates history, and on any disagreement with the task files or git it is the thing that is wrong. Keep it small: every Iteration pays to read it, and unlike this specification it is not served from a prompt cache.
 
