@@ -1,19 +1,26 @@
 {
-  "description": "Baseline Capability Ledger — permanent, low-risk capabilities that ship with the Loop Runtime. Identical in every consumer repository. Higher-risk capabilities live in knowledge/capabilities.json (standing, per-repo) or .ai/capabilities.json (goal-scoped).",
+  "description": "Baseline Capability Ledger - permanent, low-risk capabilities that ship with the Loop Runtime. Identical in every consumer repository. Higher-risk capabilities live in knowledge/capabilities.json (standing, per-repo) or .ai/capabilities.json (goal-scoped). Note: git push is NOT here - it is network access, a High-risk class under POLICIES.md, granted per repository and scoped to the Loop Branch (ADR-011). Worker subagents are restricted further still, by the tools array in .loop/agents.json.",
   "entries": [
     {
       "intent": "Read repository files and search the codebase",
       "command": "Read / Glob / Grep tools",
       "scope": "consumer repository",
       "lifetime": "permanent",
-      "allow": ["Read(**)", "Glob(**)", "Grep(**)"]
+      "allow": [
+        "Read(**)",
+        "Glob(**)",
+        "Grep(**)"
+      ]
     },
     {
       "intent": "Create and edit files inside the repository (protected paths are covered by deny rules)",
       "command": "Edit / Write tools",
       "scope": "consumer repository",
       "lifetime": "permanent",
-      "allow": ["Edit(**)", "Write(**)"]
+      "allow": [
+        "Edit(**)",
+        "Write(**)"
+      ]
     },
     {
       "intent": "Inspect and locally persist git state (checkpoints on the Loop Branch); no push, no merge, no history rewriting",

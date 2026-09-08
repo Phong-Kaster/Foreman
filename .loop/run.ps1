@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Loop Runtime V1 — the thin, intentionally dumb outer loop.
+    Loop Runtime V1 - the thin, intentionally dumb outer loop.
 
 .DESCRIPTION
     The Runtime is the enforcement plane of the AI Software Factory.
@@ -17,19 +17,33 @@
 
 .NOTES
     Run from the consumer repository root. Requires: git, Claude Code CLI, PRD.md.
-    Exit codes: 0=DONE  2=crash limit  3=ESCALATE  4=FAILED  5=iteration budget exhausted
+    Exit codes: 0=DONE  2=crash limit  3=ESCALATE  4=FAILED  5=iteration budget  6=quota ceiling
 #>
 
 param(
-    # Mechanical safety bounds — the only "policy" the Runtime owns.
+    # Mechanical safety bounds - the only "policy" the Runtime owns (ADR-012).
     [int]$MaxIterations = 50,
     [int]$MaxConsecutiveCrashes = 3,
+    # Idle timeout: no stream event for this long means a hung invocation. Must exceed the longest
+    # legitimate single tool call, because one Bash call emits no events while it runs.
+    [int]$MaxIdleMinutes = 20,
+    # Hard timeout: backstop for an invocation that emits events forever without converging.
+    [int]$MaxIterationMinutes = 90,
+    # Quota ceiling: stop (or wait) at this utilization percentage, on WHICHEVER usage window
+    # trips first - the account has more than one (five_hour and seven_day).
+    [int]$QuotaStopPercent = 90,
+    # By default the loop sleeps until the quota window resets and then continues. This stops instead.
+    [switch]$NoQuotaWait,
+    [int]$MaxQuotaWaits = 6,
+    # Keep the dynamic (per-machine, per-iteration) sections out of the system prompt so the
+    # cacheable prefix stays byte-identical across iterations. This flag opts out.
+    [switch]$NoStablePrompt,
     # Invocation mechanics.
     [string]$ClaudeCommand = "claude",
     [string]$Model = "",
     # Optional: stage an external requirement document as PRD.md before the first iteration.
     # Accepts a path relative to the repo root or an absolute path. Leave empty (default) to use
-    # whatever PRD.md already sits at the repo root — unchanged from prior behavior.
+    # whatever PRD.md already sits at the repo root - unchanged from prior behavior.
     [string]$PrdPath = "",
     # Suppress the live engine activity feed (feed is on by default for observability).
     [switch]$QuietEngine,
@@ -47,9 +61,11 @@ $StatusFile = Join-Path $AiDir "STATUS.md"
 
 $EngineSpecPath = Join-Path $LoopDir "ENGINE.md"
 if (-not (Test-Path $EngineSpecPath)) { Write-Error ".loop/ENGINE.md not found. Run from the consumer repository root."; exit 1 }
-$EngineSpec = Get-Content $EngineSpecPath -Raw
+# Passed as --append-system-prompt-file, not as an inline argument: the spec is ~13KB of multi-line
+# text, which cannot survive Start-Process argument quoting (needed for the timeout bounds below).
+$AgentsPath = Join-Path $LoopDir "agents.json"
 
-# ---------- PRD staging (mechanical copy only — never interprets or rewrites content) ----------
+# ---------- PRD staging (mechanical copy only - never interprets or rewrites content) ----------
 if ($PrdPath -ne "") {
     $PrdSource = if (Test-Path $PrdPath) { (Resolve-Path $PrdPath).Path } else { Join-Path $RepoRoot $PrdPath }
     if (-not (Test-Path $PrdSource)) { Write-Error "PRD source not found: $PrdPath"; exit 1 }
@@ -64,7 +80,7 @@ if ($PrdPath -ne "") {
 $IterationPrompt = "Execute exactly one Iteration according to your Execution Engine Specification, then stop."
 
 # Run lock: at most ONE Loop Runtime per repository. Two concurrent engines committing to the
-# same branch would corrupt the run — refuse to start if a live instance holds the lock.
+# same branch would corrupt the run - refuse to start if a live instance holds the lock.
 $LockFile = Join-Path $env:TEMP ("loop-run-" + (Split-Path $RepoRoot -Leaf) + ".lock")
 if (Test-Path $LockFile) {
     $oldPid = (Get-Content $LockFile -TotalCount 1).Trim()
@@ -74,7 +90,7 @@ if (Test-Path $LockFile) {
         Write-Host "Another Loop Runtime (PID $oldPid) is already running against this repository. Only one loop may run at a time." -ForegroundColor Red
         exit 1
     }
-    # Stale lock from a dead process — take over.
+    # Stale lock from a dead process - take over.
 }
 "$PID" | Out-File -FilePath $LockFile -Encoding ascii
 
@@ -112,7 +128,7 @@ Write-Host "Raw engine events (debugging): $RawLog"
 #   knowledge/capabilities.json        standing,  per-repository (approved at the DoD gate)
 #   .ai/capabilities.json              scoped,    per-goal (expires automatically with .ai/)
 # Each ledger: { "entries": [ { "intent", "command", "scope", "lifetime", "allow": ["<exact rule>"] } ] }
-# The runtime reads ONLY the "allow" arrays — exact rule strings the human approved. No interpretation.
+# The runtime reads ONLY the "allow" arrays - exact rule strings the human approved. No interpretation.
 function Compile-PermissionSettings {
     $allowRules = @()
     $ledgers = @(
@@ -136,7 +152,14 @@ function Compile-PermissionSettings {
         "Edit(knowledge/capabilities.json)",
         "Write(knowledge/capabilities.json)",
         "Edit(.ai/capabilities.json)",
-        "Write(.ai/capabilities.json)"
+        "Write(.ai/capabilities.json)",
+        # Pushing is capability-gated (ADR-011) and scoped to the Loop Branch. These deny the
+        # operations that would make the engine an author on shared history rather than a
+        # contributor on its own branch - regardless of what any allow rule grants.
+        "Bash(git push --force*)",
+        "Bash(git push -f*)",
+        "Bash(git merge*)",
+        "Bash(git rebase*)"
     )
 
     $settings = @{
@@ -166,6 +189,269 @@ function Read-ExecutionStatus {
     return $null  # Malformed status = no status = crash.
 }
 
+# ---------- Quota reader (ADR-012) ----------
+# claude -p --output-format stream-json emits `rate_limit_event` carrying structured utilization:
+#   { "type":"rate_limit_event", "rate_limit_info": {
+#       "status":"allowed", "rateLimitType":"five_hour", "resetsAt":<unix>,
+#       "unifiedWindows": { "five_hour": {"utilization":0.37,"resetsAt":<unix>},
+#                           "seven_day": {"utilization":0.18,"resetsAt":<unix>} } } }
+# The Runtime keeps the LATEST one seen and checks BETWEEN iterations. It never reads this as
+# engineering signal - it is a mechanical resource bound, nothing more.
+$script:LatestRateLimit = $null
+
+function ConvertFrom-UnixSeconds([long]$seconds) {
+    return [System.DateTimeOffset]::FromUnixTimeSeconds($seconds).LocalDateTime
+}
+
+function Test-HasProperty($obj, [string]$name) {
+    if ($null -eq $obj) { return $false }
+    return (@($obj.PSObject.Properties.Name) -contains $name)
+}
+
+# Returns $null when below the ceiling, otherwise the tripped window with its reset time.
+# Checks EVERY window: the five-hour one is not the only limit, and exhausting the seven-day
+# window locks the human out for days rather than hours.
+function Get-QuotaTrip {
+    $info = $script:LatestRateLimit
+    if ($null -eq $info) { return $null }
+
+    $tripped = $null
+    if (Test-HasProperty $info "unifiedWindows") {
+        foreach ($prop in $info.unifiedWindows.PSObject.Properties) {
+            $w = $prop.Value
+            if (-not (Test-HasProperty $w "utilization")) { continue }
+            $pct = [double]$w.utilization * 100.0
+            if ($pct -ge $QuotaStopPercent) {
+                $resets = $null
+                if (Test-HasProperty $w "resetsAt") { $resets = ConvertFrom-UnixSeconds ([long]$w.resetsAt) }
+                # When several windows trip, the earliest reset is the one worth waiting for.
+                if ($null -eq $tripped) {
+                    $tripped = @{ Window = $prop.Name; Percent = $pct; ResetsAt = $resets }
+                } elseif ($null -ne $resets -and $null -ne $tripped.ResetsAt -and $resets -lt $tripped.ResetsAt) {
+                    $tripped = @{ Window = $prop.Name; Percent = $pct; ResetsAt = $resets }
+                }
+            }
+        }
+    }
+    return $tripped
+}
+
+# A rejected status is a quota wait, NOT a Crash: the engine never got to run, so the Watchdog
+# counter must not move. Before ADR-012 these were indistinguishable - both produced no status,
+# so exhausting the quota burned three crashes and ended the run.
+function Test-QuotaRejected {
+    $info = $script:LatestRateLimit
+    if ($null -eq $info) { return $false }
+    if (-not (Test-HasProperty $info "status")) { return $false }
+    return ($info.status -ne "allowed")
+}
+
+function Get-QuotaResetTime {
+    $info = $script:LatestRateLimit
+    if ($null -ne $info -and (Test-HasProperty $info "resetsAt")) { return ConvertFrom-UnixSeconds ([long]$info.resetsAt) }
+    return $null
+}
+
+# Sleep until the window resets, logging a heartbeat: a silent stream reads as a hang to a human
+# watching the feed. Waiting time is excluded from both iteration timeouts by construction.
+function Wait-ForQuotaReset {
+    param([datetime]$ResetsAt, [string]$Window)
+
+    $target = $ResetsAt.AddSeconds(30)   # small buffer past the boundary
+    $msg = "Quota window '$Window' at/above $QuotaStopPercent%. Waiting until $($target.ToString('yyyy-MM-dd HH:mm:ss')) for reset."
+    Write-Host $msg -ForegroundColor Yellow
+    Write-RunLog $msg
+
+    while ((Get-Date) -lt $target) {
+        $remaining = $target - (Get-Date)
+        $beat = "[$(Get-Date -Format 'HH:mm:ss')] waiting for quota reset - {0:00}:{1:00}:{2:00} remaining" -f [int]$remaining.TotalHours, $remaining.Minutes, $remaining.Seconds
+        Write-Host $beat -ForegroundColor DarkGray
+        Write-RunLog $beat
+        $chunk = [Math]::Min(300, [Math]::Max(5, [int]$remaining.TotalSeconds))
+        Start-Sleep -Seconds $chunk
+    }
+    Write-RunLog "Quota wait finished at $(Get-Date -Format o)"
+}
+
+# ---------- Child-process launcher ----------
+# Invoke-EngineOnce needs a tracked child process (so a hung invocation can be killed), which means
+# Start-Process rather than the `& cmd @args` call operator. Two consequences must be handled here:
+#
+#  1. The engine command is often a PowerShell SCRIPT, not an executable -- the npm-installed
+#     `claude` resolves to claude.ps1, and the test fixture is a .ps1 too. Start-Process cannot
+#     execute a .ps1, so a script is launched through powershell.exe -File.
+#  2. Start-Process takes one argument STRING, so each argument is quoted here rather than trusting
+#     -ArgumentList array joining, which does not quote reliably on Windows PowerShell 5.1.
+function Format-ProcArg([string]$value) {
+    if ($value -eq "") { return '""' }
+    if ($value -notmatch '[\s"]') { return $value }
+    # Double any run of backslashes immediately before the closing quote, then escape quotes.
+    $escaped = $value -replace '(\\+)$', '$1$1'
+    $escaped = $escaped -replace '"', '\"'
+    return '"' + $escaped + '"'
+}
+
+function Resolve-EngineLaunch {
+    param([string[]]$EngineArgs)
+
+    $resolved = $null
+    try { $resolved = Get-Command $ClaudeCommand -ErrorAction Stop } catch {}
+
+    $exe = $ClaudeCommand
+    $argv = $EngineArgs
+
+    if ($null -ne $resolved) {
+        if ($resolved.CommandType -eq "ExternalScript") {
+            $exe = (Get-Command powershell.exe).Source
+            $argv = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $resolved.Source) + $EngineArgs
+        } elseif ($resolved.CommandType -eq "Application") {
+            $exe = $resolved.Source
+        }
+    }
+
+    $argString = ($argv | ForEach-Object { Format-ProcArg $_ }) -join " "
+    return @{ Exe = $exe; ArgString = $argString }
+}
+
+# ---------- Engine invocation with idle + hard timeout (ADR-012) ----------
+# Run as a tracked child process rather than a pipeline, so a hung invocation can actually be
+# killed. An engine doing work emits tool_use events continuously; silence is the hang signal -
+# which is why the idle bound, not the wall-clock bound, is the real hang detector.
+# Returns "" on a completed invocation, or "idle" / "hard" when a timeout killed it.
+function Invoke-EngineOnce {
+    param([string[]]$EngineArgs, [datetime]$IterStart, [bool]$Stream)
+
+    $stdoutFile = Join-Path $env:TEMP ("loop-engine-" + [System.Guid]::NewGuid().ToString("N") + ".out")
+    $stderrFile = "$stdoutFile.err"
+    $timeoutKind = ""
+
+    $launch = Resolve-EngineLaunch -EngineArgs $EngineArgs
+    # -WorkingDirectory is explicit and load-bearing: Start-Process launches in .NET's current
+    # directory, which is NOT PowerShell's location. Without it the engine runs somewhere else
+    # entirely and writes its status file outside the consumer repository.
+    $proc = Start-Process -FilePath $launch.Exe -ArgumentList $launch.ArgString `
+                          -WorkingDirectory $RepoRoot `
+                          -RedirectStandardOutput $stdoutFile -RedirectStandardError $stderrFile `
+                          -NoNewWindow -PassThru
+
+    $idleLimit   = New-TimeSpan -Minutes $MaxIdleMinutes
+    $hardLimit   = New-TimeSpan -Minutes $MaxIterationMinutes
+    $lastEventAt = Get-Date
+    $reader      = $null
+    $fileStream  = $null
+    $buffer      = ""
+
+    try {
+        while (-not (Test-Path $stdoutFile) -and -not $proc.HasExited) { Start-Sleep -Milliseconds 100 }
+        if (Test-Path $stdoutFile) {
+            # Shared read: the child holds this file open for writing for the whole invocation.
+            $fileStream = New-Object System.IO.FileStream($stdoutFile, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
+            $reader = New-Object System.IO.StreamReader($fileStream)
+        }
+
+        while ($true) {
+            $sawOutput = $false
+            if ($null -ne $reader) {
+                # ReadToEnd on a growing file returns what is available now. Split on newlines and
+                # keep the trailing fragment: a half-written line is not parsable JSON yet.
+                $chunk = $reader.ReadToEnd()
+                if ($chunk.Length -gt 0) {
+                    $sawOutput = $true
+                    $lastEventAt = Get-Date
+                    $buffer += $chunk
+                    $parts = $buffer -split "`n"
+                    $buffer = $parts[$parts.Count - 1]
+                    if ($parts.Count -gt 1) {
+                        foreach ($line in $parts[0..($parts.Count - 2)]) {
+                            Read-EngineEvent -Line $line.TrimEnd("`r") -IterStart $IterStart -Stream $Stream
+                        }
+                    }
+                }
+            }
+
+            if ($proc.HasExited -and -not $sawOutput) { break }
+
+            if (((Get-Date) - $lastEventAt) -gt $idleLimit) {
+                $timeoutKind = "idle"
+                Write-Warning ("No engine event for {0} minutes - treating as a hung invocation." -f $MaxIdleMinutes)
+                break
+            }
+            if (((Get-Date) - $IterStart) -gt $hardLimit) {
+                $timeoutKind = "hard"
+                Write-Warning ("Iteration exceeded {0} minutes - hard timeout." -f $MaxIterationMinutes)
+                break
+            }
+            if (-not $sawOutput) { Start-Sleep -Milliseconds 250 }
+        }
+
+        if ($timeoutKind -ne "") {
+            # Kill the whole tree: the engine spawns Workers, and orphans would keep writing.
+            try { & taskkill /PID $proc.Id /T /F | Out-Null } catch {}
+            try { if (-not $proc.HasExited) { $proc.Kill() } } catch {}
+            Write-RunLog "=== Timeout ($timeoutKind) killed the engine process tree === $(Get-Date -Format o)"
+        }
+    } catch {
+        Write-Warning "Engine process error: $_"
+    } finally {
+        if ($null -ne $reader) { try { $reader.Dispose() } catch {} }
+        if ($null -ne $fileStream) { try { $fileStream.Dispose() } catch {} }
+        try {
+            if ((Test-Path $stderrFile) -and (Get-Item $stderrFile).Length -gt 0) {
+                $errText = (Get-Content $stderrFile -Raw).Trim()
+                if ($errText -ne "") { Write-RawLog $errText }
+            }
+        } catch {}
+        Remove-Item $stdoutFile -Force -ErrorAction SilentlyContinue
+        Remove-Item $stderrFile -Force -ErrorAction SilentlyContinue
+    }
+
+    return $timeoutKind
+}
+
+# Mechanical passthrough of one stream-json line. The Runtime relays events, never interprets them.
+function Read-EngineEvent {
+    param([string]$Line, [datetime]$IterStart, [bool]$Stream)
+
+    if ($Line.Trim() -eq "") { return }
+    Write-RawLog $Line
+
+    $evt = $null
+    try { $evt = $Line | ConvertFrom-Json } catch { return }
+    if ($null -eq $evt) { return }
+
+    # Quota is tracked even when the activity feed is suppressed: it is a safety bound, not output.
+    if ($evt.type -eq "rate_limit_event" -and (Test-HasProperty $evt "rate_limit_info")) {
+        $script:LatestRateLimit = $evt.rate_limit_info
+    }
+    if (-not $Stream) { return }
+
+    $stamp = "$(Get-Date -Format 'HH:mm:ss') +$(Format-Elapsed $IterStart)"
+    if ($evt.type -eq "assistant" -and $null -ne $evt.message.content) {
+        foreach ($block in $evt.message.content) {
+            if ($block.type -eq "tool_use") {
+                $detail = ""
+                if ($null -ne $block.input.file_path) { $detail = " " + $block.input.file_path }
+                elseif ($null -ne $block.input.command) { $detail = " " + $block.input.command }
+                $line = "[$stamp] engine> $($block.name)$detail"
+                Write-Host $line -ForegroundColor DarkGray
+                Write-RunLog $line
+            }
+            if ($block.type -eq "text" -and $block.text.Trim() -ne "") {
+                $snippet = ($block.text.Trim() -replace "\s+", " ")
+                if ($snippet.Length -gt 160) { $snippet = $snippet.Substring(0, 160) + "..." }
+                $line = "[$stamp] engine: $snippet"
+                Write-Host $line -ForegroundColor Gray
+                Write-RunLog $line
+            }
+        }
+    }
+    if ($evt.type -eq "result") {
+        $line = "[$stamp] engine invocation finished ($($evt.subtype))"
+        Write-Host $line -ForegroundColor DarkGray
+        Write-RunLog $line
+    }
+}
+
 # ---------- Timer ----------
 $RunStart = Get-Date
 function Format-Elapsed([datetime]$since) {
@@ -175,6 +461,7 @@ function Format-Elapsed([datetime]$since) {
 
 # ---------- The loop ----------
 $consecutiveCrashes = 0
+$quotaWaits = 0
 
 try {
 for ($iteration = 1; $iteration -le $MaxIterations; $iteration++) {
@@ -186,8 +473,10 @@ for ($iteration = 1; $iteration -le $MaxIterations; $iteration++) {
     # Status file is transport, not state: delete before invoking so absence-after = crash (mechanical detection).
     if (Test-Path $StatusFile) { Remove-Item $StatusFile -Force }
 
-    # Fresh permission settings every iteration — build artifact, never a source artifact.
-    $claudeArgs = @("-p", $IterationPrompt, "--append-system-prompt", $EngineSpec)
+    # Fresh permission settings every iteration - build artifact, never a source artifact.
+    # The engine spec goes in by FILE, not as an inline argument: it is ~13KB of multi-line text,
+    # which cannot survive Start-Process argument quoting (needed for the timeout bounds).
+    $claudeArgs = @("-p", $IterationPrompt, "--append-system-prompt-file", $EngineSpecPath)
     if ($DangerouslySkipPermissions) {
         $claudeArgs += "--dangerously-skip-permissions"
     } else {
@@ -195,57 +484,54 @@ for ($iteration = 1; $iteration -le $MaxIterations; $iteration++) {
         $claudeArgs += @("--settings", $settingsPath)
     }
     if ($Model -ne "") { $claudeArgs += @("--model", $Model) }
+    # Worker/Reviewer definitions come from .loop/, which is deny-listed against the engine's own
+    # edits: a Worker's tool restriction must be enforced by the harness, not by instruction the
+    # engine could reason around. Omitting Bash from its tools is what makes "no git, no build,
+    # no test" real rather than advisory.
+    if (Test-Path $AgentsPath) { $claudeArgs += @("--agents", ((Get-Content $AgentsPath -Raw).Trim())) }
+    # Keep per-machine, per-iteration sections (cwd, env, git status) out of the system prompt so
+    # the cacheable prefix stays byte-identical across iterations. Git status changes every
+    # checkpoint, so leaving it in the prefix would break the cache for the spec that follows it.
+    if (-not $NoStablePrompt) { $claudeArgs += "--exclude-dynamic-system-prompt-sections" }
+
+    # stream-json is always requested: the Runtime needs `rate_limit_event` for the quota bound
+    # (ADR-012) even when the human-facing activity feed is suppressed.
+    $claudeArgs += @("--output-format", "stream-json", "--verbose")
 
     # Invoke the engine. Its exit code is irrelevant; only the persisted status counts.
-    # Default: stream engine events so a human can SEE that the loop is alive and what it is doing.
-    # Purely mechanical passthrough — the Runtime relays events, it never interprets them.
-    if ($QuietEngine) {
-        try { & $ClaudeCommand @claudeArgs } catch { Write-Warning "Engine process error: $_" }
-    } else {
-        $claudeArgs += @("--output-format", "stream-json", "--verbose")
-        try {
-            & $ClaudeCommand @claudeArgs | ForEach-Object {
-                Write-RawLog $_
-                $evt = $null
-                try { $evt = $_ | ConvertFrom-Json } catch {}
-                if ($null -ne $evt) {
-                    # Timestamp + iteration stopwatch: proof of life on every engine event.
-                    $stamp = "$(Get-Date -Format 'HH:mm:ss') +$(Format-Elapsed $IterStart)"
-                    if ($evt.type -eq "assistant" -and $null -ne $evt.message.content) {
-                        foreach ($block in $evt.message.content) {
-                            if ($block.type -eq "tool_use") {
-                                $detail = ""
-                                if ($null -ne $block.input.file_path) { $detail = " " + $block.input.file_path }
-                                elseif ($null -ne $block.input.command) { $detail = " " + $block.input.command }
-                                $line = "[$stamp] engine> $($block.name)$detail"
-                                Write-Host $line -ForegroundColor DarkGray
-                                Write-RunLog $line
-                            }
-                            if ($block.type -eq "text" -and $block.text.Trim() -ne "") {
-                                $snippet = ($block.text.Trim() -replace "\s+", " ")
-                                if ($snippet.Length -gt 160) { $snippet = $snippet.Substring(0, 160) + "..." }
-                                $line = "[$stamp] engine: $snippet"
-                                Write-Host $line -ForegroundColor Gray
-                                Write-RunLog $line
-                            }
-                        }
-                    }
-                    if ($evt.type -eq "result") {
-                        $line = "[$stamp] engine invocation finished ($($evt.subtype))"
-                        Write-Host $line -ForegroundColor DarkGray
-                        Write-RunLog $line
-                    }
-                }
-            }
-        } catch { Write-Warning "Engine process error: $_" }
-    }
+    $timeoutKind = Invoke-EngineOnce -EngineArgs $claudeArgs -IterStart $IterStart -Stream (-not $QuietEngine)
 
     $status = Read-ExecutionStatus
 
+    # ---- Quota comes first: it is neither a Crash nor an engineering outcome (ADR-012) ----
+    # A rejected invocation never ran, so the Watchdog counter must not move. Checking this before
+    # crash handling is what stops an exhausted quota from burning three crashes and ending the run.
+    if ($null -eq $status -and (Test-QuotaRejected)) {
+        $resetsAt = Get-QuotaResetTime
+        Write-Host "Usage limit reached - the engine could not run this iteration." -ForegroundColor Yellow
+        Write-RunLog "=== Quota rejected === $(Get-Date -Format o)"
+        if ($NoQuotaWait -or $null -eq $resetsAt) {
+            Write-Host "Stopping at the usage limit. Re-run after it resets to continue from the last Stable Checkpoint." -ForegroundColor Yellow
+            exit 6
+        }
+        $quotaWaits++
+        if ($quotaWaits -gt $MaxQuotaWaits) {
+            Write-Host "Waited for a quota reset $MaxQuotaWaits times already. Stopping deterministically." -ForegroundColor Red
+            exit 6
+        }
+        Wait-ForQuotaReset -ResetsAt $resetsAt -Window "rejected"
+        $iteration--   # this iteration never executed; do not spend it from the budget
+        continue
+    }
+
     if ($null -eq $status) {
         # Crash: the engine died without reporting. Only the Runtime can detect this (Watchdog).
+        # A timeout kill lands here deliberately - it IS a crash, and existing recovery applies:
+        # the next invocation finds a dirty tree and recovers per ENGINE.md 6.1.
         $consecutiveCrashes++
-        Write-Warning "Crash detected (no Execution Status). Consecutive crashes: $consecutiveCrashes / $MaxConsecutiveCrashes"
+        $why = "no Execution Status"
+        if ($timeoutKind -ne "") { $why = "$timeoutKind timeout" }
+        Write-Warning "Crash detected ($why). Consecutive crashes: $consecutiveCrashes / $MaxConsecutiveCrashes"
         if ($consecutiveCrashes -ge $MaxConsecutiveCrashes) {
             Write-Host "Watchdog limit reached. Stopping. The next run's engine will recover from the last Stable Checkpoint." -ForegroundColor Red
             exit 2
@@ -260,10 +546,27 @@ for ($iteration = 1; $iteration -le $MaxIterations; $iteration++) {
     if ($status.Reason -ne "") { Write-Host $status.Reason }
 
     switch ($status.Word) {
-        "CONTINUE" { continue }
         "DONE"     { Write-Host "Goal verified complete. Review and merge the Loop Branch." -ForegroundColor Green; exit 0 }
-        "ESCALATE" { Write-Host "Human decision required. See .ai/ESCALATION.md, fill the Decision section, then re-run." -ForegroundColor Magenta; exit 3 }
+        "ESCALATE" { Write-Host "Human decision required. See .ai/ESCALATION.md - answer the queued decisions, then re-run." -ForegroundColor Magenta; exit 3 }
         "FAILED"   { Write-Host "Execution broken. Human repair required. See .ai/STATE.md for the engine's last findings." -ForegroundColor Red; exit 4 }
+    }
+
+    # ---- CONTINUE: check the resource bound before spending another iteration ----
+    $trip = Get-QuotaTrip
+    if ($null -ne $trip) {
+        $pct = [Math]::Round($trip.Percent, 1)
+        Write-Host "Quota window '$($trip.Window)' at $pct% (ceiling $QuotaStopPercent%)." -ForegroundColor Yellow
+        Write-RunLog "=== Quota ceiling: $($trip.Window) at $pct% === $(Get-Date -Format o)"
+        if ($NoQuotaWait -or $null -eq $trip.ResetsAt) {
+            Write-Host "Stopping to leave usage headroom. Re-run to continue from the last Stable Checkpoint." -ForegroundColor Yellow
+            exit 6
+        }
+        $quotaWaits++
+        if ($quotaWaits -gt $MaxQuotaWaits) {
+            Write-Host "Waited for a quota reset $MaxQuotaWaits times already. Stopping deterministically." -ForegroundColor Red
+            exit 6
+        }
+        Wait-ForQuotaReset -ResetsAt $trip.ResetsAt -Window $trip.Window
     }
 }
 

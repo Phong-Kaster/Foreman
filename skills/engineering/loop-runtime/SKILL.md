@@ -18,8 +18,9 @@ use whichever exists; call it `<SkillDir>` below. It contains `ENGINE.md`, `POLI
 
 ## 2. Sync .loop/ at the repo root
 
-Copy `<SkillDir>/ENGINE.md`, `POLICIES.md`, `capabilities/`, `templates/`, and `scripts/run.ps1`
-(as `.loop/run.ps1`) into `.loop/` at the repository root, overwriting existing copies there.
+Copy `<SkillDir>/ENGINE.md`, `POLICIES.md`, `agents.json`, `capabilities/`, `templates/`, and
+`scripts/run.ps1` (as `.loop/run.ps1`) into `.loop/` at the repository root, overwriting existing
+copies there.
 Never touch `.ai/`, `knowledge/`, or `PRD.md` — those are per-repo runtime state, not part of
 the distributable, and must survive across skill updates untouched.
 
@@ -59,23 +60,38 @@ with `persistent: true` — a run can take a long time. Every line `run.ps1` wri
 headers, `engine>` tool-use lines, `engine:` text snippets, `Status:` lines) now streams into the
 conversation live, the same as any other command's output.
 
-While watching, keep a running note of anything the engine records as a discovery classified
-"no action" / noted-but-not-acted-on (visible in the stream or in `.ai/STATE.md` history) — these
-otherwise vanish when `.ai/` is deleted at completion, and belong in the final summary (step 7).
+You do **not** need to keep your own notes of non-blocking findings any more: the engine
+regenerates `ISSUES.md` at the repo root every iteration, and that file survives the Cleanup Commit.
+Read it rather than reconstructing it.
+
+Two new stream lines are normal and are **not** failures — do not stop the monitor for either:
+
+- `waiting for quota reset — HH:MM:SS remaining` — the run hit the usage ceiling and is sleeping
+  until the window resets, then continuing on its own (ADR-012). Tell the user when it resumes.
+- `Crash detected (idle timeout)` / `(hard timeout)` — a hung iteration was killed; the Watchdog
+  re-invokes and the next iteration recovers from the last checkpoint.
 
 Treat a `Status: ESCALATE`, `Status: DONE`, or `Status: FAILED` line arriving in the stream as the
-trigger to stop the monitor and move to the matching step below.
+trigger to stop the monitor and move to the matching step below. Exit code 6 means the run stopped
+at the quota ceiling — report that and offer to resume after the reset.
 
 ## 6. On ESCALATE
 
-Read `.ai/ESCALATION.md` (question, context, options considered, recommendation, any proposed
-capabilities). Ask the user directly in conversation, as a normal question — offer the engine's
-own proposed options as choices when they are discrete (e.g. approve / edit / reject a Definition
-of Done), or ask openly otherwise. Never tell the user to open the file themselves.
+`.ai/ESCALATION.md` is a **queue**, so expect more than one pending entry — the engine parks
+questions and keeps working, and only stops when it runs out of executable work (ADR-007). Read
+every entry whose `## Decision` section is still empty.
 
-Once answered: write the user's decision and rationale into `.ai/ESCALATION.md`'s `## Decision`
-section yourself. Then return to step 4 (relaunch, re-attach the monitor). Repeat until the run
-reaches DONE or FAILED.
+Present them as a batch, most blocking first — an entry's `Blocks tasks` field tells you how much
+work each one is holding up. Offer the engine's own proposed options as choices when they are
+discrete (e.g. approve / edit / reject a Definition of Done), or ask openly otherwise. Never tell
+the user to open the file themselves. Also read `ISSUES.md` and report any tasks the engine
+abandoned, with their failure reasons — the user may want to answer a question differently once
+they see what failed.
+
+Once answered: write each decision and its rationale into that entry's `## Decision` section
+yourself. Answering a subset is fine — unanswered entries stay queued and their tasks stay
+blocked. Then return to step 4 (relaunch, re-attach the monitor). Repeat until the run reaches
+DONE or FAILED.
 
 ## 7. On DONE
 
@@ -93,12 +109,23 @@ Then build a **roll-up across every `loop/*` branch** in the repository (`git br
 - Stale/abandoned-looking branches → flag as such rather than guessing at intent.
 
 Present a table: branch → status (DONE / in-progress / escalated-awaiting-decision / abandoned) →
-what it contains → merge-ready or not. Fold in the "no action" / noted-but-not-archived items
-gathered in step 5 for the branch that just finished.
+what it contains → merge-ready or not. Then surface `ISSUES.md` for the branch that just finished:
+abandoned tasks with their failure reasons, unfixed review findings, and recorded assumptions. A
+`DONE` run should have none of the first kind — if it does, something is inconsistent and worth
+saying so.
 
 Remind the user that merging is always their manual step — this skill and the engine never merge
 or push; per the engine's own invariant, that stays a human act.
 
 ## 8. On FAILED
 
-Stop. Report `.ai/STATE.md`'s last recorded findings for that branch. Do not attempt a roll-up.
+Stop. Report `.ai/STATE.md`'s last recorded findings for that branch, plus `ISSUES.md` if it
+exists. Do not attempt a roll-up.
+
+## 9. A run that ends incomplete
+
+A run with abandoned tasks reports `ESCALATE`, never `DONE`, and never runs the Verifier — an
+incomplete feature is not verified, by design. `.ai/` therefore survives on the branch (no Cleanup
+Commit ran), so the full failure detail is still there. Report `ISSUES.md` as the primary artifact
+and be explicit that the feature is **not** complete: say which DoD criteria are unmet rather than
+implying the branch is mergeable.

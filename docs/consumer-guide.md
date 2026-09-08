@@ -63,6 +63,12 @@ Useful parameters:
 | `-PrdPath` | (empty) | Stage an external file as `PRD.md` before the first iteration — relative or absolute path |
 | `-Model` | (CLI default) | Model override for engine invocations |
 | `-QuietEngine` | off | Suppress the live engine activity feed |
+| `-MaxIdleMinutes` | 20 | No engine event for this long = a hung iteration; killed and treated as a crash. Must exceed your longest single command (a clean Android build can pass 10 minutes) |
+| `-MaxIterationMinutes` | 90 | Hard backstop for an iteration that emits events but never converges |
+| `-QuotaStopPercent` | 90 | Stop (or wait) at this usage-window utilization, on **whichever window trips first** |
+| `-NoQuotaWait` | off | Stop at the quota ceiling instead of sleeping until it resets |
+| `-MaxQuotaWaits` | 6 | How many resets one run may wait through before stopping deterministically |
+| `-NoStablePrompt` | off | Opt out of keeping per-iteration sections out of the system prompt (they are excluded by default so the cacheable prefix stays identical between iterations) |
 | `-DangerouslySkipPermissions` | off | Full permission bypass — only for sandboxed/VM environments |
 
 ### Watching the loop (is it running?)
@@ -121,11 +127,21 @@ After approval the DoD is immutable to the engine either way: it may propose cha
 
 Nothing is required from you. The loop stops only for:
 
-- **`ESCALATE`** — a decision above the engine's authority: an architecture change (Tier 2), an intent gap (Tier 3), a capability request, missing product information. Skill path: answered as conversation, same as §4. Manual path: read `.ai/ESCALATION.md`, write decision + rationale, re-run. One pending escalation at a time, always.
+- **`ESCALATE`** — the loop ran out of executable work and needs decisions. It does **not** stop at the first question: a question is queued with the tasks it blocks named, and the loop continues on unrelated work ([ADR-007](./adr/ADR-007-non-blocking-progress.md)). So expect a **batch** of questions here, not one. Skill path: answered as conversation, same as §4. Manual path: read `.ai/ESCALATION.md`, fill the `## Decision` section of any entries you want to answer (a subset is fine), re-run.
+- **Abandoned tasks** — a task failing three attempts is abandoned, along with anything depending on it, and the loop keeps going. This is what lets it run with little supervision. A run with an abandoned task reports `ESCALATE`, never `DONE`, and never runs the verifier: an incomplete feature is not certified. Read `ISSUES.md` for what failed and why.
+- **Quota ceiling (exit 6)** — stopped to leave usage headroom, or waited too many resets. Re-run after the window resets.
 - **`FAILED`** — execution itself is broken (environment, corruption, exhausted resources). Fix the environment, re-run (or ask the skill to); the engine resumes from the last checkpoint.
 - **Watchdog / budget stops** — mechanical bounds tripped. Inspect, re-run to continue; the loop never loses verified work.
 
 Interrupting is always safe: kill it whenever you like (or ask the skill to stop supervising). Every iteration ends at a Stable Checkpoint (one atomic commit of code + state); the next invocation recovers mechanically — even from a mid-iteration crash, which it detects as a dirty working tree.
+
+**The run is tied to the session that launched it.** If you close the terminal (or the Claude Code session ends), the loop stops. That is deliberate and costs nothing: re-run and it continues from the last checkpoint. There is no separate resume step.
+
+**The loop occupies the working directory** for the whole run — one branch, one checkout ([ADR-008](./adr/ADR-008-phase-workers-single-branch.md)). You cannot work in that repository concurrently. Use a second clone if you need to.
+
+**On hitting the usage limit** the run does not die. It reads the reset time from the CLI's own rate-limit signal, logs a heartbeat while it sleeps (`waiting for quota reset — HH:MM:SS remaining`), then continues. It also stops *before* the limit — at 90% by default — to leave you headroom, since a loop that consumes your whole window leaves you none for your own work. Both usage windows are checked, not just the five-hour one: exhausting the weekly window locks you out for days rather than hours.
+
+**Read `ISSUES.md`** at the repo root. It is regenerated every iteration and contains problems only: tasks the loop abandoned after three attempts (with each attempt's command and error), tasks it could not reach, decisions waiting on you, review findings it recorded but did not fix, and assumptions it made. It survives to the end of the run, unlike `.ai/`.
 
 Watching progress: `git log --oneline` on the loop branch is the execution history; `.ai/STATE.md` is the engine's current memory; `.ai/AMENDMENTS.md` is the audited log of every plan mutation.
 
@@ -139,7 +155,7 @@ Watching progress: `git log --oneline` on the loop branch is the execution histo
 
 **Manual path:** review the branch like any contribution yourself; check other `loop/*` branches with `git branch --list 'loop/*'` if you've run more than one goal in this repo.
 
-Either way: **merging is your act — the engine never merges, never pushes, never touches your default branch.**
+Either way: **merging is your act — the engine never merges and never touches your default branch.** It may push its own `loop/*` branch, and only that, if you granted the capability.
 
 ## 7. The next feature
 
@@ -158,16 +174,20 @@ Enforced mechanically (runtime deny rules) or by hard-stop protocol — true reg
 - Modify `.loop/`, any capability ledger, or its own permission settings
 - Modify `PRD.md` or the approved `DoD.md`
 - Widen a capability beyond what you approved
-- Touch your default branch, push, merge, or rewrite history
+- Touch your default branch, merge, or rewrite history (`--force`, `rebase` and `merge` are denied outright by the runtime, whatever any allow rule says)
+- Push anything without an explicit capability grant, and even then only the `loop/*` branch
 - Declare `DONE` from the same invocation that implemented the final work
-- Proceed past an unanswered escalation
+- Declare `DONE` at all if any task was abandoned or any decision is unanswered
+- Proceed on a task blocked by an unanswered decision, or one depending on an abandoned task
+- Give a Worker git, build, or test access (enforced by the tool list in `.loop/agents.json`, not by instruction)
 
 The skill adds no authority of its own on top of this — it only stages input (PRD, capability ledger entries you already approved) and supervises/summarizes output. Every capability the engine ever exercises still traces back to a ledger entry you approved, standing or goal-scoped.
 
 ## Honest limitations
 
 - The capability system is a guardrail against accidents and drift — not containment for an adversarial process. For untrusted PRDs or maximum isolation, run the whole loop inside a VM/container (where `-DangerouslySkipPermissions` becomes reasonable).
+- **Network access is now part of the capability surface**: `git push` of the Loop Branch can be granted ([ADR-011](./adr/ADR-011-loop-branch-push.md)). It is High-risk by classification and off unless you grant it. Granting it means the loop's unverified intermediate checkpoints become visible on your remote and may trigger CI. The default branch, `--force`, `merge` and `rebase` remain denied regardless.
 - V1 assumes git and PowerShell; both are persistence/transport details, not architecture.
 - Compound Bash commands (e.g. `cd <dir> && node ...`) can be denied even when the base command is capability-approved, since the approval matches on the literal command form. Expect the engine to self-correct by retrying with a simpler form — it costs a retry, not a failure.
 - Skill path only: the skill's own frontmatter must keep `disable-model-invocation: true`. Without it, a nested engine invocation running inside the same repo can see the skill and auto-trigger it on itself instead of following `ENGINE.md` directly — this was a real bug found during testing, now fixed, but worth knowing if you ever fork or repackage the skill.
-- Automated agent-skill security scanners on skill installers (e.g. Snyk, Socket) rate this skill High-risk, and correctly so — this is an accurate read of its real capability surface, not a false positive: the baseline capability ledger (`capabilities/baseline.json`) grants `Edit(**)`, `Write(**)`, and git commit/branch/checkout as **permanent, automatic** capabilities — no per-action approval once a run starts; `run.ps1` ships a `-DangerouslySkipPermissions` switch that fully bypasses the permission system (documented for sandboxed/VM use only); and the engine runs unattended for up to 50 iterations, writing and committing code on its own branch with a human in the loop only at escalations. Consistent with this project's own documented position (ADR-004): a guardrail against accidents and drift, not a security boundary against an adversarial engine. The mitigations that make this an acceptable tradeoff are independently verifiable in the same files: the engine never touches the default branch, never pushes, never merges, never force-pushes or rebases; `.loop/`, all capability ledgers, and generated permission settings are deny-listed against the engine's own edits; and it escalates for any capability grant or architecture/intent change rather than expanding its own authority.
+- Automated agent-skill security scanners on skill installers (e.g. Snyk, Socket) rate this skill High-risk, and correctly so — this is an accurate read of its real capability surface, not a false positive: the baseline capability ledger (`capabilities/baseline.json`) grants `Edit(**)`, `Write(**)`, and git commit/branch/checkout as **permanent, automatic** capabilities — no per-action approval once a run starts; `run.ps1` ships a `-DangerouslySkipPermissions` switch that fully bypasses the permission system (documented for sandboxed/VM use only); and the engine runs unattended for up to 50 iterations, writing and committing code on its own branch with a human in the loop only at escalations. Consistent with this project's own documented position (ADR-004): a guardrail against accidents and drift, not a security boundary against an adversarial engine. Since [ADR-011](./adr/ADR-011-loop-branch-push.md) the surface also includes **network access**: `git push` of the `loop/*` branch is grantable, and granting it publishes unverified intermediate checkpoints to your remote where CI may run on them. It is off unless you grant it. The mitigations that make this an acceptable tradeoff are independently verifiable in the same files: the engine never touches the default branch, never merges, and cannot force-push or rebase (the runtime appends deny rules for `git push --force`, `git push -f`, `git merge` and `git rebase` that no allow rule can override); `.loop/`, all capability ledgers, and generated permission settings are deny-listed against the engine's own edits; and it escalates for any capability grant or architecture/intent change rather than expanding its own authority.

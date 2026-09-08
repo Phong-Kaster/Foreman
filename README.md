@@ -138,10 +138,10 @@ consumer-repo/
 
 1. **Bootstrap** (automatic — the first invocation finds no `.ai/`): the engine reads the PRD and the repository, generates `knowledge/` and `.ai/`, creates a dedicated `loop/<prd-slug>` branch, and stops with one question: *approve the Definition of Done*.
 2. **The one mandatory human gate:** review the DoD (the testable meaning of "done") and the proposed toolchain capabilities. Answered as conversation now, not a hand-edited file.
-3. **The loop runs unattended:** each iteration is a fresh process that recovers, orients from repository state, selects the highest-value task, implements, builds, tests, gets a **fresh-context review** from a clean-context subagent, reconciles everything it learned, and commits **one atomic checkpoint** (code + state together). Status `CONTINUE` → the runtime invokes it again.
-4. **It stops only for real reasons:** `ESCALATE` (a decision above its authority — architecture change, intent gap, capability request) or `FAILED` (execution environment broken).
+3. **The loop runs unattended:** each iteration is a fresh process that recovers, orients from a small **Resume Block**, selects a **Phase** of up to three non-conflicting tasks, dispatches one **Worker** per task (each confined to a declared file scope, with no git/build/test capability), wires the shared files itself, builds and tests once, gets a **fresh-context review** on the combined diff, reconciles everything it learned, and commits **one atomic checkpoint** on one branch. Status `CONTINUE` → the runtime invokes it again.
+4. **It does not stop for a question.** A decision above its authority is written to a **Decision Queue** naming the tasks it blocks; those tasks become unselectable and the loop carries on with unrelated work. A task that fails three attempts is **abandoned**, along with anything depending on it. The loop stops when it genuinely runs out of executable work (`ESCALATE`, a batch of questions to answer), when the environment is broken (`FAILED`), or when it reaches the **quota ceiling** — where it either waits for the usage window to reset and continues, or stops leaving you headroom.
 5. **Completion is earned, not claimed:** the iteration that finishes the last task may not declare victory. A *fresh* verifier iteration — which wrote none of the code — re-proves every DoD criterion, strips the execution state from the branch tip (Cleanup Commit, whose message is the completion summary), and only then reports `DONE`.
-6. **You merge.** The engine never touches your default branch, never pushes, never merges.
+6. **You merge.** The engine never touches your default branch and never merges. It may push its own `loop/*` branch if you granted that capability, which is how a mid-run machine failure stops costing you the work.
 
 Full operating manual for the manual-install path (parameters, watching the loop, escalations, merge): [docs/consumer-guide.md](./docs/consumer-guide.md).
 
@@ -150,14 +150,36 @@ Full operating manual for the manual-install path (parameters, watching the loop
 ## Core design commitments
 
 - **Stateless iterations, dumb runtime.** Every iteration starts from repository state, so resumability is *tested continuously*, not trusted. The runtime has no judgment — its whole intelligence is a status reaction table plus two mechanical safety bounds (crash watchdog, iteration budget).
-- **Status contract.** Every engine invocation ends with exactly one of `CONTINUE / DONE / ESCALATE / FAILED`; producing no status *is* the crash signal.
+- **Status contract.** Every engine invocation ends with exactly one of `CONTINUE / DONE / ESCALATE / FAILED`; producing no status *is* the crash signal. `ESCALATE` fires when work runs out, not at the first question.
+- **Non-blocking progress.** Questions queue, failures abandon, and the loop keeps moving — which is what makes it usable with minimal supervision. Safety comes from the dependency graph: every queued question names the tasks it blocks, and a blocked task cannot be selected, so the engine can never build on an unanswered question.
+- **Mechanical resource bounds.** Idle timeout (a working engine emits events continuously; silence is a hang), hard timeout, iteration budget, and a **quota ceiling read from structured signal** — the CLI's `rate_limit_event` reports utilization and reset time for *every* usage window, so the ceiling is measured rather than guessed, and hitting the limit is a wait rather than a crash.
 - **Tiered mutability.** Tier 1: the engine freely reshapes tasks (always logged). Tier 2: architecture/strategy changes hard-stop for approval. Tier 3: intent belongs to the human, forever.
 - **Capability-based permissions.** No permanent allowlists — grants carry intent, command, scope, and lifetime (goal-scoped by default, auto-expiring), enforced through the trust chain *Human → Ledger → Runtime Compiler → Settings → Engine*. A guardrail against accidents and drift — documented honestly as not being a boundary against an adversarial engine.
-- **Three minds.** The builder implements, a clean-context reviewer challenges (it never sees the builder's reasoning — that reasoning may contain the original mistake), and a fresh verifier confirms completion.
+- **Three minds, plus Workers.** The builder implements, a clean-context reviewer challenges (it never sees the builder's reasoning — that reasoning may contain the original mistake), and a fresh verifier confirms completion. Parallel Workers are restricted by the harness, not by instruction: omitting `Bash` from a Worker's tool list is what makes "no git, no build, no test" real.
+- **Bounded context, by construction.** Audit history leaves the read path entirely, so orientation cost stays flat instead of growing with the run: iteration 40 reads what iteration 2 read.
 - **Everything auditable.** Plan amendments logged with reasons; human decisions recorded with rationale; every checkpoint a commit; the branch history *is* the execution history.
 - **The skill never widens what the engine can do.** It stages input and supervises output; every capability grant — standing or goal-scoped — still flows through the same human-approved ledger the engine has always used.
 
 The complete vocabulary lives in [CONTEXT.md](./CONTEXT.md); the full design in [docs/architecture.md](./docs/architecture.md); the reasoning behind each hard-to-reverse choice in [docs/adr/](./docs/adr/).
+
+---
+
+## Loop Engineering alignment
+
+This is an application of Addy Osmani's [Loop Engineering](https://addyosmani.com/blog/loop-engineering/), which names six primitives a loop needs. Where each one lives here:
+
+| Primitive | Where it lives |
+|---|---|
+| **Automations** (the heartbeat) | Deliberately *outside* `run.ps1` — the runtime holds no scheduling logic ([ADR-002](./docs/adr/ADR-002-stateless-iteration-dumb-runtime.md)). `run.ps1` is a goal loop; a cadence comes from Claude Code's `/loop`, cron, or CI invoking `/loop-runtime` |
+| **Worktrees** (isolation) | Replaced by something stricter: one branch, one working directory, **Declared File Scopes verified after the fact** ([ADR-008](./docs/adr/ADR-008-phase-workers-single-branch.md)). Git refuses two worktrees on one branch, so the two are mutually exclusive — and verified scopes make a collision explicit instead of letting the filesystem hide it |
+| **Skills** (codified knowledge) | The `/loop-runtime` skill, plus `knowledge/`, which survives every run |
+| **Connectors** (real environment) | Any MCP rule string grants through the same Capability Ledger as a shell command — no new machinery, because the runtime concatenates approved rules verbatim |
+| **Sub-agents** (maker/checker) | Builder, reviewer, verifier — plus Workers, restricted by the harness via `.loop/agents.json` |
+| **State** (the spine) | `.ai/` + `knowledge/` + `git log`, with the read path split from the audit path ([ADR-010](./docs/adr/ADR-010-resume-block-and-audit-split.md)) |
+
+The article's three warnings are answered by mechanisms rather than intentions: **verification stays human** (you merge, always), **comprehension debt** is fought by the completion summary and the Issues Report, and **cognitive surrender** is resisted by the DoD gate and Tier 3 — intent never becomes the machine's to decide.
+
+Two places this goes further than the article: completion is certified by a mind that wrote none of the code, and the loop's resource bounds are read from structured signal rather than guessed at.
 
 ---
 
@@ -182,7 +204,7 @@ Don't judge the loop by a hello-world; judge it by unattended correctness on wor
 Field findings driving the next iteration of the runtime:
 
 - **Compound Bash commands can get denied even when the base command is capability-approved** (e.g. `cd X && node ...`) — the engine self-corrected by retrying with simpler forms both times this was hit; worth tightening the capability-proposal format so this doesn't cost a retry.
-- **Plan granularity must scale with PRD size** — bootstrap split a 2-task feature into 5 tasks, multiplying the per-iteration overhead (policy tune, pending).
+- **Plan granularity must scale with PRD size** — bootstrap split a 2-task feature into 5 tasks, multiplying the per-iteration overhead. Addressed by Phase grouping ([ADR-008](./docs/adr/ADR-008-phase-workers-single-branch.md)): grouping tasks into Phases is what cuts iteration count, which is where orientation cost is paid.
 - Observability must never kill execution — a log-tail file lock once crashed the whole loop; log writes are now shared-mode and fail-silent, and a run lock allows only one runtime per repository (fixed).
 - Iteration counters differ between engine (counts from STATE, includes bootstrap) and runtime (counts this session's invocations) — cosmetic, pending alignment.
 - Console shows mojibake for UTF-8 punctuation on default Windows code pages — cosmetic, pending `[Console]::OutputEncoding` fix.

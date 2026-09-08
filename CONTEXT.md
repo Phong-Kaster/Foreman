@@ -17,15 +17,51 @@ The AI process (one Claude Code invocation) governed by ENGINE.md that performs 
 _Avoid_: Agent, assistant, bot
 
 **Iteration**:
-One Runtime invocation of the Execution Engine: reconstruct context from durable artifacts, execute autonomously until a Stable Checkpoint, persist all changes, return one Execution Status.
+One Runtime invocation of the Execution Engine: reconstruct context from the Resume Block and durable artifacts, execute exactly one Phase, persist all changes as one Stable Checkpoint, return one Execution Status. An Iteration is not one task — a Phase may hold several.
 _Avoid_: Task, step, turn
+
+**Phase**:
+A set of tasks with no unmet dependencies and no overlapping Declared File Scope, executed by a single Iteration. A Phase may hold one task or many. Grouping tasks into Phases is what reduces the number of Iterations — and therefore the orientation cost paid per Iteration; running a Phase's tasks concurrently only reduces wall-clock. Not to be confused with the run's **Stage**.
+_Avoid_: Batch, sprint, stage, round
+
+**Stage**:
+Where a run currently sits in its lifecycle: bootstrap, executing, done-candidate, or escalated. Recorded in `STATE.md`. Named `Phase` in V1 and renamed to free that word for the task group (ADR-008).
+_Avoid_: Phase (its former name), state (overloaded)
+
+**Worker**:
+A clean-context subagent dispatched by the Iteration to implement exactly one task of a Phase, in place in the single working directory, within its Declared File Scope. A Worker holds no git, build, or test capability — enforced by its agent definition, not by instruction — so the Iteration remains the sole writer of state and the sole committer.
+_Avoid_: Agent (ambiguous), sub-engine, parallel engine
+
+**Declared File Scope**:
+The set of files a Worker is permitted to modify, assigned by the Iteration before dispatch and verified after the Worker reports. It serves two purposes: preventing collisions between concurrent Workers, and attributing a build failure to exactly one Worker so it can be re-dispatched with the error. Files shared between tasks — navigation tables, route registries, manifests — are never in a Worker's scope; the Iteration wires them itself.
+_Avoid_: File lock, ownership, partition
+
+**Worker Brief**:
+The minimal context handed to a Worker: its own task, its Declared File Scope, the *status* of other tasks (never their content or their reasoning), pointers to interfaces earlier Phases created, and the conventions it needs. Its return handoff is a manifest — files written, behavior now working, what it could not do — never a payload; the Iteration reads the diff from git.
+_Avoid_: Prompt, context dump, handoff (that's the return direction only)
+
+**Resume Block**:
+The small artifact each Iteration writes at its end containing exactly what the next Iteration needs to orient: current Stage, the next Phase's tasks and their Declared File Scopes, queued-decision count, abandoned task ids, verified build/test commands. A derived cache, never a source of truth — where it disagrees with the task files or git, it loses, and Recover always goes to ground truth.
+_Avoid_: Memory, cache (alone), summary, context file
+
+**Decision Queue**:
+The durable queue of Escalation Requests awaiting human decision. Each entry names the tasks it blocks — the rule that makes deferral safe, because a blocked task becomes unselectable rather than merely unanswered. Replaces V1's "at most one pending Escalation Request": the engine parks a question and continues with unrelated work instead of stopping.
+_Avoid_: Inbox, backlog, blocker list
+
+**Abandoned task**:
+A task marked permanently incomplete after failing its third attempt, together with every task transitively depending on it, which are marked unreachable rather than attempted. Abandonment is not failure of the run: the loop continues on unrelated work and reports the abandonment in the Issues Report. A run containing an abandoned task can never reach `DONE`.
+_Avoid_: Failed task, skipped, dropped
+
+**Issues Report**:
+The durable, issues-only artifact regenerated every Iteration and living outside `.ai/` so it survives the Cleanup Commit: abandoned tasks with their three failure reasons, queued decisions awaiting the human, review findings noted but not fixed, and recorded assumptions. It carries no narrative of what succeeded — that is what the commit messages are for.
+_Avoid_: Report, summary, changelog, roll-up (that's the Skill's end-of-run branch table)
 
 **Execution Status**:
 The single value the engine must produce at the end of every successful invocation: CONTINUE, DONE, ESCALATE, or FAILED. The transport (status file, stdout, SDK response…) is an implementation detail, never part of the contract. V1 uses a status file.
 _Avoid_: Exit code, result, verdict
 
 **ESCALATE**:
-Execution Status meaning the engine is healthy but a decision exceeds its authority (Tier 2, Tier 3, missing product information). Asks the human for a decision.
+Execution Status meaning the engine is healthy but can make no further progress without a human decision. Reported when no executable task remains and the Decision Queue is non-empty or tasks were abandoned — a batch at the end of a run, not an interruption at the first question (ADR-007). Asks the human for decisions.
 _Avoid_: Blocked, paused
 
 **FAILED**:
@@ -45,7 +81,7 @@ Human → Capability Ledger → Runtime Compiler → Permission Settings → Eng
 _Avoid_: Security model (this is a guardrail against accidents and drift, not a boundary against an adversarial engine — containment is the VM path)
 
 **Loop Branch**:
-The dedicated local git branch a run lives on (e.g. `loop/<prd-slug>`), created at bootstrap. The engine never touches the default branch, never pushes, never merges — merging is a human act, always. A catastrophic run is discarded with a branch delete.
+The dedicated git branch a run lives on (e.g. `loop/<prd-slug>`), created at bootstrap. Every Worker and every checkpoint of a run shares this one branch. The engine never touches the default branch and never merges — merging is a human act, always. It may push this branch, and only this branch, under an explicitly granted Capability. A catastrophic run is discarded with a branch delete.
 _Avoid_: Feature branch (human workflow), working copy
 
 **Cleanup Commit**:
@@ -53,7 +89,7 @@ The final commit of a run, created only after fresh verification passes. It remo
 _Avoid_: Squash, final commit (generic)
 
 **Escalation Request**:
-The durable artifact the engine must persist before stopping whenever it requires human input: the question, context, options considered, the engine's recommendation, and space for the human's decision *and rationale*. Consumed and archived by the next fresh invocation. At most one pending at a time (V1). The artifact name (V1: `.ai/ESCALATION.md`) is an implementation detail.
+The durable artifact the engine persists whenever it requires human input: the question, context, options considered, the engine's recommendation, the tasks it blocks, and space for the human's decision *and rationale*. Persisted into the Decision Queue rather than halting the run; consumed and archived by a later fresh invocation. The "at most one pending" limit of V1 is retired (ADR-007). The artifact name (`.ai/ESCALATION.md`) is an implementation detail.
 _Avoid_: Question file, blocker, ticket
 
 **Crash**:

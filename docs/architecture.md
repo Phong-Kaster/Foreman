@@ -92,9 +92,28 @@ HUMAN: reviews the Loop Branch (tip = implementation + knowledge + completion su
 
 ### Iteration anatomy
 
-An **Iteration** is *not* one task. It is: reconstruct context from durable artifacts → execute autonomously until a **Stable Checkpoint** → persist all changes → return one **Execution Status**. The invariant is not granularity; it is that *every iteration leaves the repository in a consistent, resumable state.* For V1 simplicity: one iteration → one checkpoint → one commit.
+An **Iteration** is *not* one task -- it executes one **Phase**, which may hold one task or several. It is: orient from the Resume Block and durable artifacts → select a Phase → dispatch one Worker per task → verify scope, wire shared files, build and test once → review → reconcile → persist all changes → return one **Execution Status**. The invariant is not granularity; it is that *every iteration leaves the repository in a consistent, resumable state.* One iteration → one checkpoint → one commit, always.
 
 Because each iteration is a fresh process, the principle "the agent forgets, the repository doesn't" is **tested every iteration** rather than trusted. If `.ai/` were insufficient to resume, iteration 2 would fail visibly — not a rare crash months later ([ADR-002](./adr/ADR-002-stateless-iteration-dumb-runtime.md)).
+
+---
+
+## 4b. Loop Engineering alignment
+
+This runtime is an application of Addy Osmani's [Loop Engineering](https://addyosmani.com/blog/loop-engineering/) idea, which names six primitives a loop needs. Where each lives here:
+
+| Primitive | Its job in the loop | Where it lives in this runtime |
+|---|---|---|
+| **Automations** | Discovery and triage on a schedule -- what makes a loop *loop* | Deliberately **not** in `run.ps1` ([ADR-002](./adr/ADR-002-stateless-iteration-dumb-runtime.md): the Runtime holds no scheduling logic). `run.ps1` is a *goal* loop, running until DONE / ESCALATE / FAILED. A cadence comes from outside it -- Claude Code's own `/loop`, cron, or a CI job invoking `/loop-runtime` |
+| **Worktrees** | Isolate parallel work | Replaced by a stricter mechanism: one branch, one working directory, and **Declared File Scopes** verified after the fact ([ADR-008](./adr/ADR-008-phase-workers-single-branch.md)). Git forbids two worktrees on one branch, so the two are mutually exclusive; scope verification makes a collision explicit rather than letting the filesystem hide it |
+| **Skills** | Codify project knowledge so the loop stops re-deriving it | The `/loop-runtime` Skill itself, plus `knowledge/` -- which survives every run, so a hard-won environmental fact is paid for once, not once per PRD |
+| **Plugins / connectors** | Let the loop act in the real environment | Any MCP rule string is grantable through the same Capability Ledger as a shell command: the Runtime concatenates approved rules verbatim without interpreting them, so a connector needs no new machinery |
+| **Sub-agents** | Separate maker from checker | Three distinct minds (§8), plus **Workers** for parallel implementation. Their limits are harness-enforced via `.loop/agents.json`: omitting `Bash` from a Worker's `tools` is what makes "no git, no build, no test" real rather than advisory |
+| **State** | Remember what is done, what passed, what is open | `.ai/` + `knowledge/` + `git log`, with the read path deliberately separated from the audit path ([ADR-010](./adr/ADR-010-resume-block-and-audit-split.md)) |
+
+The article's three warnings map onto specific mechanisms rather than good intentions: **verification stays human** (the human merges, always), **comprehension debt** is fought by the Cleanup Commit summary and the Issues Report, and **cognitive surrender** is resisted by the DoD gate and Tier 3 -- intent never becomes the machine's to decide.
+
+Two places where this runtime goes further than the article: completion is certified by a mind that wrote none of the code ([ADR-005](./adr/ADR-005-fresh-context-review-done-candidate.md)), and the loop's resource bounds are read from structured signal rather than guessed ([ADR-012](./adr/ADR-012-runtime-safety-bounds.md)).
 
 ---
 
@@ -127,11 +146,11 @@ There is no conversation to reply to — each iteration is a fresh process. Huma
 
 V1 implementation: `.ai/ESCALATION.md` — question, context, options considered, engine recommendation, structured capability proposals, and an empty **Decision** section. The human writes the decision *and its rationale* (the rationale joins the audit trail), then re-runs. The next iteration's first acts: consume the decision, log it to `AMENDMENTS.md`, archive the exchange, proceed. Unanswered escalation → re-emit `ESCALATE` and stop again — mechanically unambiguous.
 
-At most **one pending escalation at a time** (V1): the engine hard-stops on Tier 2, so parallel questions cannot arise.
+**Many pending decisions at a time** (ADR-007). The engine does not hard-stop on Tier 2 -- it queues the question, marks the tasks that entry blocks, and continues on unrelated work. `ESCALATE` is reported when no executable task remains, so the human answers a batch. The load-bearing rule is that every entry names the tasks it blocks: a blocked task is unselectable, which is what makes it impossible to build on an unanswered question.
 
 DoD approval is not a special mechanism — it is simply the first Escalation Request of every run. All policy changes cross the same boundary.
 
-**The Skill mediates this contract; it does not replace it.** When the Skill is the operating surface, it reads `.ai/ESCALATION.md` itself, presents the question (and the engine's own considered options) as ordinary conversation, and writes the human's decision — and rationale — into the same `## Decision` section a human editing the file by hand would have written. The artifact, the archival into `AMENDMENTS.md`, and the "at most one pending escalation" invariant are all unchanged; only the human-facing transport of the decision differs. A capability approval reached this way can still target either ledger — standing (`knowledge/capabilities.json`) or goal-scoped (`.ai/capabilities.json`) — exactly as a manual approval would.
+**The Skill mediates this contract; it does not replace it.** When the Skill is the operating surface, it reads `.ai/ESCALATION.md` itself, presents the question (and the engine's own considered options) as ordinary conversation, and writes the human's decision — and rationale — into the same `## Decision` section a human editing the file by hand would have written. The artifact, the archival into `AMENDMENTS.md`, and the Decision Queue semantics are all unchanged; only the human-facing transport of the decision differs. Because the queue holds many entries (ADR-007), the Skill presents them as a batch rather than one question. A capability approval reached this way can still target either ledger — standing (`knowledge/capabilities.json`) or goal-scoped (`.ai/capabilities.json`) — exactly as a manual approval would.
 
 ---
 
@@ -195,7 +214,7 @@ The trust chain:
 
 Git is a **persistence backend** for loop concepts, not their definition ([ADR-003](./adr/ADR-003-checkpoint-abstraction-and-git-persistence.md)). All git logic lives in the engine; the runtime never touches git.
 
-- **Loop Branch** per run (`loop/<prd-slug>`), created at bootstrap from HEAD. The engine never touches the default branch, never pushes, never merges, never rewrites history. A catastrophic run = delete the branch.
+- **Loop Branch** per run (`loop/<prd-slug>`), created at bootstrap from HEAD. The engine never touches the default branch, never merges, never rewrites history. It **may push the Loop Branch** under an explicitly granted capability ([ADR-011](./adr/ADR-011-loop-branch-push.md)) -- which makes a mid-run machine failure survivable and lets the human review from another device -- and `--force`, `merge` and `rebase` are denied outright by the Runtime regardless of any allow rule. A catastrophic run = delete the branch.
 - **Checkpoint = one atomic commit** of code + `.ai/` + `knowledge/` together. STATE.md at HEAD always describes HEAD; they cannot desync. `git log` on the branch *is* the execution history.
 - **Crash recovery is mechanical**: dirty tree at iteration start = previous invocation died mid-flight. Salvage into a checkpoint if coherent, otherwise revert to the last checkpoint. Never build on unverified debris.
 - **Cleanup Commit** at verified completion: removes `.ai/` from the branch tip; its message carries the completion summary (what was built, DoD criteria → evidence, notable amendments). The mergeable tip contains the implementation, durable knowledge, and nothing disposable — *`.ai/` is the loop's memory while it works, not the product the human merges.* The full `.ai/` evolution stays in branch history for audit.
@@ -225,7 +244,7 @@ Deliberately deferred until real usage demands them, with the trigger for each:
 | Runtime-transcribed capability approvals (V2 flow) | Human pastes approved ledger entries | Escalation format stabilized through real use |
 | Task-scoped capability expiry | Goal-scoped default only | A goal-long grant proves too broad in practice |
 | `run.sh` | `run.ps1` only | First non-Windows consumer |
-| Parallel task execution / multiple pending escalations | Strictly sequential, single escalation | Sequential throughput becomes the bottleneck |
+| ~~Parallel task execution / multiple pending escalations~~ | **Delivered**: Phases with Workers ([ADR-008](./adr/ADR-008-phase-workers-single-branch.md)), Decision Queue ([ADR-007](./adr/ADR-007-non-blocking-progress.md)) | -- |
 | Non-git checkpoint persistence | Git assumed | A real non-git consumer appears |
 | Separate `GOAL.md` for very large PRDs | PRD + DoD suffice | PRDs too large to serve as working intent reference |
 | Capability rules that tolerate compound shell commands | Exact-prefix match on the literal command string (e.g. `Bash(node *)`) | Recurs often enough in practice that proposals need a broader/looser matching form |

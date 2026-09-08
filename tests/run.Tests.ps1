@@ -59,6 +59,7 @@ function Remove-TestRepo {
     Remove-Item -Path (Join-Path $env:TEMP "loop-run-$leaf.log") -Force -ErrorAction SilentlyContinue
     Remove-Item -Path (Join-Path $env:TEMP "loop-run-$leaf.raw.jsonl") -Force -ErrorAction SilentlyContinue
     Remove-Item Env:\FAKE_CLAUDE_QUEUE -ErrorAction SilentlyContinue
+    Remove-Item Env:\FAKE_CLAUDE_ARGLOG -ErrorAction SilentlyContinue
 }
 
 Describe "run.ps1 status reactions" {
@@ -119,6 +120,122 @@ Describe "run.ps1 prerequisites" {
             $exit | Should Be 1
             (Test-Path (Join-Path $repo ".ai\STATUS.md")) | Should Be $false
         } finally { Remove-TestRepo -TestRepo $repo }
+    }
+}
+
+Describe "run.ps1 quota bound (ADR-012)" {
+
+    It "stops with exit 6 when the five-hour window is at or above the ceiling" {
+        $repo = New-TestRepo
+        try {
+            # 95% > 90% ceiling. -NoQuotaWait makes the trip a stop rather than a sleep.
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("QUOTA:95|CONTINUE|more work", "DONE|never reached")
+            $exit = Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "5", "-NoQuotaWait")
+            $exit | Should Be 6
+        } finally { Remove-TestRepo -TestRepo $repo }
+    }
+
+    It "stops on the seven-day window too, not only the five-hour one" {
+        $repo = New-TestRepo
+        try {
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("QUOTA7:96|CONTINUE|more work", "DONE|never reached")
+            $exit = Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "5", "-NoQuotaWait")
+            $exit | Should Be 6
+        } finally { Remove-TestRepo -TestRepo $repo }
+    }
+
+    It "keeps going when utilization is below the ceiling" {
+        $repo = New-TestRepo
+        try {
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("QUOTA:40|CONTINUE|fine", "DONE|all good")
+            $exit = Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "5", "-NoQuotaWait")
+            $exit | Should Be 0
+        } finally { Remove-TestRepo -TestRepo $repo }
+    }
+
+    It "respects a custom ceiling" {
+        $repo = New-TestRepo
+        try {
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("QUOTA:40|CONTINUE|fine", "DONE|never reached")
+            $exit = Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "5", "-NoQuotaWait", "-QuotaStopPercent", "30")
+            $exit | Should Be 6
+        } finally { Remove-TestRepo -TestRepo $repo }
+    }
+
+    It "treats a rejected invocation as a quota stop, NOT as a crash" {
+        $repo = New-TestRepo
+        try {
+            # Three REJECTED in a row would trip the watchdog (exit 2) if they counted as crashes.
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("REJECTED", "REJECTED", "REJECTED")
+            $exit = Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "5", "-MaxConsecutiveCrashes", "2", "-NoQuotaWait")
+            $exit | Should Be 6
+        } finally { Remove-TestRepo -TestRepo $repo }
+    }
+
+    It "waits for the reset and then continues, instead of stopping" {
+        $repo = New-TestRepo
+        try {
+            # The fixture sets resetsAt ~2s out, so the wait is real but short.
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("REJECTED", "DONE|resumed after the wait")
+            $exit = Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "5")
+            $exit | Should Be 0
+        } finally { Remove-TestRepo -TestRepo $repo }
+    }
+
+    It "does not spend an iteration from the budget on a rejected invocation" {
+        $repo = New-TestRepo
+        try {
+            # Budget of 1. The rejection must not consume it, or DONE would never be reached.
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("REJECTED", "DONE|used the only budgeted iteration")
+            $exit = Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "1")
+            $exit | Should Be 0
+        } finally { Remove-TestRepo -TestRepo $repo }
+    }
+}
+
+Describe "run.ps1 timeout bounds (ADR-012)" {
+
+    It "kills a silent invocation on the idle bound and counts it as a crash" {
+        $repo = New-TestRepo
+        try {
+            # Emits one event then goes quiet for 60s. Idle bound of 1 minute fires first.
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("IDLE:60", "IDLE:60")
+            $exit = Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "5", "-MaxConsecutiveCrashes", "2", "-MaxIdleMinutes", "1")
+            $exit | Should Be 2
+        } finally { Remove-TestRepo -TestRepo $repo }
+    }
+
+    It "does not kill an invocation that reports within the idle bound" {
+        $repo = New-TestRepo
+        try {
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("CONTINUE|quick", "DONE|quick")
+            $exit = Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "5", "-MaxIdleMinutes", "1")
+            $exit | Should Be 0
+        } finally { Remove-TestRepo -TestRepo $repo }
+    }
+}
+
+Describe "run.ps1 engine invocation contract" {
+
+    It "passes the engine spec by file, never as an inline argument" {
+        $repo = New-TestRepo
+        try {
+            $argLog = Join-Path $repo "args.txt"
+            $env:FAKE_CLAUDE_ARGLOG = $argLog
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("DONE|ok")
+            Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "2") | Out-Null
+
+            $recorded = Get-Content $argLog -Raw
+            $recorded | Should Match "--append-system-prompt-file"
+            # The spec BODY must never appear on the command line - only its path. The marker is
+            # the test repo's spec content, not a phrase from the fixed prompt (PowerShell regex
+            # is case-insensitive, and the prompt itself names the Execution Engine Specification).
+            $recorded | Should Match "ENGINE.md"
+            $recorded | Should Not Match "fake engine spec"
+        } finally {
+            Remove-Item Env:\FAKE_CLAUDE_ARGLOG -ErrorAction SilentlyContinue
+            Remove-TestRepo -TestRepo $repo
+        }
     }
 }
 

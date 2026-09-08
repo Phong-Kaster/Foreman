@@ -1,44 +1,56 @@
-# ESCALATION REQUEST
+# DECISION QUEUE
 
-> The engine persists this before stopping whenever a decision exceeds its authority.
-> Fill the **Decision** section (decision + rationale), then re-run the Runtime. At most one pending request at a time.
+> Questions the engine could not answer within its authority. Queueing one does **not** stop the run:
+> the engine marks the tasks that entry blocks and keeps working on everything else. The Runtime
+> stops only when no executable task remains.
+>
+> Answer any number of entries - fill each `## Decision` section, then re-run. Unanswered entries
+> stay queued and the tasks they name stay unselectable.
 
+---
+
+## D-001 - <short title>
+
+- **Status:** pending | answered | archived
 - **Type:** DoD approval | Tier 2 (plan/architecture) | Tier 3 (intent) | Capability grant | Missing information
 - **Iteration:** N
-- **Timestamp:** …
+- **Timestamp:** ...
+- **Blocks tasks:** T-00x, T-00y
+  <!-- LOAD-BEARING. A blocked task is unselectable, which is what makes it impossible for the
+       engine to build on an unanswered question. An entry naming no tasks is a defect. -->
 
-## Question
+### Question
 
 <!-- Exactly what the human is being asked to decide. -->
 
-## Context
+### Context
 
 <!-- Why this arose; what was discovered. -->
 
-## Options Considered
+### Options Considered
 
-1. … — consequences: …
-2. … — consequences: …
+1. ... - consequences: ...
+2. ... - consequences: ...
 
-## Engine Recommendation
+### Engine Recommendation
 
 <!-- The engine's preferred option and why. -->
 
-## Proposed Capabilities (if any)
+### Proposed Capabilities (if any)
 
 <!-- Structured proposals. The human may narrow scope/lifetime, never the engine widening them.
-     On approval (V1): the human pastes the approved entry into the named ledger file. -->
+     On approval: the approved entry is written into the named ledger file verbatim. -->
 ```json
 {
-  "intent": "…",
-  "command": "…",
-  "scope": "…",
+  "intent": "...",
+  "command": "...",
+  "scope": "...",
   "lifetime": "goal",
   "allow": ["Bash(<exact rule>)"],
   "target_ledger": ".ai/capabilities.json"
 }
 ```
 
-## Decision
+### Decision
 
 <!-- HUMAN WRITES HERE: the decision AND its rationale. The rationale becomes part of the audit trail. -->

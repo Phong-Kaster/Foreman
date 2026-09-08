@@ -1,34 +1,24 @@
 # STATE
 
 > Machine-owned execution memory. Updated every iteration; committed atomically with the code it describes.
-> A fresh engine invocation must be able to resume from this file plus the repository alone.
+> Execution history lives in HISTORY.md, not here — this file must not grow with the run.
 
 ## Current
 
-- **Phase:** bootstrap | executing | done-candidate | escalated
-- **Loop Branch:** loop/…
-- **Next task:** …
+- **Stage:** bootstrap | executing | done-candidate | escalated
+  <!-- "Stage" is the run's lifecycle position. A "Phase" is a group of tasks. Do not conflate them. -->
+- **Loop Branch:** loop/...
+- **Next Phase:** T-00x, T-00y
 - **DONE-candidate:** no
 
 ## Progress
 
-| Task | Status | Evidence |
-|---|---|---|
-| T-001 | pending / in-progress / complete / blocked | … |
+| Task | Status | Declared File Scope | Evidence |
+|---|---|---|---|
+| T-001 | pending / in-progress / complete / blocked / abandoned / unreachable | src/... | commit sha, or - |
 
 ## Assumptions
 
-<!-- Minor PRD/DoD ambiguities resolved by recorded assumption (auditable, reversible). Behavior-defining ambiguity escalates instead. -->
-- …
-
-## Iteration History
-
-<!-- Newest first. One entry per iteration: what was attempted, what was learned, what was reconciled. -->
-### Iteration N — <timestamp>
-- Attempted: …
-- Learned: …
-- Reconciled: …
-
-## Archived Escalations
-
-<!-- Full request + decision + rationale of every consumed Escalation Request. -->
+<!-- Minor PRD/DoD ambiguities resolved by recorded assumption (auditable, reversible). Also copied
+     into ISSUES.md. Behavior-defining ambiguity queues a decision instead. -->
+- ...

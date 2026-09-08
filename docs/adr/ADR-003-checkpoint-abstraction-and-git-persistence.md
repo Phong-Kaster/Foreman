@@ -14,4 +14,4 @@ A **Stable Checkpoint** is defined as a verified execution state that is safe to
 - Crash recovery is mechanical: a dirty working tree at iteration start means the previous iteration died mid-flight; the engine salvages or reverts to the last checkpoint.
 - `git log` on the Loop Branch is the execution history; the audit trail is free.
 - At verified completion, a **Cleanup Commit** removes `.ai/` from the branch tip: `.ai/` is the loop's memory while it works, not the product the human merges. Its history remains in the branch's commits. The completion summary travels in the Cleanup Commit's message.
-- The engine never touches the default branch, never pushes, never merges. Merging is a human act, always.
+- The engine never touches the default branch and never merges. Merging is a human act, always. (Pushing the Loop Branch was later permitted under an explicit capability grant -- see [ADR-011](./ADR-011-loop-branch-push.md) -- which does not change the branch's append-only character or who may merge.)
