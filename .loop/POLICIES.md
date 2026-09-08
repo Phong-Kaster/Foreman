@@ -92,7 +92,7 @@ A claim without evidence is not a fact. Task completion requires recorded eviden
 - **Low-risk (baseline, permanent, ships with the runtime):** reading repository files; `git status/diff/log/add/commit/checkout/branch` local operations; creating and editing files inside the consumer repository (excluding protected paths).
 - **Standing (per-repository, approved at the DoD gate, lives in Knowledge):** the repository's verified toolchain — build, test, lint, dependency install. Pushing the Loop Branch also belongs here when granted, since it applies to every checkpoint of the run.
 - **High-risk (goal-scoped by default, always explicit):** deletion commands; **network access, including `git push`**; process/system management (`docker`, `adb`, `kubectl`, service control); anything touching paths outside the repository; anything irreversible.
-- **Worker-denied always:** git of any kind, build, test, and any write to `.ai/` or `knowledge/`. A Worker that could write shared state would break the single-writer rule that makes concurrent Workers safe.
+- **Worker-denied always:** git of any kind, build, test, and any write to `.ai/` or `knowledge/`. A Worker that could write shared state would break the single-writer rule that makes concurrent Workers safe. These limits are the `tools:` list in `.loop/agents/`, enforced by the harness rather than by instruction.
 
 Protected paths (never writable by the engine, enforced by runtime deny rules): `.loop/`, all Capability Ledgers, generated permission settings, runtime configuration.
 

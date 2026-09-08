@@ -18,7 +18,13 @@ The quota bound is possible because `claude -p --output-format stream-json` emit
                     "seven_day":{"utilization":0.18,"resetsAt":1789308000}}}}
 ```
 
-The Runtime tracks the latest event seen, checks **between** Iterations, and reacts: below the ceiling, invoke again; at or above it, either stop or sleep until `resetsAt` and resume. A `status` indicating rejection is a **quota wait, never a Crash** — it does not increment the Watchdog counter.
+The Runtime tracks the **peak** utilization seen (not the latest — a later event can report lower), checks **between** Iterations, and reacts: below the ceiling, invoke again; at or above it, either stop or sleep until `resetsAt` and resume. An explicitly `rejected` status is a **quota wait, never a Crash** — it does not increment the Watchdog counter.
+
+Two things a real run taught, both of which changed this design:
+
+**`status` has three values, not two:** `allowed`, `allowed_warning`, `rejected`. Code that asks "is the status not `allowed`?" classifies a merely-warned invocation as a rejection — so an invocation that crashed for an unrelated reason while the account was near its limit would put the Runtime to sleep for hours instead of letting the Watchdog retry. That is precisely the silent-hang failure this design exists to avoid. **Only an explicit `rejected` is a rejection.**
+
+**The ceiling cannot preempt a single expensive Iteration, and no threshold can.** The utilization reading available between Iterations was measured when the *previous* Iteration began making calls. One observed Iteration cost $0.84 and consumed the window from roughly 40% to 100%, passing `allowed_warning` at 96%, 97%, and 99% mid-stream before being `rejected` — so a 90% ceiling evaluated on between-Iteration data never fired, and the loop reached 100% anyway. Two mitigations, both now in place: track the peak seen mid-stream rather than the last value, and **treat the CLI's own `allowed_warning` as a trip regardless of the arithmetic**, since the CLI knows the true remaining headroom and the Runtime's figure may be stale. What remains true is structural: the ceiling is a guard on *starting another* Iteration, not on finishing the current one. Where Iterations are costly relative to the window, the ceiling must be set lower.
 
 Timeouts kill the process and count as a Crash, so existing recovery applies unchanged: the next invocation finds a dirty tree and recovers per `ENGINE.md` §6.1. Quota waits are excluded from both timeouts.
 
@@ -33,7 +39,8 @@ Timeouts kill the process and count as a Crash, so existing recovery applies unc
 
 ## Consequences
 
-- Detecting a quota wait removes a concrete defect: before this ADR, exhausting the quota produced no `STATUS.md`, so the Watchdog read it as three Crashes and ended the run.
+- Detecting a quota wait removes a concrete defect: before this ADR, exhausting the quota produced no `STATUS.md`, so the Watchdog read it as three Crashes and ended the run. Verified end to end in a real run: the Runtime saw `rejected`, did not count a Crash, and slept until the reported reset.
+- After a wait completes, the recorded peak and warning flag must be **cleared**. Carrying them across a reset would trip the ceiling instantly on the next check and the loop would never resume.
 - The Runtime must log a heartbeat while waiting ("waiting for quota reset, resumes HH:MM"). A silent stream reads as a hang to a human watching the feed, and to the Skill's Monitor.
 - The idle threshold must exceed the longest legitimate single tool call, because one `Bash` call emits no events while it runs. A clean Android build can exceed ten minutes; 20 min is chosen against that, and is the first number to revisit per project.
 - `result` events carry `subagent_stats`, including `refused.concurrency_limit` — so the ceiling on concurrent Workers is **observable and must be discovered**, never assumed (see ADR-008).

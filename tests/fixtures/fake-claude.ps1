@@ -118,6 +118,22 @@ if ($directive -eq "REJECTED") {
     exit 0
 }
 
+# The CLI has THREE statuses, not two: allowed / allowed_warning / rejected. A warned invocation
+# was permitted and must never be mistaken for a rejection - doing so would make the Runtime sleep
+# for hours on an invocation that simply crashed. WARNED emits the warning and then behaves as the
+# following directive, exactly as the real CLI does.
+if ($directive -match '^WARNED\|(.+)$') {
+    Emit-RateLimit -FiveHour 0.5 -SevenDay 0.2 -Status "allowed_warning"
+    $directive = $Matches[1]
+}
+
+# WARNCRASH: warned, then dies without a status. This is the trap: the old code treated any
+# non-"allowed" status as a rejection and would wait for a reset instead of counting a crash.
+if ($directive -eq "WARNCRASH") {
+    Emit-RateLimit -FiveHour 0.5 -SevenDay 0.2 -Status "allowed_warning"
+    exit 0
+}
+
 # ---------- quota-prefixed directives ----------
 $fiveHour = 0.37
 $sevenDay = 0.18

@@ -141,6 +141,8 @@ Interrupting is always safe: kill it whenever you like (or ask the skill to stop
 
 **On hitting the usage limit** the run does not die. It reads the reset time from the CLI's own rate-limit signal, logs a heartbeat while it sleeps (`waiting for quota reset — HH:MM:SS remaining`), then continues. It also stops *before* the limit — at 90% by default — to leave you headroom, since a loop that consumes your whole window leaves you none for your own work. Both usage windows are checked, not just the five-hour one: exhausting the weekly window locks you out for days rather than hours.
 
+**Set `-QuotaStopPercent` lower than you would expect.** The ceiling governs whether the loop *starts another* iteration, not whether it finishes the current one — and one iteration can consume a large slice of the window on its own. A measured run went from roughly 40% to 100% inside a single iteration. The runtime mitigates this by acting on the CLI's own near-limit warning rather than only on its own arithmetic, but no threshold can preempt an iteration already in flight. If your iterations are expensive, 60–70% is a more realistic ceiling than 90%.
+
 **Read `ISSUES.md`** at the repo root. It is regenerated every iteration and contains problems only: tasks the loop abandoned after three attempts (with each attempt's command and error), tasks it could not reach, decisions waiting on you, review findings it recorded but did not fix, and assumptions it made. It survives to the end of the run, unlike `.ai/`.
 
 Watching progress: `git log --oneline` on the loop branch is the execution history; `.ai/STATE.md` is the engine's current memory; `.ai/AMENDMENTS.md` is the audited log of every plan mutation.
@@ -179,7 +181,7 @@ Enforced mechanically (runtime deny rules) or by hard-stop protocol — true reg
 - Declare `DONE` from the same invocation that implemented the final work
 - Declare `DONE` at all if any task was abandoned or any decision is unanswered
 - Proceed on a task blocked by an unanswered decision, or one depending on an abandoned task
-- Give a Worker git, build, or test access (enforced by the tool list in `.loop/agents.json`, not by instruction)
+- Give a Worker git, build, or test access (enforced by the `tools:` list in `.loop/agents/`, republished into `.claude/agents/` every iteration and deny-listed against the engine's own edits, so it cannot loosen its own helpers)
 
 The skill adds no authority of its own on top of this — it only stages input (PRD, capability ledger entries you already approved) and supervises/summarizes output. Every capability the engine ever exercises still traces back to a ledger entry you approved, standing or goal-scoped.
 

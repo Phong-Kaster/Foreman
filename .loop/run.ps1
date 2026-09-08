@@ -63,7 +63,7 @@ $EngineSpecPath = Join-Path $LoopDir "ENGINE.md"
 if (-not (Test-Path $EngineSpecPath)) { Write-Error ".loop/ENGINE.md not found. Run from the consumer repository root."; exit 1 }
 # Passed as --append-system-prompt-file, not as an inline argument: the spec is ~13KB of multi-line
 # text, which cannot survive Start-Process argument quoting (needed for the timeout bounds below).
-$AgentsPath = Join-Path $LoopDir "agents.json"
+$AgentsDir  = Join-Path $LoopDir "agents"
 
 # ---------- PRD staging (mechanical copy only - never interprets or rewrites content) ----------
 if ($PrdPath -ne "") {
@@ -156,6 +156,8 @@ function Compile-PermissionSettings {
         # Pushing is capability-gated (ADR-011) and scoped to the Loop Branch. These deny the
         # operations that would make the engine an author on shared history rather than a
         # contributor on its own branch - regardless of what any allow rule grants.
+        "Edit(.claude/agents/**)",
+        "Write(.claude/agents/**)",
         "Bash(git push --force*)",
         "Bash(git push -f*)",
         "Bash(git merge*)",
@@ -192,12 +194,27 @@ function Read-ExecutionStatus {
 # ---------- Quota reader (ADR-012) ----------
 # claude -p --output-format stream-json emits `rate_limit_event` carrying structured utilization:
 #   { "type":"rate_limit_event", "rate_limit_info": {
-#       "status":"allowed", "rateLimitType":"five_hour", "resetsAt":<unix>,
+#       "status":"allowed" | "allowed_warning" | "rejected",
+#       "rateLimitType":"five_hour", "resetsAt":<unix>,
 #       "unifiedWindows": { "five_hour": {"utilization":0.37,"resetsAt":<unix>},
 #                           "seven_day": {"utilization":0.18,"resetsAt":<unix>} } } }
-# The Runtime keeps the LATEST one seen and checks BETWEEN iterations. It never reads this as
-# engineering signal - it is a mechanical resource bound, nothing more.
+#
+# Two things learned from a real run, both of which shaped the code below:
+#
+#  1. `allowed_warning` is a real status, distinct from both `allowed` and `rejected`. Treating
+#     "anything that is not allowed" as a rejection would make the Runtime sleep for hours on a
+#     merely-warned invocation - the silent-hang failure mode this design exists to avoid. Only an
+#     explicit `rejected` is a rejection.
+#  2. The utilization reading available between iterations is measured when the finished iteration
+#     STARTED making calls. A single iteration can consume a large share of a window, so a 90%
+#     ceiling on stale data does not stop the loop reaching 100% mid-iteration - observed going
+#     40% -> 100% inside one iteration. Therefore: track the PEAK seen mid-stream rather than the
+#     last value, and treat the CLI's own `allowed_warning` as a trip regardless of arithmetic.
+#     The ceiling remains a between-iteration guard; it cannot preempt a single expensive
+#     iteration, and no threshold can. Lower the ceiling when iterations are costly.
 $script:LatestRateLimit = $null
+$script:QuotaWarned     = $false
+$script:PeakUtilization = @{}
 
 function ConvertFrom-UnixSeconds([long]$seconds) {
     return [System.DateTimeOffset]::FromUnixTimeSeconds($seconds).LocalDateTime
@@ -208,42 +225,60 @@ function Test-HasProperty($obj, [string]$name) {
     return (@($obj.PSObject.Properties.Name) -contains $name)
 }
 
-# Returns $null when below the ceiling, otherwise the tripped window with its reset time.
-# Checks EVERY window: the five-hour one is not the only limit, and exhausting the seven-day
-# window locks the human out for days rather than hours.
-function Get-QuotaTrip {
-    $info = $script:LatestRateLimit
-    if ($null -eq $info) { return $null }
-
-    $tripped = $null
+# Record one rate_limit_event. Called for every such event, including mid-iteration ones, because
+# the peak matters and a later event can report a lower figure than one already seen.
+function Register-RateLimit($info) {
+    $script:LatestRateLimit = $info
+    if (Test-HasProperty $info "status") {
+        if ($info.status -eq "allowed_warning" -or $info.status -eq "rejected") { $script:QuotaWarned = $true }
+    }
     if (Test-HasProperty $info "unifiedWindows") {
         foreach ($prop in $info.unifiedWindows.PSObject.Properties) {
             $w = $prop.Value
             if (-not (Test-HasProperty $w "utilization")) { continue }
             $pct = [double]$w.utilization * 100.0
-            if ($pct -ge $QuotaStopPercent) {
-                $resets = $null
-                if (Test-HasProperty $w "resetsAt") { $resets = ConvertFrom-UnixSeconds ([long]$w.resetsAt) }
-                # When several windows trip, the earliest reset is the one worth waiting for.
-                if ($null -eq $tripped) {
-                    $tripped = @{ Window = $prop.Name; Percent = $pct; ResetsAt = $resets }
-                } elseif ($null -ne $resets -and $null -ne $tripped.ResetsAt -and $resets -lt $tripped.ResetsAt) {
-                    $tripped = @{ Window = $prop.Name; Percent = $pct; ResetsAt = $resets }
-                }
+            $resets = $null
+            if (Test-HasProperty $w "resetsAt") { $resets = ConvertFrom-UnixSeconds ([long]$w.resetsAt) }
+            $prev = $null
+            if ($script:PeakUtilization.ContainsKey($prop.Name)) { $prev = $script:PeakUtilization[$prop.Name] }
+            if ($null -eq $prev -or $pct -gt $prev.Percent) {
+                $script:PeakUtilization[$prop.Name] = @{ Window = $prop.Name; Percent = $pct; ResetsAt = $resets }
             }
+        }
+    }
+}
+
+# Returns $null when below the ceiling, otherwise the tripped window with its reset time.
+# Checks EVERY window: the five-hour one is not the only limit, and exhausting the seven-day
+# window locks the human out for days rather than hours.
+function Get-QuotaTrip {
+    $tripped = $null
+    foreach ($key in $script:PeakUtilization.Keys) {
+        $w = $script:PeakUtilization[$key]
+        $isOver = ($w.Percent -ge $QuotaStopPercent)
+        # The CLI's own warning outranks the arithmetic: it knows the true remaining headroom,
+        # and the utilization figure available here may have been measured before this iteration
+        # spent anything.
+        if (-not $isOver -and $script:QuotaWarned -and $key -eq "five_hour") { $isOver = $true }
+        if (-not $isOver) { continue }
+        if ($null -eq $tripped) {
+            $tripped = $w
+        } elseif ($null -ne $w.ResetsAt -and $null -ne $tripped.ResetsAt -and $w.ResetsAt -lt $tripped.ResetsAt) {
+            # When several windows trip, the earliest reset is the one worth waiting for.
+            $tripped = $w
         }
     }
     return $tripped
 }
 
-# A rejected status is a quota wait, NOT a Crash: the engine never got to run, so the Watchdog
-# counter must not move. Before ADR-012 these were indistinguishable - both produced no status,
-# so exhausting the quota burned three crashes and ended the run.
+# A rejected invocation never ran, so the Watchdog counter must not move. Before this was
+# distinguished, exhausting the quota burned three crashes and ended the run.
+# `allowed_warning` is NOT a rejection - the invocation was permitted.
 function Test-QuotaRejected {
     $info = $script:LatestRateLimit
     if ($null -eq $info) { return $false }
     if (-not (Test-HasProperty $info "status")) { return $false }
-    return ($info.status -ne "allowed")
+    return ($info.status -eq "rejected")
 }
 
 function Get-QuotaResetTime {
@@ -270,6 +305,10 @@ function Wait-ForQuotaReset {
         $chunk = [Math]::Min(300, [Math]::Max(5, [int]$remaining.TotalSeconds))
         Start-Sleep -Seconds $chunk
     }
+    # The window has reset: clear what was learned before it, or the next check trips instantly.
+    $script:QuotaWarned = $false
+    $script:PeakUtilization = @{}
+    $script:LatestRateLimit = $null
     Write-RunLog "Quota wait finished at $(Get-Date -Format o)"
 }
 
@@ -311,6 +350,31 @@ function Resolve-EngineLaunch {
 
     $argString = ($argv | ForEach-Object { Format-ProcArg $_ }) -join " "
     return @{ Exe = $exe; ArgString = $argString }
+}
+
+# Agent definitions are materialized as FILES, not passed as a --agents argument. The JSON route
+# was tried and abandoned: the definitions contain many double quotes, and the npm `claude` shim is
+# itself a PowerShell script that re-quotes its arguments when calling claude.exe -- PowerShell 5.1
+# mangles embedded quotes at that hop, so the CLI received unparsable JSON. Files avoid command-line
+# quoting entirely and work regardless of which shim resolves.
+#
+# Like the permission settings, these are a BUILD artifact: regenerated from .loop/agents/ every
+# iteration and deny-listed against the engine's own edits, so a Worker's tool restriction stays
+# enforced by the harness rather than by instruction.
+function Publish-AgentDefinitions {
+    $source = Join-Path $LoopDir "agents"
+    if (-not (Test-Path $source)) { return }
+    try {
+        # Join-Path twice rather than embedding a separator: a literal backslash in this path was
+        # how a stray control character got in here once, and it silently created a
+        # differently-named directory that the CLI then never discovered.
+        $target = Join-Path (Join-Path $RepoRoot ".claude") "agents"
+        if (-not (Test-Path $target)) { New-Item -ItemType Directory -Path $target -Force | Out-Null }
+        Copy-Item -Path (Join-Path $source "*.md") -Destination $target -Force
+    } catch {
+        # Never let this stop a run: without the definitions the engine simply has no Workers.
+        Write-Warning "Could not publish agent definitions ($_). Continuing without Workers."
+    }
 }
 
 # ---------- Engine invocation with idle + hard timeout (ADR-012) ----------
@@ -398,7 +462,19 @@ function Invoke-EngineOnce {
         try {
             if ((Test-Path $stderrFile) -and (Get-Item $stderrFile).Length -gt 0) {
                 $errText = (Get-Content $stderrFile -Raw).Trim()
-                if ($errText -ne "") { Write-RawLog $errText }
+                if ($errText -ne "") {
+                    Write-RawLog $errText
+                    # Surface it: an invocation that dies without a status is otherwise reported as
+                    # a bare "Crash detected", and the only explanation sits in a log file the human
+                    # has to know to open. Show the tail on the console too.
+                    $errLines = @($errText -split "`n")
+                    $tail = $errLines[([Math]::Max(0, $errLines.Count - 12))..($errLines.Count - 1)]
+                    foreach ($l in $tail) {
+                        $line = "[engine stderr] " + $l.TrimEnd("`r")
+                        Write-Host $line -ForegroundColor DarkYellow
+                        Write-RunLog $line
+                    }
+                }
             }
         } catch {}
         Remove-Item $stdoutFile -Force -ErrorAction SilentlyContinue
@@ -421,7 +497,7 @@ function Read-EngineEvent {
 
     # Quota is tracked even when the activity feed is suppressed: it is a safety bound, not output.
     if ($evt.type -eq "rate_limit_event" -and (Test-HasProperty $evt "rate_limit_info")) {
-        $script:LatestRateLimit = $evt.rate_limit_info
+        Register-RateLimit $evt.rate_limit_info
     }
     if (-not $Stream) { return }
 
@@ -488,7 +564,7 @@ for ($iteration = 1; $iteration -le $MaxIterations; $iteration++) {
     # edits: a Worker's tool restriction must be enforced by the harness, not by instruction the
     # engine could reason around. Omitting Bash from its tools is what makes "no git, no build,
     # no test" real rather than advisory.
-    if (Test-Path $AgentsPath) { $claudeArgs += @("--agents", ((Get-Content $AgentsPath -Raw).Trim())) }
+    Publish-AgentDefinitions
     # Keep per-machine, per-iteration sections (cwd, env, git status) out of the system prompt so
     # the cacheable prefix stays byte-identical across iterations. Git status changes every
     # checkpoint, so leaving it in the prefix would break the cache for the spec that follows it.

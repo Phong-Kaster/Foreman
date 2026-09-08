@@ -5,12 +5,12 @@
 
 .DESCRIPTION
     run.ps1 never calls git itself (only the real engine does), so these tests don't need a real
-    git repo — just a plain folder with a `.loop/ENGINE.md` file. The fake-claude.ps1 fixture
+    git repo - just a plain folder with a `.loop/ENGINE.md` file. The fake-claude.ps1 fixture
     (invoked via run.ps1's existing -ClaudeCommand seam) is driven by a queue file so each test can
     script exactly what "the engine" does on each iteration, deterministically.
 
     run.ps1 is always launched as a genuine child process (powershell -File ...), never dot-sourced
-    or called in-process — its internal `exit N` calls would otherwise terminate the test runner
+    or called in-process - its internal `exit N` calls would otherwise terminate the test runner
     itself instead of just ending the script.
 
 .NOTES
@@ -60,6 +60,7 @@ function Remove-TestRepo {
     Remove-Item -Path (Join-Path $env:TEMP "loop-run-$leaf.raw.jsonl") -Force -ErrorAction SilentlyContinue
     Remove-Item Env:\FAKE_CLAUDE_QUEUE -ErrorAction SilentlyContinue
     Remove-Item Env:\FAKE_CLAUDE_ARGLOG -ErrorAction SilentlyContinue
+    Remove-Item Env:\FAKE_CLAUDE_AGENTLOG -ErrorAction SilentlyContinue
 }
 
 Describe "run.ps1 status reactions" {
@@ -172,6 +173,31 @@ Describe "run.ps1 quota bound (ADR-012)" {
         } finally { Remove-TestRepo -TestRepo $repo }
     }
 
+    It "treats allowed_warning as a crash when the engine dies, NOT as a quota wait" {
+        $repo = New-TestRepo
+        try {
+            # The trap this test exists for: the CLI has three statuses, and code that checks
+            # "status is not allowed" classifies a merely-warned invocation as rejected, then
+            # sleeps for hours instead of letting the Watchdog retry. Two warned crashes with a
+            # crash limit of 2 must exit 2 (watchdog), never 6 (quota).
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("WARNCRASH", "WARNCRASH")
+            $exit = Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "5", "-MaxConsecutiveCrashes", "2")
+            $exit | Should Be 2
+        } finally { Remove-TestRepo -TestRepo $repo }
+    }
+
+    It "stops on the CLI's own warning even when reported utilization is below the ceiling" {
+        $repo = New-TestRepo
+        try {
+            # 50% is well under the 90% ceiling, but the CLI warned. It knows the true headroom;
+            # the utilization figure available between iterations was measured before this
+            # iteration spent anything. A real run went 40% -> 100% inside one iteration.
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("WARNED|CONTINUE|more work", "DONE|never reached")
+            $exit = Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "5", "-NoQuotaWait")
+            $exit | Should Be 6
+        } finally { Remove-TestRepo -TestRepo $repo }
+    }
+
     It "waits for the reset and then continues, instead of stopping" {
         $repo = New-TestRepo
         try {
@@ -236,6 +262,52 @@ Describe "run.ps1 engine invocation contract" {
             Remove-Item Env:\FAKE_CLAUDE_ARGLOG -ErrorAction SilentlyContinue
             Remove-TestRepo -TestRepo $repo
         }
+    }
+}
+
+Describe "run.ps1 agent definitions" {
+
+    It "materializes the real agent definitions into .claude/agents before invoking" {
+        $repo = New-TestRepo
+        try {
+            # The REAL definitions, not hand-written stand-ins. These were once passed as a
+            # --agents JSON argument; the npm claude shim is itself a PowerShell script that
+            # re-quotes its arguments, and PowerShell 5.1 mangles embedded double quotes at that
+            # hop, so the CLI received unparsable JSON. Files avoid command-line quoting entirely.
+            New-Item -ItemType Directory -Path (Join-Path $repo ".loop\agents") -Force | Out-Null
+            Copy-Item -Path (Join-Path $RepoRootDir ".loop\agents\*.md") -Destination (Join-Path $repo ".loop\agents") -Force
+
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("DONE|ok")
+            Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "2") | Out-Null
+
+            $published = Join-Path $repo ".claude\agents"
+            (Test-Path (Join-Path $published "loop-worker.md")) | Should Be $true
+            (Test-Path (Join-Path $published "loop-reviewer.md")) | Should Be $true
+        } finally { Remove-TestRepo -TestRepo $repo }
+    }
+
+    It "gives the Worker no Bash tool, so 'no git, no build, no test' is harness-enforced" {
+        $repo = New-TestRepo
+        try {
+            New-Item -ItemType Directory -Path (Join-Path $repo ".loop\agents") -Force | Out-Null
+            Copy-Item -Path (Join-Path $RepoRootDir ".loop\agents\*.md") -Destination (Join-Path $repo ".loop\agents") -Force
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("DONE|ok")
+            Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "2") | Out-Null
+
+            $worker = Get-Content (Join-Path $repo ".claude\agents\loop-worker.md") -Raw
+            $toolLine = ($worker -split "`n" | Where-Object { $_ -match "^tools:" })
+            $toolLine | Should Not Match "Bash"
+            $toolLine | Should Match "Read"
+        } finally { Remove-TestRepo -TestRepo $repo }
+    }
+
+    It "runs normally when no agent definitions are present" {
+        $repo = New-TestRepo
+        try {
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("DONE|ok")
+            $exit = Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "2")
+            $exit | Should Be 0
+        } finally { Remove-TestRepo -TestRepo $repo }
     }
 }
 
