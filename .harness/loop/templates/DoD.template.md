@@ -5,7 +5,7 @@
 
 ## Status
 
-- [ ] APPROVED — approve via the pending `.ai/ESCALATION.md`; edit criteria freely before approving.
+- [ ] APPROVED — approve via the pending `.harness/run/ESCALATION.md`; edit criteria freely before approving.
 
 ## Acceptance Criteria
 

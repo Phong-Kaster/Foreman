@@ -1,5 +1,5 @@
 {
-  "_comment": "The Model Tier Map (ADR-013). ENGINE.md and POLICIES.md speak only in tier names ('Fast tier', 'Capable tier') and never a vendor model identifier - this file is the ONE place that mapping lives, so porting to another engine means editing this file, not the specification. The engine can read this file but never write it (covered by the .loop/** deny rule). Human-editable at install or port time.",
+  "_comment": "The Model Tier Map (ADR-013). ENGINE.md and POLICIES.md speak only in tier names ('Fast tier', 'Capable tier') and never a vendor model identifier - this file is the ONE place that mapping lives, so porting to another engine means editing this file, not the specification. The engine can read this file but never write it (covered by the .harness/loop/** deny rule). Human-editable at install or port time.",
 
   "fast": {
     "_comment": "For Worker dispatch only, and only for tasks classified Fast per POLICIES.md's Model Tier Criteria. Never used for the Reviewer, the Verifier, or the Orchestrator (the top-level Iteration itself) - those always use 'capable'.",

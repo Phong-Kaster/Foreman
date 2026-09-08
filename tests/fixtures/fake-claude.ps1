@@ -11,10 +11,10 @@
     stdout so the Runtime's parser and quota logic are genuinely exercised, not assumed.
 
     Directives:
-      CONTINUE|<reason>        -> stream-json + .ai/STATUS.md = CONTINUE
-      DONE|<reason>            -> stream-json + .ai/STATUS.md = DONE
-      ESCALATE|<reason>        -> stream-json + .ai/STATUS.md = ESCALATE
-      FAILED|<reason>          -> stream-json + .ai/STATUS.md = FAILED
+      CONTINUE|<reason>        -> stream-json + .harness/run/STATUS.md = CONTINUE
+      DONE|<reason>            -> stream-json + .harness/run/STATUS.md = DONE
+      ESCALATE|<reason>        -> stream-json + .harness/run/STATUS.md = ESCALATE
+      FAILED|<reason>          -> stream-json + .harness/run/STATUS.md = FAILED
       CRASH                    -> emits nothing, writes nothing (a crashed invocation)
       SLEEP:<seconds>          -> sleeps, writes nothing (run-lock / hard-timeout tests)
       IDLE:<seconds>           -> emits one event, then goes silent (idle-timeout tests)
@@ -39,8 +39,8 @@ if ($env:FAKE_CLAUDE_ARGLOG) {
 }
 
 $RepoRoot = (Get-Location).Path
-$AiDir = Join-Path $RepoRoot ".ai"
-if (-not (Test-Path $AiDir)) { New-Item -ItemType Directory -Path $AiDir -Force | Out-Null }
+$RunDir = Join-Path (Join-Path $RepoRoot ".harness") "run"
+if (-not (Test-Path $RunDir)) { New-Item -ItemType Directory -Path $RunDir -Force | Out-Null }
 
 $QueueFile = $env:FAKE_CLAUDE_QUEUE
 if (-not $QueueFile -or -not (Test-Path $QueueFile)) { exit 0 }
@@ -95,7 +95,7 @@ function Emit-Result {
 
 function Write-Status {
     param([string]$Word, [string]$Reason)
-    Set-Content -Path (Join-Path $AiDir "STATUS.md") -Value "$Word`n$Reason"
+    Set-Content -Path (Join-Path $RunDir "STATUS.md") -Value "$Word`n$Reason"
 }
 
 # ---------- non-reporting directives ----------

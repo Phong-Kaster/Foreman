@@ -47,7 +47,7 @@
   "scope": "...",
   "lifetime": "goal",
   "allow": ["Bash(<exact rule>)"],
-  "target_ledger": ".ai/capabilities.json"
+  "target_ledger": ".harness/run/capabilities.json"
 }
 ```
 

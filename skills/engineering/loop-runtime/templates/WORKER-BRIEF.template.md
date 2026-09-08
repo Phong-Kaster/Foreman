@@ -37,7 +37,7 @@ deliberately excluded. The Iteration wires those itself after your work is merge
 
 ## Conventions
 
-<!-- The relevant subset of knowledge/PROJECT.md. -->
+<!-- The relevant subset of .harness/knowledge/PROJECT.md. -->
 
 ## Report back
 

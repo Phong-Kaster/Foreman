@@ -16,12 +16,12 @@ The engine reports `ESCALATE` only when **no executable task remains** and the q
 
 ## Consequences
 
-- The V1 invariant "at most one pending Escalation Request" is retired, replaced by the Decision Queue. `.ai/ESCALATION.md` becomes a queue of entries rather than a single pending request.
+- The V1 invariant "at most one pending Escalation Request" is retired, replaced by the Decision Queue. `.harness/run/ESCALATION.md` becomes a queue of entries rather than a single pending request.
 - **Parking is safe only because tasks declare dependencies.** A queue entry that fails to name the tasks it blocks is a defect: it would allow the engine to build on an unanswered question. This is the load-bearing rule of the whole design.
 - `ENGINE.md` §6.2 narrows from "never proceed past an unanswered escalation" to "never proceed past an unanswered escalation *on the tasks that escalation blocks*".
 - `POLICIES.md`'s retry policy changes its terminal branch: the third failure reconciles to **abandonment**, not escalation.
 - A global question (a technology choice, a contradiction in intent) blocks nearly every task through the dependency graph, so the loop runs out of executable work and reports quickly. The graph makes global and local questions behave correctly without a special case.
 - DoD approval remains the **single blocking gate**: approved before the run starts, after which nothing stops the loop for a question until it runs out of work.
 - A run can now end with unmet DoD criteria. That outcome is `ESCALATE`, never `DONE` — so ADR-005's completion guarantee is untouched.
-- Because a run can end incomplete, the **Issues Report** becomes necessary rather than optional: abandoned tasks with their three failure reasons, queued questions, unfixed review findings, and recorded assumptions must survive the Cleanup Commit that removes `.ai/`.
+- Because a run can end incomplete, the **Issues Report** becomes necessary rather than optional: abandoned tasks with their three failure reasons, queued questions, unfixed review findings, and recorded assumptions must survive the Cleanup Commit that removes `.harness/run/`.
 - The iteration budget stops being the primary safety bound for a long run. The bound that replaces it is a **resource** bound, not a time-of-day one — see ADR-012, which also establishes that exhausting the account quota is a wait, never a Crash. "No executable task remains" is the progress bound; the quota ceiling is the resource bound; neither is a clock.

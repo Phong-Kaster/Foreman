@@ -5,7 +5,7 @@ How to install, run, and govern the Loop Runtime as the human in the loop. Desig
 There are two ways to operate the loop — pick one per repository, both talk to the same engine underneath:
 
 - **Skill path (recommended)** — the `/loop-runtime` Claude Code skill installs, stages, launches, supervises, and summarizes for you. This is the path most people want; skip to [§1a](#1a-install-the-skill-recommended).
-- **Manual path** — copy `.loop/` yourself and run `run.ps1` from a terminal. Useful outside Claude Code, for scripted/CI-style invocation, or if you want direct control over every parameter. See [§1b](#1b-install-manually).
+- **Manual path** — copy `.harness/loop/` yourself and run `run.ps1` from a terminal. Useful outside Claude Code, for scripted/CI-style invocation, or if you want direct control over every parameter. See [§1b](#1b-install-manually).
 
 ---
 
@@ -22,11 +22,11 @@ There are two ways to operate the loop — pick one per repository, both talk to
 npx skills@latest add Phong-Kaster/Loop-Runtime
 ```
 
-Installs `loop-runtime` into `.claude/skills/loop-runtime/` and `.agents/skills/loop-runtime/` in the current repo. Nothing else to copy — the skill carries its own copy of `ENGINE.md`, `POLICIES.md`, the capability baseline, the templates, and `run.ps1`, and materializes `.loop/` at your repo root itself the first time you invoke it.
+Installs `loop-runtime` into `.claude/skills/loop-runtime/` and `.agents/skills/loop-runtime/` in the current repo. Nothing else to copy — the skill carries its own copy of `ENGINE.md`, `POLICIES.md`, the capability baseline, the templates, and `run.ps1`, and materializes `.harness/loop/` at your repo root itself the first time you invoke it.
 
 ## 1b. Install manually
 
-Copy the `.loop/` directory into your repository root by hand. That is the entire installation — never edit its contents per-project (project-specific truth belongs in `knowledge/`, which the loop maintains itself). Use this path if you're not working inside Claude Code, or want to invoke `run.ps1` from a script/CI job instead of a conversation.
+Copy the `.harness/loop/` directory into your repository root by hand. That is the entire installation — never edit its contents per-project (project-specific truth belongs in `.harness/knowledge/`, which the loop maintains itself). Use this path if you're not working inside Claude Code, or want to invoke `run.ps1` from a script/CI job instead of a conversation.
 
 ---
 
@@ -46,12 +46,12 @@ Inline text is written verbatim into `PRD.md` — no rewriting, no summarizing. 
 
 ## 3. Start the runtime
 
-**Skill path:** the skill starts it for you — `.loop/run.ps1` is launched in the background and its log is streamed live into the conversation via a Monitor, the same way you'd see output from any other command. Nothing to run by hand; nothing ties up your terminal, and there's no foreground-command timeout to worry about on a long run.
+**Skill path:** the skill starts it for you — `.harness/loop/run.ps1` is launched in the background and its log is streamed live into the conversation via a Monitor, the same way you'd see output from any other command. Nothing to run by hand; nothing ties up your terminal, and there's no foreground-command timeout to worry about on a long run.
 
 **Manual path:**
 
 ```powershell
-powershell -File .loop/run.ps1
+powershell -File .harness/loop/run.ps1
 ```
 
 Useful parameters:
@@ -108,17 +108,17 @@ git log --oneline loop/<prd-slug>
 
 Only one runtime may run per repository — a second `run.ps1` refuses to start while another holds the run lock (`$env:TEMP\loop-run-<repo-name>.lock`; stale locks from dead processes are taken over automatically). This holds regardless of which path launched it.
 
-The first invocation finds no `.ai/` and therefore bootstraps: it reads your PRD, inspects the repository (including `CLAUDE.md` and READMEs — it never edits them), generates `knowledge/` and `.ai/`, creates the `loop/<prd-slug>` branch, and stops with `ESCALATE`.
+The first invocation finds no `.harness/run/` and therefore bootstraps: it reads your PRD, inspects the repository (including `CLAUDE.md` and READMEs — it never edits them), generates `.harness/knowledge/` and `.harness/run/`, creates the `loop/<prd-slug>` branch, and stops with `ESCALATE`.
 
 ## 4. The one mandatory gate: approve the Definition of Done
 
-**Skill path:** the skill reads `.ai/ESCALATION.md` and asks you directly in conversation — the DoD, the proposed capabilities, and any ambiguity the engine flagged, presented as a normal question with the engine's own considered options as choices. Answer it like any other question; the skill writes your decision (and rationale) into `.ai/ESCALATION.md`'s `## Decision` section and any approved capability into the right ledger file, then resumes automatically. You never open a file yourself.
+**Skill path:** the skill reads `.harness/run/ESCALATION.md` and asks you directly in conversation — the DoD, the proposed capabilities, and any ambiguity the engine flagged, presented as a normal question with the engine's own considered options as choices. Answer it like any other question; the skill writes your decision (and rationale) into `.harness/run/ESCALATION.md`'s `## Decision` section and any approved capability into the right ledger file, then resumes automatically. You never open a file yourself.
 
-**Manual path:** open `.ai/DoD.md` and `.ai/ESCALATION.md`. The DoD is the exam the whole run will be graded against — this is your highest-leverage five minutes:
+**Manual path:** open `.harness/run/DoD.md` and `.harness/run/ESCALATION.md`. The DoD is the exam the whole run will be graded against — this is your highest-leverage five minutes:
 
 1. Edit the criteria freely: tighten vague ones, delete wrong ones, add missing ones. Every criterion must be provable by evidence.
 2. Review the proposed standing capabilities (your repo's build/test/lint commands). Narrow anything too broad; paste approved entries into the named ledger file.
-3. Write your decision **and rationale** under `## Decision` in `.ai/ESCALATION.md`.
+3. Write your decision **and rationale** under `## Decision` in `.harness/run/ESCALATION.md`.
 4. Re-run `run.ps1`.
 
 After approval the DoD is immutable to the engine either way: it may propose changes, never apply them.
@@ -127,7 +127,7 @@ After approval the DoD is immutable to the engine either way: it may propose cha
 
 Nothing is required from you. The loop stops only for:
 
-- **`ESCALATE`** — the loop ran out of executable work and needs decisions. It does **not** stop at the first question: a question is queued with the tasks it blocks named, and the loop continues on unrelated work ([ADR-007](./adr/ADR-007-non-blocking-progress.md)). So expect a **batch** of questions here, not one. Skill path: answered as conversation, same as §4. Manual path: read `.ai/ESCALATION.md`, fill the `## Decision` section of any entries you want to answer (a subset is fine), re-run.
+- **`ESCALATE`** — the loop ran out of executable work and needs decisions. It does **not** stop at the first question: a question is queued with the tasks it blocks named, and the loop continues on unrelated work ([ADR-007](./adr/ADR-007-non-blocking-progress.md)). So expect a **batch** of questions here, not one. Skill path: answered as conversation, same as §4. Manual path: read `.harness/run/ESCALATION.md`, fill the `## Decision` section of any entries you want to answer (a subset is fine), re-run.
 - **Abandoned tasks** — a task failing three attempts is abandoned, along with anything depending on it, and the loop keeps going. This is what lets it run with little supervision. A run with an abandoned task reports `ESCALATE`, never `DONE`, and never runs the verifier: an incomplete feature is not certified. Read `ISSUES.md` for what failed and why.
 - **Quota ceiling (exit 6)** — stopped to leave usage headroom, or waited too many resets. Re-run after the window resets.
 - **`FAILED`** — execution itself is broken (environment, corruption, exhausted resources). Fix the environment, re-run (or ask the skill to); the engine resumes from the last checkpoint.
@@ -143,17 +143,17 @@ Interrupting is always safe: kill it whenever you like (or ask the skill to stop
 
 **Set `-QuotaStopPercent` lower than you would expect.** The ceiling governs whether the loop *starts another* iteration, not whether it finishes the current one — and one iteration can consume a large slice of the window on its own. A measured run went from roughly 40% to 100% inside a single iteration. The runtime mitigates this by acting on the CLI's own near-limit warning rather than only on its own arithmetic, but no threshold can preempt an iteration already in flight. If your iterations are expensive, 60–70% is a more realistic ceiling than 90%.
 
-**Read `ISSUES.md`** at the repo root. It is regenerated every iteration and contains problems only: tasks the loop abandoned after three attempts (with each attempt's command and error), tasks it could not reach, decisions waiting on you, review findings it recorded but did not fix, and assumptions it made. It survives to the end of the run, unlike `.ai/`.
+**Read `.harness/ISSUES.md`.** It is regenerated every iteration and contains problems only: tasks the loop abandoned after three attempts (with each attempt's command and error), tasks it could not reach, decisions waiting on you, review findings it recorded but did not fix, and assumptions it made. It survives to the end of the run, unlike `.harness/run/`.
 
-Watching progress: `git log --oneline` on the loop branch is the execution history; `.ai/STATE.md` is the engine's current memory; `.ai/AMENDMENTS.md` is the audited log of every plan mutation.
+Watching progress: `git log --oneline` on the loop branch is the execution history; `.harness/run/STATE.md` is the engine's current memory; `.harness/run/AMENDMENTS.md` is the audited log of every plan mutation.
 
-**Capability grants can be goal-scoped, not just standing.** A denied-but-needed action (e.g. a destructive git operation the engine isn't authorized for, even late in a run) escalates the same way — the request can propose either a standing capability (`knowledge/capabilities.json`, survives future runs) or a one-time, goal-scoped one (`.ai/capabilities.json`, expires automatically when `.ai/` is removed at completion). Prefer goal-scoped whenever the need is specific to this one run.
+**Capability grants can be goal-scoped, not just standing.** A denied-but-needed action (e.g. a destructive git operation the engine isn't authorized for, even late in a run) escalates the same way — the request can propose either a standing capability (`.harness/knowledge/capabilities.json`, survives future runs) or a one-time, goal-scoped one (`.harness/run/capabilities.json`, expires automatically when `.harness/run/` is removed at completion). Prefer goal-scoped whenever the need is specific to this one run.
 
 ## 6. Completion and merge
 
-`DONE` is only ever reported by a fresh verifier iteration that wrote none of the implementation and re-proved every DoD criterion. At that point the branch tip contains the implementation, updated `knowledge/`, and a **Cleanup Commit** whose message is the completion summary (criteria → evidence, notable amendments) — and no `.ai/` (execution state is the loop's memory, not your product; its full history remains in the branch's earlier commits).
+`DONE` is only ever reported by a fresh verifier iteration that wrote none of the implementation and re-proved every DoD criterion. At that point the branch tip contains the implementation, updated `.harness/knowledge/`, and a **Cleanup Commit** whose message is the completion summary (criteria → evidence, notable amendments) — and no `.harness/run/` (execution state is the loop's memory, not your product; its full history remains in the branch's earlier commits).
 
-**Skill path:** you get a roll-up summary across **every** `loop/*` branch in the repo, not just the one that finished — each one's status (done / in-progress / stuck on an escalation / stale), what it contains, and whether it's merge-ready — plus any non-blocking review notes that would otherwise be lost when `.ai/` is deleted.
+**Skill path:** you get a roll-up summary across **every** `loop/*` branch in the repo, not just the one that finished — each one's status (done / in-progress / stuck on an escalation / stale), what it contains, and whether it's merge-ready — plus any non-blocking review notes that would otherwise be lost when `.harness/run/` is deleted.
 
 **Manual path:** review the branch like any contribution yourself; check other `loop/*` branches with `git branch --list 'loop/*'` if you've run more than one goal in this repo.
 
@@ -163,9 +163,9 @@ Either way: **merging is your act — the engine never merges and never touches 
 
 **Skill path:** `/loop-runtime <next requirement>` — same repo, new goal. If a `PRD.md` already exists and differs from the new text, the skill confirms with you before overwriting rather than doing it silently.
 
-**Manual path:** write a new `PRD.md`, run `run.ps1` again. Either way, `knowledge/` persists — verified commands and hard-won environmental lessons carry over; a new `.ai/` and a new loop branch are created for the run.
+**Manual path:** write a new `PRD.md`, run `run.ps1` again. Either way, `.harness/knowledge/` persists — verified commands and hard-won environmental lessons carry over; a new `.harness/run/` and a new loop branch are created for the run.
 
-To abandon a run: delete `.ai/` and the loop branch. Nothing else to clean.
+To abandon a run: delete `.harness/run/` and the loop branch. Nothing else to clean.
 
 ---
 
@@ -173,7 +173,7 @@ To abandon a run: delete `.ai/` and the loop branch. Nothing else to clean.
 
 Enforced mechanically (runtime deny rules) or by hard-stop protocol — true regardless of which path launched it:
 
-- Modify `.loop/`, any capability ledger, or its own permission settings
+- Modify `.harness/loop/`, any capability ledger, or its own permission settings
 - Modify `PRD.md` or the approved `DoD.md`
 - Widen a capability beyond what you approved
 - Touch your default branch, merge, or rewrite history (`--force`, `rebase` and `merge` are denied outright by the runtime, whatever any allow rule says)
@@ -181,7 +181,7 @@ Enforced mechanically (runtime deny rules) or by hard-stop protocol — true reg
 - Declare `DONE` from the same invocation that implemented the final work
 - Declare `DONE` at all if any task was abandoned or any decision is unanswered
 - Proceed on a task blocked by an unanswered decision, or one depending on an abandoned task
-- Give a Worker git, build, or test access (enforced by the `tools:` list in `.loop/agents/`, republished into `.claude/agents/` every iteration and deny-listed against the engine's own edits, so it cannot loosen its own helpers)
+- Give a Worker git, build, or test access (enforced by the `tools:` list in `.harness/loop/agents/`, republished into `.claude/agents/` every iteration and deny-listed against the engine's own edits, so it cannot loosen its own helpers)
 
 The skill adds no authority of its own on top of this — it only stages input (PRD, capability ledger entries you already approved) and supervises/summarizes output. Every capability the engine ever exercises still traces back to a ledger entry you approved, standing or goal-scoped.
 
@@ -192,4 +192,4 @@ The skill adds no authority of its own on top of this — it only stages input (
 - V1 assumes git and PowerShell; both are persistence/transport details, not architecture.
 - Compound Bash commands (e.g. `cd <dir> && node ...`) can be denied even when the base command is capability-approved, since the approval matches on the literal command form. Expect the engine to self-correct by retrying with a simpler form — it costs a retry, not a failure.
 - Skill path only: the skill's own frontmatter must keep `disable-model-invocation: true`. Without it, a nested engine invocation running inside the same repo can see the skill and auto-trigger it on itself instead of following `ENGINE.md` directly — this was a real bug found during testing, now fixed, but worth knowing if you ever fork or repackage the skill.
-- Automated agent-skill security scanners on skill installers (e.g. Snyk, Socket) rate this skill High-risk, and correctly so — this is an accurate read of its real capability surface, not a false positive: the baseline capability ledger (`capabilities/baseline.json`) grants `Edit(**)`, `Write(**)`, and git commit/branch/checkout as **permanent, automatic** capabilities — no per-action approval once a run starts; `run.ps1` ships a `-DangerouslySkipPermissions` switch that fully bypasses the permission system (documented for sandboxed/VM use only); and the engine runs unattended for up to 50 iterations, writing and committing code on its own branch with a human in the loop only at escalations. Consistent with this project's own documented position (ADR-004): a guardrail against accidents and drift, not a security boundary against an adversarial engine. Since [ADR-011](./adr/ADR-011-loop-branch-push.md) the surface also includes **network access**: `git push` of the `loop/*` branch is grantable, and granting it publishes unverified intermediate checkpoints to your remote where CI may run on them. It is off unless you grant it. The mitigations that make this an acceptable tradeoff are independently verifiable in the same files: the engine never touches the default branch, never merges, and cannot force-push or rebase (the runtime appends deny rules for `git push --force`, `git push -f`, `git merge` and `git rebase` that no allow rule can override); `.loop/`, all capability ledgers, and generated permission settings are deny-listed against the engine's own edits; and it escalates for any capability grant or architecture/intent change rather than expanding its own authority.
+- Automated agent-skill security scanners on skill installers (e.g. Snyk, Socket) rate this skill High-risk, and correctly so — this is an accurate read of its real capability surface, not a false positive: the baseline capability ledger (`capabilities/baseline.json`) grants `Edit(**)`, `Write(**)`, and git commit/branch/checkout as **permanent, automatic** capabilities — no per-action approval once a run starts; `run.ps1` ships a `-DangerouslySkipPermissions` switch that fully bypasses the permission system (documented for sandboxed/VM use only); and the engine runs unattended for up to 50 iterations, writing and committing code on its own branch with a human in the loop only at escalations. Consistent with this project's own documented position (ADR-004): a guardrail against accidents and drift, not a security boundary against an adversarial engine. Since [ADR-011](./adr/ADR-011-loop-branch-push.md) the surface also includes **network access**: `git push` of the `loop/*` branch is grantable, and granting it publishes unverified intermediate checkpoints to your remote where CI may run on them. It is off unless you grant it. The mitigations that make this an acceptable tradeoff are independently verifiable in the same files: the engine never touches the default branch, never merges, and cannot force-push or rebase (the runtime appends deny rules for `git push --force`, `git push -f`, `git merge` and `git rebase` that no allow rule can override); `.harness/loop/`, all capability ledgers, and generated permission settings are deny-listed against the engine's own edits; and it escalates for any capability grant or architecture/intent change rather than expanding its own authority.

@@ -1,6 +1,6 @@
 # Loop Runtime
 
-The vocabulary of the Loop Runtime: a portable execution engine, installed into consumer repositories either as a Claude Code skill or by copying `.loop/` directly, that turns a feature PRD into verified working software with minimal human intervention during coding.
+The vocabulary of the Loop Runtime: a portable execution engine, installed into consumer repositories either as a Claude Code skill or by copying `.harness/loop/` directly, that turns a feature PRD into verified working software with minimal human intervention during coding.
 
 ## Language
 
@@ -9,7 +9,7 @@ The thin, intentionally dumb outer script that compiles the Capability Ledger in
 _Avoid_: Harness, orchestrator, scheduler
 
 **Skill**:
-The `/loop-runtime` Claude Code skill — the recommended surface for installing and operating the loop. It carries its own copy of `.loop/`'s contents (spec, policies, templates, runtime script) and materializes them at the consumer repository root; stages the human's requirement (inline text or a document path) as `PRD.md`; launches and supervises `run.ps1` live instead of leaving it to a terminal; mediates every Escalation Request as ordinary conversation instead of a file the human must open and edit; and reports a Roll-up Summary at completion. It adds no authority of its own — every Capability it exercises still traces back to a ledger entry the human approved through the same Trust Chain.
+The `/loop-runtime` Claude Code skill — the recommended surface for installing and operating the loop. It carries its own copy of `.harness/loop/`'s contents (spec, policies, templates, runtime script) and materializes them at the consumer repository root; stages the human's requirement (inline text or a document path) as `PRD.md`; launches and supervises `run.ps1` live instead of leaving it to a terminal; mediates every Escalation Request as ordinary conversation instead of a file the human must open and edit; and reports a Roll-up Summary at completion. It adds no authority of its own — every Capability it exercises still traces back to a ledger entry the human approved through the same Trust Chain.
 _Avoid_: Wrapper, launcher (undersells that it also supervises and summarizes), plugin (V1 ships as a skill, not a Claude Code plugin — see ADR notes on invocation namespacing)
 
 **Execution Engine**:
@@ -29,7 +29,7 @@ One of two capability levels — Fast or Capable — assigned to a Worker's task
 _Avoid_: Model, model choice (too generic — always say which tier)
 
 **Model Tier Map**:
-`.loop/models.json`, the one file mapping a Model Tier name to a concrete vendor model identifier. The engine reads it, never writes it. Porting to another engine means editing this file, not the specification — the same adapter-boundary principle as ADR-006, applied to model naming.
+`.harness/loop/models.json`, the one file mapping a Model Tier name to a concrete vendor model identifier. The engine reads it, never writes it. Porting to another engine means editing this file, not the specification — the same adapter-boundary principle as ADR-006, applied to model naming.
 _Avoid_: Model config, model settings (implies something richer than a two-entry mapping)
 
 **Stage**:
@@ -61,7 +61,7 @@ A task marked permanently incomplete after failing its third attempt, together w
 _Avoid_: Failed task, skipped, dropped
 
 **Issues Report**:
-The durable, issues-only artifact regenerated every Iteration and living outside `.ai/` so it survives the Cleanup Commit: abandoned tasks with their three failure reasons, queued decisions awaiting the human, review findings noted but not fixed, and recorded assumptions. It carries no narrative of what succeeded — that is what the commit messages are for.
+The durable, issues-only artifact regenerated every Iteration and living outside `.harness/run/` so it survives the Cleanup Commit: abandoned tasks with their three failure reasons, queued decisions awaiting the human, review findings noted but not fixed, and recorded assumptions. It carries no narrative of what succeeded — that is what the commit messages are for.
 _Avoid_: Report, summary, changelog, roll-up (that's the Skill's end-of-run branch table)
 
 **Execution Status**:
@@ -77,11 +77,11 @@ Execution Status meaning execution itself is broken (environment problems, repos
 _Avoid_: Error, crashed (a Crash is specifically the absence of any status)
 
 **Capability**:
-A scoped, auditable permission grant: intent (why), command (what), resource scope (where), lifetime (how long). Capabilities never silently accumulate, and the default lifetime is goal-scoped — expiry with `.ai/` is automatic; reuse requires a new Escalation Request. Permanent capabilities (baseline read/git-local shipped with the runtime; per-repo toolchain standing in Knowledge) represent long-lived policy and always require separate explicit approval. Approval may reduce scope or lifetime, never expand it.
+A scoped, auditable permission grant: intent (why), command (what), resource scope (where), lifetime (how long). Capabilities never silently accumulate, and the default lifetime is goal-scoped — expiry with `.harness/run/` is automatic; reuse requires a new Escalation Request. Permanent capabilities (baseline read/git-local shipped with the runtime; per-repo toolchain standing in Knowledge) represent long-lived policy and always require separate explicit approval. Approval may reduce scope or lifetime, never expand it.
 _Avoid_: Permission (as a permanent grant), allowlist entry
 
 **Capability Ledger**:
-The durable, human-approved source of truth for Capabilities, split across the three lifecycle layers (baseline in `.loop/`, standing in `knowledge/`, scoped in `.ai/`). Engine-immutable: protected by deny rules the runtime always appends. The compiled permission settings are a build artifact regenerated by the runtime every Iteration — never a source artifact.
+The durable, human-approved source of truth for Capabilities, split across the three lifecycle layers (baseline in `.harness/loop/`, standing in `.harness/knowledge/`, scoped in `.harness/run/`). Engine-immutable: protected by deny rules the runtime always appends. The compiled permission settings are a build artifact regenerated by the runtime every Iteration — never a source artifact.
 _Avoid_: Settings file, permission config (that's the build artifact)
 
 **Trust Chain**:
@@ -93,11 +93,11 @@ The dedicated git branch a run lives on (e.g. `loop/<prd-slug>`), created at boo
 _Avoid_: Feature branch (human workflow), working copy
 
 **Cleanup Commit**:
-The final commit of a run, created only after fresh verification passes. It removes `.ai/` from the branch tip so the mergeable state contains the implementation, durable Knowledge, the completion summary, and verification evidence — never execution state. `.ai/` is the loop's memory while it works; it is not the product the human merges. Its full history stays in the branch's commits for audit.
+The final commit of a run, created only after fresh verification passes. It removes `.harness/run/` from the branch tip so the mergeable state contains the implementation, durable Knowledge, the completion summary, and verification evidence — never execution state. `.harness/run/` is the loop's memory while it works; it is not the product the human merges. Its full history stays in the branch's commits for audit.
 _Avoid_: Squash, final commit (generic)
 
 **Escalation Request**:
-The durable artifact the engine persists whenever it requires human input: the question, context, options considered, the engine's recommendation, the tasks it blocks, and space for the human's decision *and rationale*. Persisted into the Decision Queue rather than halting the run; consumed and archived by a later fresh invocation. The "at most one pending" limit of V1 is retired (ADR-007). The artifact name (`.ai/ESCALATION.md`) is an implementation detail.
+The durable artifact the engine persists whenever it requires human input: the question, context, options considered, the engine's recommendation, the tasks it blocks, and space for the human's decision *and rationale*. Persisted into the Decision Queue rather than halting the run; consumed and archived by a later fresh invocation. The "at most one pending" limit of V1 is retired (ADR-007). The artifact name (`.harness/run/ESCALATION.md`) is an implementation detail.
 _Avoid_: Question file, blocker, ticket
 
 **Crash**:
@@ -117,11 +117,11 @@ The human-owned product intent: business objective, requirements, constraints. T
 _Avoid_: Goal file, spec, requirements doc
 
 **Bootstrap**:
-The one-time process that reads `PRD.md`, generates the Definition of Done, and initializes `.ai/`. Ends by escalating for DoD approval — the only mandatory human gate before autonomous execution.
+The one-time process that reads `PRD.md`, generates the Definition of Done, and initializes `.harness/run/`. Ends by escalating for DoD approval — the only mandatory human gate before autonomous execution.
 _Avoid_: Setup, init, onboarding
 
 **Definition of Done**:
-The testable acceptance criteria derived from the PRD and approved by the human. The only human-owned artifact inside `.ai/` (`DoD.md`); immutable after approval — the engine may propose changes but never apply them.
+The testable acceptance criteria derived from the PRD and approved by the human. The only human-owned artifact inside `.harness/run/` (`DoD.md`); immutable after approval — the engine may propose changes but never apply them.
 _Avoid_: Acceptance criteria file, goal, DoD checklist
 
 **Plan**:
@@ -144,7 +144,7 @@ The state recorded when the engine believes the Goal is complete. The iteration 
 _Avoid_: Done, complete (before fresh verification)
 
 **Knowledge**:
-The engine-maintained cache of verified operational truth about a consumer repository — build/test/lint commands, conventions, environmental quirks learned through execution. Lives in `knowledge/` at the consumer root; survives every feature run; human-editable without approval gates. It is a cache, never the source of truth: on conflict, the codebase wins and the engine corrects the cache.
+The engine-maintained cache of verified operational truth about a consumer repository — build/test/lint commands, conventions, environmental quirks learned through execution. Lives in `.harness/knowledge/` at the consumer root; survives every feature run; human-editable without approval gates. It is a cache, never the source of truth: on conflict, the codebase wins and the engine corrects the cache.
 _Avoid_: Docs, memory, wiki
 
 **Roll-up Summary**:
@@ -152,5 +152,5 @@ The Skill's end-of-run report, produced when a run reaches `DONE`: every Loop Br
 _Avoid_: Report, digest, changelog
 
 **Consumer repository**:
-Any repository that installs the loop — either via the Skill (`npx skills@latest add`, then `/loop-runtime`) or by copying `.loop/` directly — and provides a Goal. The Loop Runtime never knows the consumer's tech stack.
+Any repository that installs the loop — either via the Skill (`npx skills@latest add`, then `/loop-runtime`) or by copying `.harness/loop/` directly — and provides a Goal. The Loop Runtime never knows the consumer's tech stack.
 _Avoid_: Host project, target repo

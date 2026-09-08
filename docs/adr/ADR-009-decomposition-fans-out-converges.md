@@ -21,4 +21,4 @@ The parent alone then writes `DoD.md`, `PLAN.md`, and the task files. One plan, 
 - The conflict-analysis agent produces exactly the input Phase selection requires, so Phase grouping is derived from analysis rather than guessed at during execution.
 - The critique agent is a checker role, so ADR-005's three-minds principle now covers planning as well as code: the context that proposed a decomposition is the least likely to notice what it omitted.
 - Fan-out costs one subagent call per analysis role, paid once at bootstrap. Cheap against a multi-hour run; wasteful on a two-task PRD, hence the size threshold.
-- The five roles are read-only analysts. They propose; they never write `.ai/`. The single-author rule is what keeps the task graph coherent.
+- The five roles are read-only analysts. They propose; they never write `.harness/run/`. The single-author rule is what keeps the task graph coherent.

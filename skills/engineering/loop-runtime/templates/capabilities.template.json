@@ -1,5 +1,5 @@
 {
-  "description": "Capability Ledger template. Standing ledger: knowledge/capabilities.json (per-repository toolchain, approved at the DoD gate). Goal-scoped ledger: .ai/capabilities.json (expires automatically with .ai/). Entries are written by the HUMAN on approving a queued decision. The Runtime concatenates the 'allow' arrays verbatim - exact rule strings the human approved - and never translates or expands them.",
+  "description": "Capability Ledger template. Standing ledger: .harness/knowledge/capabilities.json (per-repository toolchain, approved at the DoD gate). Goal-scoped ledger: .harness/run/capabilities.json (expires automatically with .harness/run/). Entries are written by the HUMAN on approving a queued decision. The Runtime concatenates the 'allow' arrays verbatim - exact rule strings the human approved - and never translates or expands them.",
   "entries": [
     {
       "intent": "why this capability is needed",

@@ -1,7 +1,8 @@
 # LOOP ISSUES REPORT
 
-> Regenerated every iteration and kept at the **repository root**, so it survives the Cleanup Commit
-> that removes `.ai/`. This is what a human reads when they come back to the run.
+> Regenerated every iteration and kept at `.harness/ISSUES.md` — a **sibling** of `run/`, not inside
+> it, which is why the Cleanup Commit that removes `.harness/run/` leaves this file standing. This is
+> what a human reads when they come back to the run.
 >
 > Problems only. What succeeded is in the commit messages.
 
@@ -32,7 +33,7 @@ _Last updated: <timestamp> - branch `loop/...` - iteration N_
 
 ## Review findings not fixed
 
-<!-- Major/Minor findings recorded but not acted on. These would otherwise vanish with `.ai/`. -->
+<!-- Major/Minor findings recorded but not acted on. These would otherwise vanish with `.harness/run/`. -->
 
 ## Assumptions recorded
 

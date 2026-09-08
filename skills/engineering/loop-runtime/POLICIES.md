@@ -1,6 +1,6 @@
 # POLICIES
 
-> Generic engineering policy shipped with the Loop Runtime. Identical in every consumer repository — project-specific facts belong in `knowledge/`, never here.
+> Generic engineering policy shipped with the Loop Runtime. Identical in every consumer repository — project-specific facts belong in `.harness/knowledge/`, never here.
 
 ---
 
@@ -38,7 +38,7 @@
 
 ## Model Tier Criteria
 
-Two tiers exist: **Fast** and **Capable**, mapped to concrete model identifiers in `.loop/models.json` — the only place a vendor model name appears. `ENGINE.md` and this file never name one directly.
+Two tiers exist: **Fast** and **Capable**, mapped to concrete model identifiers in `.harness/loop/models.json` — the only place a vendor model name appears. `ENGINE.md` and this file never name one directly.
 
 **Always Capable, no exception:** the Reviewer, the Verifier, the Orchestrator (the top-level Iteration itself, in every capacity), and every bootstrap fan-out analysis role (ADR-009). These are judgment-heavy roles by definition; tiering applies only to Worker implementation.
 
@@ -97,7 +97,7 @@ Finding severities:
 - **Major** — likely future defect or architectural erosion. File a task.
 - **Minor** — style, naming, polish. Fix opportunistically or record; never let minors block progress.
 
-Findings recorded but not fixed belong in the Issues Report — otherwise they vanish when `.ai/` is removed.
+Findings recorded but not fixed belong in the Issues Report — otherwise they vanish when `.harness/run/` is removed.
 
 ## Evidence Requirements
 
@@ -108,19 +108,19 @@ A claim without evidence is not a fact. Task completion requires recorded eviden
 - **Low-risk (baseline, permanent, ships with the runtime):** reading repository files; `git status/diff/log/add/commit/checkout/branch` local operations; creating and editing files inside the consumer repository (excluding protected paths).
 - **Standing (per-repository, approved at the DoD gate, lives in Knowledge):** the repository's verified toolchain — build, test, lint, dependency install. Pushing the Loop Branch also belongs here when granted, since it applies to every checkpoint of the run.
 - **High-risk (goal-scoped by default, always explicit):** deletion commands; **network access, including `git push`**; process/system management (`docker`, `adb`, `kubectl`, service control); anything touching paths outside the repository; anything irreversible.
-- **Worker-denied always:** git of any kind, build, test, and any write to `.ai/` or `knowledge/`. A Worker that could write shared state would break the single-writer rule that makes concurrent Workers safe. These limits are the `tools:` list in `.loop/agents/`, enforced by the harness rather than by instruction.
+- **Worker-denied always:** git of any kind, build, test, and any write to `.harness/run/` or `.harness/knowledge/`. A Worker that could write shared state would break the single-writer rule that makes concurrent Workers safe. These limits are the `tools:` list in `.harness/loop/agents/`, enforced by the harness rather than by instruction.
 
-Protected paths (never writable by the engine, enforced by runtime deny rules): `.loop/`, all Capability Ledgers, generated permission settings, runtime configuration.
+Protected paths (never writable by the engine, enforced by runtime deny rules): `.harness/loop/`, all Capability Ledgers, generated permission settings, runtime configuration.
 
 ## Reconciliation Rules
 
 - Every discovery is classified in the iteration it was made. Deferring classification is itself a violation.
-- Operational discoveries (commands, environment quirks, conventions) update `knowledge/` in the same checkpoint.
+- Operational discoveries (commands, environment quirks, conventions) update `.harness/knowledge/` in the same checkpoint.
 - Ambiguity in the PRD/DoD is never resolved by guessing on behalf of the human: minor ambiguity → record the assumption in `STATE.md` and the Issues Report (auditable, reversible); behavior-defining ambiguity → queued decision.
 
 ## Git Conduct
 
 - All work on the Loop Branch. Never the default branch, never merge, never rewrite history (`--force`, rebase) — the branch is an audit trail.
 - `git push` of the Loop Branch is permitted only under a granted capability, and only for that branch. Pushing makes a mid-run machine failure survivable and lets the human review from elsewhere; it is never a step toward merging, which stays a human act.
-- One atomic checkpoint commit per iteration: code + `.ai/` + `knowledge/` together.
+- One atomic checkpoint commit per iteration: code + `.harness/run/` + `.harness/knowledge/` together.
 - Commit messages: first line `loop(phase-<n>): <what a human would call this>` — a plain-language summary, not a list of task ids. Body lists what each Worker did, the evidence summary, and amendments made.

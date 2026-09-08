@@ -1,11 +1,11 @@
 <#
 .SYNOPSIS
-    Unit tests for .loop/run.ps1's mechanics, using a fake `claude` stub so no real API calls,
+    Unit tests for .harness/loop/run.ps1's mechanics, using a fake `claude` stub so no real API calls,
     no nested-agent invocation, and no dependency on git ever happen.
 
 .DESCRIPTION
     run.ps1 never calls git itself (only the real engine does), so these tests don't need a real
-    git repo - just a plain folder with a `.loop/ENGINE.md` file. The fake-claude.ps1 fixture
+    git repo - just a plain folder with a `.harness/loop/ENGINE.md` file. The fake-claude.ps1 fixture
     (invoked via run.ps1's existing -ClaudeCommand seam) is driven by a queue file so each test can
     script exactly what "the engine" does on each iteration, deterministically.
 
@@ -18,7 +18,7 @@
 #>
 
 $RepoRootDir = Split-Path -Parent $PSScriptRoot
-$RunPs1 = Join-Path $RepoRootDir ".loop\run.ps1"
+$RunPs1 = Join-Path $RepoRootDir ".harness/loop/run.ps1"
 $FakeClaude = Join-Path $PSScriptRoot "fixtures\fake-claude.ps1"
 
 function New-TestRepo {
@@ -26,8 +26,8 @@ function New-TestRepo {
     $dir = Join-Path ([System.IO.Path]::GetTempPath()) ("loop-runtime-unit-" + [System.Guid]::NewGuid().ToString("N").Substring(0, 12))
     New-Item -ItemType Directory -Path $dir -Force | Out-Null
     if (-not $WithoutEngineSpec) {
-        New-Item -ItemType Directory -Path (Join-Path $dir ".loop") -Force | Out-Null
-        Set-Content -Path (Join-Path $dir ".loop\ENGINE.md") -Value "# fake engine spec for tests"
+        New-Item -ItemType Directory -Path (Join-Path $dir ".harness/loop") -Force | Out-Null
+        Set-Content -Path (Join-Path $dir ".harness/loop/ENGINE.md") -Value "# fake engine spec for tests"
     }
     return $dir
 }
@@ -113,13 +113,13 @@ Describe "run.ps1 status reactions" {
 
 Describe "run.ps1 prerequisites" {
 
-    It "exits 1 immediately when .loop/ENGINE.md is missing, without invoking the engine" {
+    It "exits 1 immediately when .harness/loop/ENGINE.md is missing, without invoking the engine" {
         $repo = New-TestRepo -WithoutEngineSpec
         try {
             Set-FakeClaudeQueue -TestRepo $repo -Directives @("DONE|should never run")
             $exit = Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "5")
             $exit | Should Be 1
-            (Test-Path (Join-Path $repo ".ai\STATUS.md")) | Should Be $false
+            (Test-Path (Join-Path $repo ".harness/run/STATUS.md")) | Should Be $false
         } finally { Remove-TestRepo -TestRepo $repo }
     }
 }
@@ -274,8 +274,8 @@ Describe "run.ps1 agent definitions" {
             # --agents JSON argument; the npm claude shim is itself a PowerShell script that
             # re-quotes its arguments, and PowerShell 5.1 mangles embedded double quotes at that
             # hop, so the CLI received unparsable JSON. Files avoid command-line quoting entirely.
-            New-Item -ItemType Directory -Path (Join-Path $repo ".loop\agents") -Force | Out-Null
-            Copy-Item -Path (Join-Path $RepoRootDir ".loop\agents\*.md") -Destination (Join-Path $repo ".loop\agents") -Force
+            New-Item -ItemType Directory -Path (Join-Path $repo ".harness/loop/agents") -Force | Out-Null
+            Copy-Item -Path (Join-Path $RepoRootDir ".harness/loop/agents/*.md") -Destination (Join-Path $repo ".harness/loop/agents") -Force
 
             Set-FakeClaudeQueue -TestRepo $repo -Directives @("DONE|ok")
             Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "2") | Out-Null
@@ -289,8 +289,8 @@ Describe "run.ps1 agent definitions" {
     It "gives the Worker no Bash tool, so 'no git, no build, no test' is harness-enforced" {
         $repo = New-TestRepo
         try {
-            New-Item -ItemType Directory -Path (Join-Path $repo ".loop\agents") -Force | Out-Null
-            Copy-Item -Path (Join-Path $RepoRootDir ".loop\agents\*.md") -Destination (Join-Path $repo ".loop\agents") -Force
+            New-Item -ItemType Directory -Path (Join-Path $repo ".harness/loop/agents") -Force | Out-Null
+            Copy-Item -Path (Join-Path $RepoRootDir ".harness/loop/agents/*.md") -Destination (Join-Path $repo ".harness/loop/agents") -Force
             Set-FakeClaudeQueue -TestRepo $repo -Directives @("DONE|ok")
             Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "2") | Out-Null
 
@@ -335,7 +335,7 @@ Describe "run.ps1 -PrdPath staging" {
             $exit = Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "5", "-PrdPath", "does-not-exist.md")
 
             $exit | Should Be 1
-            (Test-Path (Join-Path $repo ".ai\STATUS.md")) | Should Be $false
+            (Test-Path (Join-Path $repo ".harness/run/STATUS.md")) | Should Be $false
             (Test-Path (Join-Path $repo "PRD.md")) | Should Be $false
         } finally { Remove-TestRepo -TestRepo $repo }
     }

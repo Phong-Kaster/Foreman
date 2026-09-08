@@ -8,12 +8,12 @@
 
     Per iteration it does exactly four things:
       1. Compile human-approved Capability Ledgers into fresh permission settings (a build artifact).
-      2. Invoke Claude Code once, with .loop/ENGINE.md as appended system prompt.
-      3. Read the Execution Status the engine persisted (.ai/STATUS.md).
+      2. Invoke Claude Code once, with .harness/loop/ENGINE.md as appended system prompt.
+      3. Read the Execution Status the engine persisted (.harness/run/STATUS.md).
       4. React: CONTINUE -> invoke again | DONE/ESCALATE/FAILED -> stop | no status -> Watchdog.
 
     Trust chain: Human -> Capability Ledger -> Runtime Compiler -> Permission Settings -> Engine.
-    The engine can never modify .loop/, the ledgers, or the generated settings (deny rules below).
+    The engine can never modify .harness/loop/, the ledgers, or the generated settings (deny rules below).
 
 .NOTES
     Run from the consumer repository root. Requires: git, Claude Code CLI, PRD.md.
@@ -55,12 +55,12 @@ $ErrorActionPreference = "Stop"
 
 # ---------- Paths ----------
 $RepoRoot   = (Get-Location).Path
-$LoopDir    = Join-Path $RepoRoot ".loop"
-$AiDir      = Join-Path $RepoRoot ".ai"
-$StatusFile = Join-Path $AiDir "STATUS.md"
+$LoopDir    = Join-Path (Join-Path $RepoRoot ".harness") "loop"
+$RunDir      = Join-Path (Join-Path $RepoRoot ".harness") "run"
+$StatusFile = Join-Path $RunDir "STATUS.md"
 
 $EngineSpecPath = Join-Path $LoopDir "ENGINE.md"
-if (-not (Test-Path $EngineSpecPath)) { Write-Error ".loop/ENGINE.md not found. Run from the consumer repository root."; exit 1 }
+if (-not (Test-Path $EngineSpecPath)) { Write-Error ".harness/loop/ENGINE.md not found. Run from the consumer repository root."; exit 1 }
 # Passed as --append-system-prompt-file, not as an inline argument: the spec is ~13KB of multi-line
 # text, which cannot survive Start-Process argument quoting (needed for the timeout bounds below).
 $AgentsDir  = Join-Path $LoopDir "agents"
@@ -124,17 +124,17 @@ Write-Host "Raw engine events (debugging): $RawLog"
 
 # ---------- Capability compiler (mechanical: concatenates human-approved rules, never translates) ----------
 # Ledger layers, by lifecycle:
-#   .loop/capabilities/baseline.json   permanent, ships with the runtime
-#   knowledge/capabilities.json        standing,  per-repository (approved at the DoD gate)
-#   .ai/capabilities.json              scoped,    per-goal (expires automatically with .ai/)
+#   .harness/loop/capabilities/baseline.json  permanent, ships with the runtime
+#   .harness/knowledge/capabilities.json      standing,  per-repository (approved at the DoD gate)
+#   .harness/run/capabilities.json            scoped,    per-goal (expires automatically with .harness/run/)
 # Each ledger: { "entries": [ { "intent", "command", "scope", "lifetime", "allow": ["<exact rule>"] } ] }
 # The runtime reads ONLY the "allow" arrays - exact rule strings the human approved. No interpretation.
 function Compile-PermissionSettings {
     $allowRules = @()
     $ledgers = @(
         (Join-Path $LoopDir "capabilities\baseline.json"),
-        (Join-Path $RepoRoot "knowledge\capabilities.json"),
-        (Join-Path $AiDir "capabilities.json")
+        (Join-Path $RepoRoot ".harness/knowledge/capabilities.json"),
+        (Join-Path $RunDir "capabilities.json")
     )
     foreach ($ledger in $ledgers) {
         if (Test-Path $ledger) {
@@ -147,12 +147,12 @@ function Compile-PermissionSettings {
 
     # Immutable deny rules protecting the enforcement plane itself. Always appended, never configurable.
     $denyRules = @(
-        "Edit(.loop/**)",
-        "Write(.loop/**)",
-        "Edit(knowledge/capabilities.json)",
-        "Write(knowledge/capabilities.json)",
-        "Edit(.ai/capabilities.json)",
-        "Write(.ai/capabilities.json)",
+        "Edit(.harness/loop/**)",
+        "Write(.harness/loop/**)",
+        "Edit(.harness/knowledge/capabilities.json)",
+        "Write(.harness/knowledge/capabilities.json)",
+        "Edit(.harness/run/capabilities.json)",
+        "Write(.harness/run/capabilities.json)",
         # Pushing is capability-gated (ADR-011) and scoped to the Loop Branch. These deny the
         # operations that would make the engine an author on shared history rather than a
         # contributor on its own branch - regardless of what any allow rule grants.
@@ -358,7 +358,7 @@ function Resolve-EngineLaunch {
 # mangles embedded quotes at that hop, so the CLI received unparsable JSON. Files avoid command-line
 # quoting entirely and work regardless of which shim resolves.
 #
-# Like the permission settings, these are a BUILD artifact: regenerated from .loop/agents/ every
+# Like the permission settings, these are a BUILD artifact: regenerated from .harness/loop/agents/ every
 # iteration and deny-listed against the engine's own edits, so a Worker's tool restriction stays
 # enforced by the harness rather than by instruction.
 function Publish-AgentDefinitions {
@@ -560,7 +560,7 @@ for ($iteration = 1; $iteration -le $MaxIterations; $iteration++) {
         $claudeArgs += @("--settings", $settingsPath)
     }
     if ($Model -ne "") { $claudeArgs += @("--model", $Model) }
-    # Worker/Reviewer definitions come from .loop/, which is deny-listed against the engine's own
+    # Worker/Reviewer definitions come from .harness/loop/, which is deny-listed against the engine's own
     # edits: a Worker's tool restriction must be enforced by the harness, not by instruction the
     # engine could reason around. Omitting Bash from its tools is what makes "no git, no build,
     # no test" real rather than advisory.
@@ -623,8 +623,8 @@ for ($iteration = 1; $iteration -le $MaxIterations; $iteration++) {
 
     switch ($status.Word) {
         "DONE"     { Write-Host "Goal verified complete. Review and merge the Loop Branch." -ForegroundColor Green; exit 0 }
-        "ESCALATE" { Write-Host "Human decision required. See .ai/ESCALATION.md - answer the queued decisions, then re-run." -ForegroundColor Magenta; exit 3 }
-        "FAILED"   { Write-Host "Execution broken. Human repair required. See .ai/STATE.md for the engine's last findings." -ForegroundColor Red; exit 4 }
+        "ESCALATE" { Write-Host "Human decision required. See .harness/run/ESCALATION.md - answer the queued decisions, then re-run." -ForegroundColor Magenta; exit 3 }
+        "FAILED"   { Write-Host "Execution broken. Human repair required. See .harness/run/STATE.md for the engine's last findings." -ForegroundColor Red; exit 4 }
     }
 
     # ---- CONTINUE: check the resource bound before spending another iteration ----
@@ -648,7 +648,7 @@ for ($iteration = 1; $iteration -le $MaxIterations; $iteration++) {
 
 # Iteration budget exhausted: a deterministic safety stop, never an interpretation of task failure.
 Write-Host "Iteration budget ($MaxIterations) exhausted. Stopping deterministically." -ForegroundColor Red
-Write-Host "This is a Runtime safety bound, not a judgment about the work. Inspect .ai/STATE.md and re-run to continue from the last Stable Checkpoint."
+Write-Host "This is a Runtime safety bound, not a judgment about the work. Inspect .harness/run/STATE.md and re-run to continue from the last Stable Checkpoint."
 exit 5
 } finally {
     # Cleanup always runs, even on exit: release the log writers and the run lock.
