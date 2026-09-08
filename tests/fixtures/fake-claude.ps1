@@ -34,6 +34,19 @@
 
 # Optional: record the exact argument vector run.ps1 passed, so a test can assert the
 # invocation contract (e.g. that the engine spec travels by file, not inline).
+# Record whether the launcher left us "expecting input". The real npm `claude` shim branches on
+# $MyInvocation.ExpectingInput and, when true, does `$input | & claude.exe` -- which blocks forever
+# if stdin is an inherited pipe that never closes. run.ps1 must therefore hand the engine a
+# finite stdin. Observed hanging 11 minutes in the field before this was fixed.
+if ($env:FAKE_CLAUDE_STDINLOG) {
+    # Drain stdin to completion. The point is not whether stdin is redirected -- with
+    # -RedirectStandardInput it IS, and ExpectingInput is therefore True -- but whether it is
+    # FINITE. An empty file enumerates to zero items at once; an inherited pipe that never closes
+    # would block here forever, which is precisely the hang this guards against.
+    $items = @($input)
+    try { Add-Content -Path $env:FAKE_CLAUDE_STDINLOG -Value ("stdinItems=" + $items.Count) } catch {}
+}
+
 if ($env:FAKE_CLAUDE_ARGLOG) {
     try { Add-Content -Path $env:FAKE_CLAUDE_ARGLOG -Value ($args -join ' ') } catch {}
 }

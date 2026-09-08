@@ -400,11 +400,24 @@ function Invoke-EngineOnce {
     $timeoutKind = ""
 
     $launch = Resolve-EngineLaunch -EngineArgs $EngineArgs
+
+    # Empty stdin, and it is load-bearing. The npm `claude` shim is a PowerShell script that does
+    #   if ($MyInvocation.ExpectingInput) { $input | & claude.exe $args } else { & claude.exe $args }
+    # Redirecting stdout without redirecting stdin leaves the child inheriting OUR stdin. When that
+    # is a pipe that never delivers data and never closes -- which is exactly what it is when the
+    # Runtime itself was launched from a script or a background task -- ExpectingInput is true and
+    # `$input` blocks forever enumerating a stream that never ends. claude.exe is then never
+    # spawned at all: the engine hangs before it starts, with no output and no error, and only the
+    # idle timeout eventually notices. Observed in the field, hanging 11 minutes with 0.3s of CPU.
+    $stdinFile = Join-Path $env:TEMP ("loop-engine-stdin-" + [System.Guid]::NewGuid().ToString("N") + ".txt")
+    Set-Content -Path $stdinFile -Value "" -NoNewline
+
     # -WorkingDirectory is explicit and load-bearing: Start-Process launches in .NET's current
     # directory, which is NOT PowerShell's location. Without it the engine runs somewhere else
     # entirely and writes its status file outside the consumer repository.
     $proc = Start-Process -FilePath $launch.Exe -ArgumentList $launch.ArgString `
                           -WorkingDirectory $RepoRoot `
+                          -RedirectStandardInput $stdinFile `
                           -RedirectStandardOutput $stdoutFile -RedirectStandardError $stderrFile `
                           -NoNewWindow -PassThru
 
@@ -489,6 +502,7 @@ function Invoke-EngineOnce {
         } catch {}
         Remove-Item $stdoutFile -Force -ErrorAction SilentlyContinue
         Remove-Item $stderrFile -Force -ErrorAction SilentlyContinue
+        Remove-Item $stdinFile -Force -ErrorAction SilentlyContinue
     }
 
     return $timeoutKind

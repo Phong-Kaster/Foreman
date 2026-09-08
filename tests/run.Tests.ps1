@@ -74,6 +74,7 @@ function Remove-TestRepo {
     Remove-Item Env:\FAKE_CLAUDE_QUEUE -ErrorAction SilentlyContinue
     Remove-Item Env:\FAKE_CLAUDE_ARGLOG -ErrorAction SilentlyContinue
     Remove-Item Env:\FAKE_CLAUDE_AGENTLOG -ErrorAction SilentlyContinue
+    Remove-Item Env:\FAKE_CLAUDE_STDINLOG -ErrorAction SilentlyContinue
 }
 
 Describe "run.ps1 status reactions" {
@@ -286,6 +287,37 @@ Describe "run.ps1 engine invocation contract" {
             $recorded | Should Not Match "fake engine spec"
         } finally {
             Remove-Item Env:\FAKE_CLAUDE_ARGLOG -ErrorAction SilentlyContinue
+            Remove-TestRepo -TestRepo $repo
+        }
+    }
+}
+
+Describe "run.ps1 engine stdin" {
+
+    It 'hands the engine a FINITE stdin, so the npm shim cannot block draining it' {
+        # The npm `claude` shim is a PowerShell script:
+        #   if ($MyInvocation.ExpectingInput) { $input | & claude.exe $args } else { & claude.exe $args }
+        # Redirecting stdout but not stdin leaves the child inheriting the Runtime's stdin. When
+        # that is a pipe which never delivers and never closes -- exactly what it is when the
+        # Runtime runs from a script or background task, which is how the Skill launches it --
+        # draining $input blocks forever and claude.exe is never spawned at all. Measured in the
+        # field: 11 minutes alive, 0.3s CPU, zero bytes on stdout AND stderr, no error.
+        #
+        # Note what is NOT asserted: that stdin is unredirected. With -RedirectStandardInput it is
+        # redirected and ExpectingInput stays True. Finiteness is the property that matters.
+        # A/B proof of the fix: without it the launch still hung at 45s; with it, 5.1s.
+        #
+        # -MaxIdleMinutes 1 so a regression fails in about a minute instead of hanging the suite.
+        $repo = New-TestRepo
+        try {
+            $stdinLog = Join-Path $repo "stdin-verdict.txt"
+            $env:FAKE_CLAUDE_STDINLOG = $stdinLog
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("DONE|ok")
+            Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "2", "-MaxIdleMinutes", "1") | Out-Null
+
+            (Get-Content $stdinLog -Raw).Trim() | Should Be "stdinItems=0"
+        } finally {
+            Remove-Item Env:\FAKE_CLAUDE_STDINLOG -ErrorAction SilentlyContinue
             Remove-TestRepo -TestRepo $repo
         }
     }
