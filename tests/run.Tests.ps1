@@ -4,8 +4,10 @@
     no nested-agent invocation, and no dependency on git ever happen.
 
 .DESCRIPTION
-    run.ps1 never calls git itself (only the real engine does), so these tests don't need a real
-    git repo - just a plain folder with a `.harness/loop/ENGINE.md` file. The fake-claude.ps1 fixture
+    run.ps1 calls git for exactly one thing: verifying the repository has a base commit, because
+    the engine branches from HEAD and checkpoints as commits (a fresh repo with everything still
+    untracked failed deep inside bootstrap in the field). So a test repo is a real git repo with
+    one commit -- everything else about git still belongs to the engine. The fake-claude.ps1 fixture
     (invoked via run.ps1's existing -ClaudeCommand seam) is driven by a queue file so each test can
     script exactly what "the engine" does on each iteration, deterministically.
 
@@ -22,13 +24,24 @@ $RunPs1 = Join-Path $RepoRootDir ".harness/loop/run.ps1"
 $FakeClaude = Join-Path $PSScriptRoot "fixtures\fake-claude.ps1"
 
 function New-TestRepo {
-    param([switch]$WithoutEngineSpec)
+    param([switch]$WithoutEngineSpec, [switch]$WithoutCommit)
     $dir = Join-Path ([System.IO.Path]::GetTempPath()) ("loop-runtime-unit-" + [System.Guid]::NewGuid().ToString("N").Substring(0, 12))
     New-Item -ItemType Directory -Path $dir -Force | Out-Null
     if (-not $WithoutEngineSpec) {
         New-Item -ItemType Directory -Path (Join-Path $dir ".harness/loop") -Force | Out-Null
         Set-Content -Path (Join-Path $dir ".harness/loop/ENGINE.md") -Value "# fake engine spec for tests"
     }
+    # A real repository with a base commit: run.ps1 refuses to start without one, and refusing is
+    # the behaviour under test in "run.ps1 prerequisites".
+    Push-Location $dir
+    try {
+        & git init --quiet 2>$null | Out-Null
+        if (-not $WithoutCommit) {
+            Set-Content -Path (Join-Path $dir "seed.txt") -Value "base commit for the loop to branch from"
+            & git add -A 2>$null | Out-Null
+            & git -c user.email=test@local -c user.name=LoopTest commit --quiet -m "initial" 2>$null | Out-Null
+        }
+    } finally { Pop-Location }
     return $dir
 }
 
@@ -112,6 +125,19 @@ Describe "run.ps1 status reactions" {
 }
 
 Describe "run.ps1 prerequisites" {
+
+    It "exits 1 when the repository has no commit yet, without invoking the engine" {
+        # Found in the field on a fresh Android repo where everything was still untracked: the
+        # engine branches from HEAD and checkpoints as commits, so with no HEAD it failed deep
+        # inside bootstrap where the cause was not obvious. Refused here instead.
+        $repo = New-TestRepo -WithoutCommit
+        try {
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("DONE|should never run")
+            $exit = Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "5")
+            $exit | Should Be 1
+            (Test-Path (Join-Path $repo ".harness/run/STATUS.md")) | Should Be $false
+        } finally { Remove-TestRepo -TestRepo $repo }
+    }
 
     It "exits 1 immediately when .harness/loop/ENGINE.md is missing, without invoking the engine" {
         $repo = New-TestRepo -WithoutEngineSpec

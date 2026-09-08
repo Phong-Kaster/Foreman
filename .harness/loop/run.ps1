@@ -61,6 +61,16 @@ $StatusFile = Join-Path $RunDir "STATUS.md"
 
 $EngineSpecPath = Join-Path $LoopDir "ENGINE.md"
 if (-not (Test-Path $EngineSpecPath)) { Write-Error ".harness/loop/ENGINE.md not found. Run from the consumer repository root."; exit 1 }
+
+# The engine creates the Loop Branch from HEAD and persists every checkpoint as a commit, so a
+# repository with no commit yet cannot be worked in at all. Found in the field: a fresh repo with
+# everything still untracked failed deep inside bootstrap, where the cause was far from obvious.
+# Checked here instead, where the message can name the fix.
+$null = & git rev-parse --verify HEAD 2>$null
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "This repository has no commits yet. The engine branches from HEAD and checkpoints as commits, so it needs a base commit first: git add -A; git commit -m 'initial'."
+    exit 1
+}
 # Passed as --append-system-prompt-file, not as an inline argument: the spec is ~13KB of multi-line
 # text, which cannot survive Start-Process argument quoting (needed for the timeout bounds below).
 $AgentsDir  = Join-Path $LoopDir "agents"
