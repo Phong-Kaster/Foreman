@@ -30,7 +30,7 @@ Installs `foreman` into `.claude/skills/foreman/` and `.agents/skills/foreman/` 
 
 ## 1b. Install manually
 
-Copy the `.loop/` directory into your repository root by hand. That is the entire installation — never edit its contents per-project (project-specific truth belongs in `knowledge/`, which the loop maintains itself). Use this path if you're not working inside Claude Code, or want to invoke `run.ps1` from a script/CI job instead of a conversation.
+Copy the `.loop/` directory into your repository root by hand. That is the entire installation — never edit its contents per-project (repository-specific truth belongs in `knowledge/PROJECT.md`, which the loop maintains itself; domain rules belong in `knowledge/DOMAIN.md`, which only you write). Use this path if you're not working inside Claude Code, or want to invoke `run.ps1` from a script/CI job instead of a conversation.
 
 ---
 
@@ -129,6 +129,21 @@ The first invocation finds no `.ai/` and therefore bootstraps: it reads your PRD
 
 After approval the DoD is immutable to the engine either way: it may propose changes, never apply them.
 
+### The other file you own: `knowledge/DOMAIN.md`
+
+Optional, and only worth creating if your project has **durable domain rules** — a formula, an algorithm, a regulatory or business invariant. Blood-pressure maths; the tolerances a background-removal algorithm must hold to; what "active subscriber" is defined to mean this quarter.
+
+It matters because of one inverted rule. `knowledge/PROJECT.md` is a cache of facts *about* your code, so when they disagree, the code wins and the engine fixes the file. `DOMAIN.md` is the opposite: your code is an *attempt* at the rule, so when they disagree, **the rule wins and the code is a defect**. Without that inversion, an engine finding a wrongly-implemented formula would "correct" the correct formula to match the bug — and then the fresh-context reviewer, which is handed your domain rules as its standard, would validate every later change against the corruption.
+
+So the engine is **deny-listed** from writing it, mechanically, the same as the Capability Ledgers. It reads the file, implements what is written, reports code that contradicts it, and proposes new entries through an Escalation Request. You (or the skill, transcribing a decision you approved) do the writing.
+
+Practically:
+
+- Start from `.loop/templates/DOMAIN-KNOWLEDGE.template.md`. State each rule precisely enough to be implemented and tested from that text alone, and cite the authority so it can be re-checked later.
+- Be explicit about units, valid ranges and boundary behaviour. That is where implementations silently diverge.
+- Don't create an empty one. No domain rules means no file — a stub is clutter that every iteration reads.
+- Don't put general stack knowledge here ("Android 13 changed notification permissions"). That is not truth about *your* project, nothing in your repo can verify it, and it goes stale with nothing to correct it — see [ADR-007](./adr/ADR-007-knowledge-stratification-and-ratchet.md).
+
 ## 5. While the loop runs
 
 Nothing is required from you. There are exactly five ways a run ends, and `run.ps1` exits with a distinct code for each — the codes are the contract for scripted or CI invocation:
@@ -183,7 +198,7 @@ To abandon a run: delete `.ai/` and the loop branch. Nothing else to clean.
 
 Enforced mechanically (runtime deny rules) or by hard-stop protocol — true regardless of which path launched it:
 
-- Modify `.loop/`, any capability ledger, or its own permission settings
+- Modify `.loop/`, any capability ledger, `knowledge/DOMAIN.md`, or its own permission settings
 - Modify `PRD.md` or the approved `DoD.md`
 - Widen a capability beyond what you approved
 - Touch your default branch, push, merge, or rewrite history

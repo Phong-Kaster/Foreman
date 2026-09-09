@@ -130,13 +130,18 @@ function Compile-PermissionSettings {
     }
 
     # Immutable deny rules protecting the enforcement plane itself. Always appended, never configurable.
+    # knowledge/DOMAIN.md is human-owned domain truth that OUTRANKS the codebase (ENGINE.md §3):
+    # an engine able to rewrite it could silently replace a correct rule with its own misreading,
+    # and the fresh-context reviewer would then validate future code against the corruption.
     $denyRules = @(
         "Edit(.loop/**)",
         "Write(.loop/**)",
         "Edit(knowledge/capabilities.json)",
         "Write(knowledge/capabilities.json)",
         "Edit(.ai/capabilities.json)",
-        "Write(.ai/capabilities.json)"
+        "Write(.ai/capabilities.json)",
+        "Edit(knowledge/DOMAIN.md)",
+        "Write(knowledge/DOMAIN.md)"
     )
 
     $settings = @{

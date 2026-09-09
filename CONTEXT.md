@@ -100,8 +100,20 @@ The state recorded when the engine believes the Goal is complete. The iteration 
 _Avoid_: Done, complete (before fresh verification)
 
 **Knowledge**:
-The engine-maintained cache of verified operational truth about a consumer repository — build/test/lint commands, conventions, environmental quirks learned through execution. Lives in `knowledge/` at the consumer root; survives every feature run; human-editable without approval gates. It is a cache, never the source of truth: on conflict, the codebase wins and the engine corrects the cache.
+What a consumer repository durably knows, kept in `knowledge/` at its root and surviving every feature run. Two files with different owners and **opposite** conflict rules — Project Knowledge and Domain Knowledge, below. Neither holds knowledge about a technology stack in general: that is not truth about this repository, nothing here can verify it, and it goes stale uncorrected (ADR-007).
 _Avoid_: Docs, memory, wiki
+
+**Project Knowledge**:
+The engine-maintained cache of verified operational truth about a consumer repository — build/test/lint commands, conventions, environmental quirks learned through execution. Lives in `knowledge/PROJECT.md`; human-editable without approval gates. It is a cache, never the source of truth: on conflict, the codebase wins and the engine corrects the cache.
+_Avoid_: Knowledge (unqualified — now ambiguous)
+
+**Domain Knowledge**:
+Human-owned durable truth about the problem domain — rules, formulas, algorithms, business and regulatory invariants. Lives in `knowledge/DOMAIN.md`; optional, and absent rather than stubbed when a project has none. **It outranks the codebase**: the code is an *attempt* at the rule, so a difference is a defect in the code, never a reason to correct the file. Engine-immutable, enforced by runtime deny rules exactly like the Capability Ledgers — the engine may read it and propose entries through an Escalation Request, never write it.
+_Avoid_: Business logic (that's code), spec, requirements (that's the PRD, which is per-feature)
+
+**Ratchet**:
+The rule governing what earns a line in any durable file the engine reads: only a lesson a real failure demonstrated — a broken build, a failing test, a review finding, a denied command — and removed once the model no longer needs it. A merely-inferred lesson is noise, and because `ENGINE.md` is injected as system prompt every invocation, noise makes the lines that were earned matter less. Foreman's own product-scope ratchet is visible in its git history: a real run's failures became a policy section and a baseline capability.
+_Avoid_: Learning, self-improvement (both imply automatic promotion; promotion is a human act)
 
 **Roll-up Summary**:
 The Skill's end-of-run report, produced when a run reaches `DONE`: every Loop Branch in the repository — not only the one that just finished — with its status (done / in-progress / stuck on an unanswered escalation / stale), what it contains, and whether it is merge-ready. A repository can accumulate more than one Loop Branch across separate PRDs over time; the summary exists so the human always sees the full picture, not just the latest run.

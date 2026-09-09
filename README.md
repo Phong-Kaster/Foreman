@@ -235,6 +235,8 @@ Each cycle is one git commit holding the code *and* the notes together, so the t
 | what you want | PRD |
 | the checklist | Definition of Done (DoD) |
 | the notebook | `.ai/` (this run) and `knowledge/` (worth keeping forever) |
+| the house rules only you can change | `knowledge/DOMAIN.md` — Domain Knowledge |
+| "a rule has to be earned by a real mistake" | the Ratchet |
 | one cycle | an Iteration |
 | a save point | a Stable Checkpoint (one git commit) |
 | "I need to ask you something" | an Escalation Request → `ESCALATE` |
@@ -277,8 +279,11 @@ your-repo/
 ├── PRD.md                    ← yours. what you want.
 ├── .ai/                      ← the robot's working notes for this run. Disposable —
 │                               removed from the branch tip when it finishes.
-└── knowledge/                ← what it learned about your repo (build commands,
-                                quirks, conventions). Survives every run. Edit freely.
+└── knowledge/                ← survives every run. Two files, opposite rules:
+    ├── PROJECT.md            ← what it learned about your repo (build commands,
+    │                           quirks, conventions). Engine writes it; code wins.
+    └── DOMAIN.md             ← your domain rules and formulas. Optional. Only YOU
+                                write it, and it beats the code.
 ```
 
 ---

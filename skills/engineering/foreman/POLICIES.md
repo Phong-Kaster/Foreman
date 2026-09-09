@@ -68,13 +68,28 @@ A claim without evidence is not a fact. Task completion requires recorded eviden
 - **Standing (per-repository, approved at the DoD gate, lives in Knowledge):** the repository's verified toolchain — build, test, lint, dependency install.
 - **High-risk (goal-scoped by default, always explicit):** deletion commands; network access beyond dependency resolution; process/system management (`docker`, `adb`, `kubectl`, service control); anything touching paths outside the repository; anything irreversible.
 
-Protected paths (never writable by the engine, enforced by runtime deny rules): `.loop/`, all Capability Ledgers, generated permission settings, runtime configuration.
+Protected paths (never writable by the engine, enforced by runtime deny rules): `.loop/`, all Capability Ledgers, `knowledge/DOMAIN.md`, generated permission settings, runtime configuration.
+
+## The Two Knowledge Files
+
+`knowledge/` holds two files with different owners and **opposite** conflict rules. Applying one file's rule to the other is a defect.
+
+| | `knowledge/PROJECT.md` | `knowledge/DOMAIN.md` |
+|---|---|---|
+| Content | Verified toolchain commands, conventions, environmental facts about *this repository* | Domain rules, formulas, algorithms, business and regulatory invariants |
+| Owner | Engine (human-editable, no gate) | **Human only** — engine may read and propose, never write |
+| Conflicts with the codebase | **Codebase wins** — it is a cache of facts about the code, so the code corrects it | **This file wins** — the code is an attempt at the rule; a difference is a defect in the code |
+| Lifetime | Per repository, cumulative | Per repository, cumulative |
+
+Neither file is a place for knowledge about a technology stack in general (platform API behaviour, framework idioms). That is not truth about *this* repository, nothing here can verify it, and it goes stale with no mechanism to correct it — see ADR-007.
 
 ## Reconciliation Rules
 
 - Every discovery is classified in the iteration it was made. Deferring classification is itself a violation.
-- Operational discoveries (commands, environment quirks, conventions) update `knowledge/` in the same checkpoint.
+- Operational discoveries (commands, environment quirks, conventions) update `knowledge/PROJECT.md` in the same checkpoint.
+- A conflict between the codebase and `knowledge/DOMAIN.md` is a **defect report**, never a cache correction. Fix the code inside the current task or file a task; if you believe the rule itself is wrong or incomplete, escalate and propose the change.
 - Ambiguity in the PRD/DoD is never resolved by guessing on behalf of the human: minor ambiguity → record the assumption in `STATE.md` (auditable, reversible); behavior-defining ambiguity → Escalation Request.
+- **Earn each line.** Record a lesson only when a real failure demonstrated it — a broken build, a failing test, a review finding, a denied command. A lesson merely inferred is noise, and noise in files read every iteration makes earned lines matter less. Remove a line once the model no longer needs it.
 
 ## Git Conduct
 
