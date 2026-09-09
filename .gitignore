@@ -1,0 +1,20 @@
+# IDE / editor
+# JetBrains (Android Studio, IntelliJ, ...) — per-machine project metadata, never shared.
+# This repo has no IDE-managed build, so none of it is worth committing.
+.idea/
+.vs/
+.vscode/
+*.iml
+
+# OS
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# Deliberately NOT ignored — these are the product, not local noise:
+#   .loop/       the standalone distributable (tracked on purpose)
+#   .ai/         a consumer repo's execution state. If this repo is ever itself run through
+#                the loop, the engine MUST be able to commit .ai/ as part of its atomic
+#                checkpoint (ENGINE.md §6.9) — ignoring it here would silently break the loop.
+#   PRD.md       same reason: human-owned intent, committed at bootstrap.
+#   knowledge/   durable, cumulative, meant to survive every run.
