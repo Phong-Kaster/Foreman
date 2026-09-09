@@ -1,6 +1,6 @@
-# Loop Runtime — Architecture
+# Foreman — Architecture
 
-This document is the complete design of the Loop Runtime. Terms in **bold capitals** are defined in [CONTEXT.md](../CONTEXT.md); decisions with real trade-offs are recorded in [docs/adr/](./adr/).
+This document is the complete design of Foreman. Terms in **bold capitals** are defined in [CONTEXT.md](../CONTEXT.md); decisions with real trade-offs are recorded in [docs/adr/](./adr/).
 
 ---
 
@@ -8,11 +8,11 @@ This document is the complete design of the Loop Runtime. Terms in **bold capita
 
 An application of Addy Osmani's **Loop Engineering** idea: instead of a human prompting an AI step by step, the human provides intent once (a PRD), and a self-orchestrating loop drives the AI through *read state → pick task → implement → build → test → review → reconcile → persist → repeat* until a verifiable goal is met.
 
-The Loop Runtime packages that idea as a **portable artifact**: one `.harness/loop/` directory that can be copied into any repository — Android, Spring, React, Python, anything — and immediately becomes that repository's autonomous execution engine.
+Foreman packages that idea as a **portable artifact**: one `.harness/loop/` directory that can be copied into any repository — Android, Spring, React, Python, anything — and immediately becomes that repository's autonomous execution engine.
 
 Two surfaces install and operate that artifact. Both drive the exact same engine and contracts described in this document — neither changes the architecture, only how a human reaches it:
 
-- **The Skill** (recommended) — `npx skills@latest add <owner>/Loop-Runtime`, then `/loop-runtime <requirement>`. Carries its own copy of `.harness/loop/`'s contents, materializes them at the consumer repo root, stages the requirement as `PRD.md`, launches and supervises `run.ps1` live in the conversation, mediates Escalation Requests as ordinary questions instead of file edits, and produces a Roll-up Summary across every Loop Branch at completion.
+- **The Skill** (recommended) — `npx skills@latest add <owner>/foreman`, then `/foreman <requirement>`. Carries its own copy of `.harness/loop/`'s contents, materializes them at the consumer repo root, stages the requirement as `PRD.md`, launches and supervises `run.ps1` live in the conversation, mediates Escalation Requests as ordinary questions instead of file edits, and produces a Roll-up Summary across every Loop Branch at completion.
 - **Manual** — copy `.harness/loop/` into the repository root by hand, write `PRD.md` yourself, run `powershell .harness/loop/run.ps1` from a terminal.
 
 The Skill is additive: it stages input and supervises/summarizes output, but exercises no authority the Trust Chain (§9) didn't already grant through a human-approved Capability. Everything from §2 onward describes the engine and runtime both surfaces drive identically.
@@ -47,7 +47,7 @@ A consumer repository contains four loop artifacts. There are four **because the
 
 | Artifact | Lifecycle | Owner | Content |
 |---|---|---|---|
-| `.harness/loop/` | Install-time; replaced only by runtime upgrades | Loop-Runtime product | Engine spec, policies, runtime script, templates, baseline capabilities |
+| `.harness/loop/` | Install-time; replaced only by runtime upgrades | Foreman product | Engine spec, policies, runtime script, templates, baseline capabilities |
 | `PRD.md` | Per feature; written before a run | Human | Product intent: objective, requirements, constraints |
 | `.harness/run/` | Per feature run; disposable | Engine (plus one human-owned file: `DoD.md`) | Plan, tasks, state, amendments, escalations, goal-scoped capabilities |
 | `.harness/knowledge/` | Per repository; cumulative across runs | Engine-maintained, human-editable | Verified toolchain commands, conventions, environmental facts, standing capabilities |
@@ -106,9 +106,9 @@ This runtime is an application of Addy Osmani's [Loop Engineering](https://addyo
 
 | Primitive | Its job in the loop | Where it lives in this runtime |
 |---|---|---|
-| **Automations** | Discovery and triage on a schedule -- what makes a loop *loop* | Deliberately **not** in `run.ps1` ([ADR-002](./adr/ADR-002-stateless-iteration-dumb-runtime.md): the Runtime holds no scheduling logic). `run.ps1` is a *goal* loop, running until DONE / ESCALATE / FAILED. A cadence comes from outside it -- Claude Code's own `/loop`, cron, or a CI job invoking `/loop-runtime` |
+| **Automations** | Discovery and triage on a schedule -- what makes a loop *loop* | Deliberately **not** in `run.ps1` ([ADR-002](./adr/ADR-002-stateless-iteration-dumb-runtime.md): the Runtime holds no scheduling logic). `run.ps1` is a *goal* loop, running until DONE / ESCALATE / FAILED. A cadence comes from outside it -- Claude Code's own `/loop`, cron, or a CI job invoking `/foreman` |
 | **Worktrees** | Isolate parallel work | Replaced by a stricter mechanism: one branch, one working directory, and **Declared File Scopes** verified after the fact ([ADR-008](./adr/ADR-008-phase-workers-single-branch.md)). Git forbids two worktrees on one branch, so the two are mutually exclusive; scope verification makes a collision explicit rather than letting the filesystem hide it |
-| **Skills** | Codify project knowledge so the loop stops re-deriving it | The `/loop-runtime` Skill itself, plus `.harness/knowledge/` -- which survives every run, so a hard-won environmental fact is paid for once, not once per PRD |
+| **Skills** | Codify project knowledge so the loop stops re-deriving it | The `/foreman` Skill itself, plus `.harness/knowledge/` -- which survives every run, so a hard-won environmental fact is paid for once, not once per PRD |
 | **Plugins / connectors** | Let the loop act in the real environment | Any MCP rule string is grantable through the same Capability Ledger as a shell command: the Runtime concatenates approved rules verbatim without interpreting them, so a connector needs no new machinery |
 | **Sub-agents** | Separate maker from checker | Three distinct minds (§8), plus **Workers** for parallel implementation. Their limits are harness-enforced via `.harness/loop/agents/`, materialized into `.claude/agents/` each iteration as a build artifact and deny-listed against the engine's own edits: omitting `Bash` from a Worker's `tools` is what makes "no git, no build, no test" real rather than advisory |
 | **State** | Remember what is done, what passed, what is open | `.harness/run/` + `.harness/knowledge/` + `git log`, with the read path deliberately separated from the audit path ([ADR-010](./adr/ADR-010-resume-block-and-audit-split.md)) |
@@ -250,6 +250,6 @@ Deliberately deferred until real usage demands them, with the trigger for each:
 | Non-git checkpoint persistence | Git assumed | A real non-git consumer appears |
 | Separate `GOAL.md` for very large PRDs | PRD + DoD suffice | PRDs too large to serve as working intent reference |
 | Capability rules that tolerate compound shell commands | Exact-prefix match on the literal command string (e.g. `Bash(node *)`) | Recurs often enough in practice that proposals need a broader/looser matching form |
-| Skill distribution beyond `npx skills@latest` (e.g. a Claude Code Plugin) | Skill only, invoked bare (`/loop-runtime`) | A consumer needs marketplace install/versioning and accepts the resulting `plugin:command` namespacing |
+| Skill distribution beyond `npx skills@latest` (e.g. a Claude Code Plugin) | Skill only, invoked bare (`/foreman`) | A consumer needs marketplace install/versioning and accepts the resulting `plugin:command` namespacing |
 
 Validated so far: a real consumer project (Android-Compose-Skeleton, manual `.harness/loop/` path) and, separately, the Skill-based install/operate/escalate/roll-up flow end-to-end in a scratch repository — not toy examples in either case.

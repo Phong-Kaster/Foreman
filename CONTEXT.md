@@ -1,6 +1,6 @@
-# Loop Runtime
+# Foreman
 
-The vocabulary of the Loop Runtime: a portable execution engine, installed into consumer repositories either as a Claude Code skill or by copying `.harness/loop/` directly, that turns a feature PRD into verified working software with minimal human intervention during coding.
+The vocabulary of Foreman: a portable execution engine, installed into consumer repositories either as a Claude Code skill or by copying `.harness/loop/` directly, that turns a feature PRD into verified working software with minimal human intervention during coding.
 
 ## Language
 
@@ -9,7 +9,7 @@ The thin, intentionally dumb outer script that compiles the Capability Ledger in
 _Avoid_: Harness, orchestrator, scheduler
 
 **Skill**:
-The `/loop-runtime` Claude Code skill — the recommended surface for installing and operating the loop. It carries its own copy of `.harness/loop/`'s contents (spec, policies, templates, runtime script) and materializes them at the consumer repository root; stages the human's requirement (inline text or a document path) as `PRD.md`; launches and supervises `run.ps1` live instead of leaving it to a terminal; mediates every Escalation Request as ordinary conversation instead of a file the human must open and edit; and reports a Roll-up Summary at completion. It adds no authority of its own — every Capability it exercises still traces back to a ledger entry the human approved through the same Trust Chain.
+The `/foreman` Claude Code skill — the recommended surface for installing and operating the loop. It carries its own copy of `.harness/loop/`'s contents (spec, policies, templates, runtime script) and materializes them at the consumer repository root; stages the human's requirement (inline text or a document path) as `PRD.md`; launches and supervises `run.ps1` live instead of leaving it to a terminal; mediates every Escalation Request as ordinary conversation instead of a file the human must open and edit; and reports a Roll-up Summary at completion. It adds no authority of its own — every Capability it exercises still traces back to a ledger entry the human approved through the same Trust Chain.
 _Avoid_: Wrapper, launcher (undersells that it also supervises and summarizes), plugin (V1 ships as a skill, not a Claude Code plugin — see ADR notes on invocation namespacing)
 
 **Execution Engine**:
@@ -164,5 +164,5 @@ The Skill's end-of-run report, produced when a run reaches `DONE`: every Loop Br
 _Avoid_: Report, digest, changelog
 
 **Consumer repository**:
-Any repository that installs the loop — either via the Skill (`npx skills@latest add`, then `/loop-runtime`) or by copying `.harness/loop/` directly — and provides a Goal. The Loop Runtime never knows the consumer's tech stack.
+Any repository that installs the loop — either via the Skill (`npx skills@latest add`, then `/foreman`) or by copying `.harness/loop/` directly — and provides a Goal. Foreman never knows the consumer's tech stack.
 _Avoid_: Host project, target repo

@@ -1,4 +1,4 @@
-# Loop Runtime
+# Foreman
 
 A **portable autonomous execution engine** for Claude Code: install one skill, hand it a requirement — inline text or a document path — and a loop of fresh AI iterations plans, implements, builds, tests, reviews, and verifies the feature until it is provably done, stopping for you only at genuine decision points.
 
@@ -12,9 +12,9 @@ An application of Addy Osmani's **Loop Engineering** concept: the human stops be
 
 ## What it is
 
-Loop Runtime is two things working together:
+Foreman is two things working together:
 
-1. **A Claude Code skill** (`/loop-runtime`) — the easy on-ramp. Install it once per repository, then type `/loop-runtime <requirement>` to start or resume a run. The skill materializes the runtime, stages your requirement as `PRD.md`, launches the engine in the background, streams its activity live into your conversation, and turns every decision point into a normal question instead of a file you have to open and edit.
+1. **A Claude Code skill** (`/foreman`) — the easy on-ramp. Install it once per repository, then type `/foreman <requirement>` to start or resume a run. The skill materializes the runtime, stages your requirement as `PRD.md`, launches the engine in the background, streams its activity live into your conversation, and turns every decision point into a normal question instead of a file you have to open and edit.
 2. **A stateless execution engine underneath** (`.harness/loop/`) — the actual "loop": a thin, dumb PowerShell runtime (`run.ps1`) that repeatedly re-invokes Claude Code headlessly, reading one status word after each invocation (`CONTINUE` / `DONE` / `ESCALATE` / `FAILED`) and reacting mechanically. All the intelligence lives in `ENGINE.md`, the engine's system-prompt specification — never in the runtime itself.
 
 You don't need to think about these as separate things day-to-day — the skill exists specifically so you never have to touch `.harness/loop/` directly.
@@ -24,10 +24,10 @@ You don't need to think about these as separate things day-to-day — the skill 
 ## Install (once per repository)
 
 ```
-npx skills@latest add Phong-Kaster/Loop-Runtime
+npx skills@latest add Phong-Kaster/foreman
 ```
 
-This installs the `loop-runtime` skill into `.claude/skills/loop-runtime/` (and `.agents/skills/loop-runtime/`) in your current repo, and records it in that repo's `skills-lock.json` — the same mechanism you'd use for any other shared Claude Code skill package. Nothing else needs to be copied by hand.
+This installs the `foreman` skill into `.claude/skills/foreman/` (and `.agents/skills/foreman/`) in your current repo, and records it in that repo's `skills-lock.json` — the same mechanism you'd use for any other shared Claude Code skill package. Nothing else needs to be copied by hand.
 
 > Prefer not to use the skill installer? `.harness/loop/` is also a plain, self-contained distributable — copy it into a repo's root and run `powershell .harness/loop/run.ps1` directly from a terminal. See [docs/consumer-guide.md](./docs/consumer-guide.md) for that path. The skill is the recommended way in for anyone already working inside Claude Code.
 
@@ -36,13 +36,13 @@ This installs the `loop-runtime` skill into `.claude/skills/loop-runtime/` (and 
 ## How to use it
 
 ```
-/loop-runtime <inline requirement text>
-/loop-runtime <path to a requirement document>
-/loop-runtime
+/foreman <inline requirement text>
+/foreman <path to a requirement document>
+/foreman
 ```
 
-- **Inline text** — e.g. `/loop-runtime add a dark mode toggle to Settings that persists via DataStore` — gets written verbatim into `PRD.md` at your repo root. No rewriting, no summarizing.
-- **A document path** — e.g. `/loop-runtime C:\reqs\dark-mode.md` — gets staged as the PRD source instead.
+- **Inline text** — e.g. `/foreman add a dark mode toggle to Settings that persists via DataStore` — gets written verbatim into `PRD.md` at your repo root. No rewriting, no summarizing.
+- **A document path** — e.g. `/foreman C:\reqs\dark-mode.md` — gets staged as the PRD source instead.
 - **No argument** — resumes with whatever `PRD.md` already exists (first run in a repo with no `PRD.md` yet will ask you for one).
 
 From there, the skill:
@@ -57,7 +57,7 @@ From there, the skill:
 
 ## Worked example
 
-This is a real, verified run — not a hypothetical. `/loop-runtime write a hello world notification` in an empty scratch repo:
+This is a real, verified run — not a hypothetical. `/foreman write a hello world notification` in an empty scratch repo:
 
 **1. Bootstrap runs automatically** (no `.harness/run/` existed yet). The engine reads the PRD, inspects the repo (nothing there, no conventions to infer), confirms Node.js is on `PATH`, creates the branch `loop/hello-world-notification`, and generates `.harness/knowledge/PROJECT.md` plus the full `.harness/run/` scaffold (`DoD.md`, `PLAN.md`, three task files, `STATE.md`).
 
@@ -90,8 +90,8 @@ Total: two escalations, both answered as ordinary conversation; zero files opene
 ## Repository tree
 
 ```
-Loop-Runtime/
-├── skills/engineering/loop-runtime/          ← THE SKILL — what `npx skills@latest add` installs
+foreman/
+├── skills/engineering/foreman/               ← THE SKILL — what `npx skills@latest add` installs
 │   ├── SKILL.md                              ← the skill's own instructions (bootstrap, supervise, escalate, roll-up)
 │   ├── ENGINE.md                             ← copy of the Execution Engine Specification
 │   ├── POLICIES.md                           ← copy of the engineering policy
@@ -130,12 +130,12 @@ Loop-Runtime/
 consumer-repo/
 ├── PRD.md                        ← human-authored product intent (per feature) — the only file you write
 ├── .harness/                     ← every loop artifact lives here, one directory (ADR-014)
-│   ├── loop/                     ← synced from the skill on every /loop-runtime invocation
+│   ├── loop/                     ← synced from the skill on every /foreman invocation
 │   ├── knowledge/                ← generated at first bootstrap; survives every run
 │   ├── run/                      ← generated per run; machine-owned execution state; disposable
 │   └── ISSUES.md                 ← problems only; survives the Cleanup Commit that removes run/
 ├── .claude/                      ← the CLI's own directory: installed skill + materialized agents
-└── .agents/skills/loop-runtime/  ← installed by the skill installer (identical copy)
+└── .agents/skills/foreman/       ← installed by the skill installer (identical copy)
 ```
 
 Each subdirectory of `.harness/` is a distinct lifecycle, which is what keeps the folder-level operations mechanical: install copies `loop/`, resetting a run deletes `run/`, and `knowledge/` survives both because it was never inside `run/`.
@@ -179,9 +179,9 @@ This is an application of Addy Osmani's [Loop Engineering](https://addyosmani.co
 
 | Primitive | Where it lives |
 |---|---|
-| **Automations** (the heartbeat) | Deliberately *outside* `run.ps1` — the runtime holds no scheduling logic ([ADR-002](./docs/adr/ADR-002-stateless-iteration-dumb-runtime.md)). `run.ps1` is a goal loop; a cadence comes from Claude Code's `/loop`, cron, or CI invoking `/loop-runtime` |
+| **Automations** (the heartbeat) | Deliberately *outside* `run.ps1` — the runtime holds no scheduling logic ([ADR-002](./docs/adr/ADR-002-stateless-iteration-dumb-runtime.md)). `run.ps1` is a goal loop; a cadence comes from Claude Code's `/loop`, cron, or CI invoking `/foreman` |
 | **Worktrees** (isolation) | Replaced by something stricter: one branch, one working directory, **Declared File Scopes verified after the fact** ([ADR-008](./docs/adr/ADR-008-phase-workers-single-branch.md)). Git refuses two worktrees on one branch, so the two are mutually exclusive — and verified scopes make a collision explicit instead of letting the filesystem hide it |
-| **Skills** (codified knowledge) | The `/loop-runtime` skill, plus `.harness/knowledge/`, which survives every run |
+| **Skills** (codified knowledge) | The `/foreman` skill, plus `.harness/knowledge/`, which survives every run |
 | **Connectors** (real environment) | Any MCP rule string grants through the same Capability Ledger as a shell command — no new machinery, because the runtime concatenates approved rules verbatim |
 | **Sub-agents** (maker/checker) | Builder, reviewer, verifier — plus Workers, restricted by the harness via `.harness/loop/agents/` |
 | **State** (the spine) | `.harness/run/` + `.harness/knowledge/` + `git log`, with the read path split from the audit path ([ADR-010](./docs/adr/ADR-010-resume-block-and-audit-split.md)) |
@@ -208,7 +208,7 @@ Don't judge the loop by a hello-world; judge it by unattended correctness on wor
 
 **V1 validated against its first real consumer** (Android Jetpack Compose project, hello-world-notification PRD, 2026-07-08). Every contract fired correctly in a real run: bootstrap → DoD escalation gate → capability grants → checkpoint commits with build evidence → fresh-context review → the engine invoking the DONE-Candidate rule on itself (refusing to self-certify and deferring completion to a clean verifier iteration).
 
-**Skill packaging validated end-to-end** (scratch repo, hello-world-notification PRD, 2026-07-15): install → `/loop-runtime` → live background streaming → two real `ESCALATE`s handled as conversation (DoD/interpretation approval, then a capability grant) → `DONE` → roll-up summary, all without opening a single file by hand. One real bug found and fixed along the way: the skill's own frontmatter needed `disable-model-invocation: true`, otherwise a nested engine invocation running inside the same repo could see and auto-trigger the launcher skill on itself.
+**Skill packaging validated end-to-end** (scratch repo, hello-world-notification PRD, 2026-07-15): install → `/foreman` → live background streaming → two real `ESCALATE`s handled as conversation (DoD/interpretation approval, then a capability grant) → `DONE` → roll-up summary, all without opening a single file by hand. One real bug found and fixed along the way: the skill's own frontmatter needed `disable-model-invocation: true`, otherwise a nested engine invocation running inside the same repo could see and auto-trigger the launcher skill on itself.
 
 **V2 mechanisms validated against a real run** (Node.js two-command CLI, scratch repo, 2026-09-08). Bootstrap produced the full new scaffold — `RESUME.md` at 949 bytes (~237 tokens, the flat read-path artifact), `ISSUES.md` beside the run state, `HISTORY.md` split out of the read path — grouped both independent tasks into **one Phase with disjoint file scopes**, and correctly identified `src/cli.js` as the Iteration-owned shared integration file belonging to no Worker. It then queued its DoD decision naming the tasks it blocks and reported `ESCALATE` with the exact reasoning the design intends: *"No task is executable yet because D-001 blocks both tasks — the only work that exists."*
 

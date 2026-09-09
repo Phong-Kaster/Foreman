@@ -1,6 +1,6 @@
 # POLICIES
 
-> Generic engineering policy shipped with the Loop Runtime. Identical in every consumer repository — project-specific facts belong in `.harness/knowledge/`, never here.
+> Generic engineering policy shipped with Foreman. Identical in every consumer repository — project-specific facts belong in `.harness/knowledge/`, never here.
 
 ---
 

@@ -1,6 +1,6 @@
 # Field trial — Calendar-Note, 2026-09-08
 
-An end-to-end trial of the Loop Runtime against a real Android codebase, run to observe the harness
+An end-to-end trial of Foreman against a real Android codebase, run to observe the harness
 rather than to ship a product. Twelve findings came out of it, nine of them already fixed. This
 records what was measured, what held up, what did not, and what the two together imply.
 

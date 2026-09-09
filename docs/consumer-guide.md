@@ -1,10 +1,10 @@
 # Consumer Guide — operating the loop in your repository
 
-How to install, run, and govern the Loop Runtime as the human in the loop. Design rationale lives in [architecture.md](./architecture.md); this is the operating manual.
+How to install, run, and govern Foreman as the human in the loop. Design rationale lives in [architecture.md](./architecture.md); this is the operating manual.
 
 There are two ways to operate the loop — pick one per repository, both talk to the same engine underneath:
 
-- **Skill path (recommended)** — the `/loop-runtime` Claude Code skill installs, stages, launches, supervises, and summarizes for you. This is the path most people want; skip to [§1a](#1a-install-the-skill-recommended).
+- **Skill path (recommended)** — the `/foreman` Claude Code skill installs, stages, launches, supervises, and summarizes for you. This is the path most people want; skip to [§1a](#1a-install-the-skill-recommended).
 - **Manual path** — copy `.harness/loop/` yourself and run `run.ps1` from a terminal. Useful outside Claude Code, for scripted/CI-style invocation, or if you want direct control over every parameter. See [§1b](#1b-install-manually).
 
 ---
@@ -19,10 +19,10 @@ There are two ways to operate the loop — pick one per repository, both talk to
 ## 1a. Install the skill (recommended)
 
 ```
-npx skills@latest add Phong-Kaster/Loop-Runtime
+npx skills@latest add Phong-Kaster/foreman
 ```
 
-Installs `loop-runtime` into `.claude/skills/loop-runtime/` and `.agents/skills/loop-runtime/` in the current repo. Nothing else to copy — the skill carries its own copy of `ENGINE.md`, `POLICIES.md`, the capability baseline, the templates, and `run.ps1`, and materializes `.harness/loop/` at your repo root itself the first time you invoke it.
+Installs `foreman` into `.claude/skills/foreman/` and `.agents/skills/foreman/` in the current repo. Nothing else to copy — the skill carries its own copy of `ENGINE.md`, `POLICIES.md`, the capability baseline, the templates, and `run.ps1`, and materializes `.harness/loop/` at your repo root itself the first time you invoke it.
 
 ## 1b. Install manually
 
@@ -35,9 +35,9 @@ Copy the `.harness/loop/` directory into your repository root by hand. That is t
 **Skill path:** type one of:
 
 ```
-/loop-runtime <inline requirement text>
-/loop-runtime <path to a requirement document>
-/loop-runtime
+/foreman <inline requirement text>
+/foreman <path to a requirement document>
+/foreman
 ```
 
 Inline text is written verbatim into `PRD.md` — no rewriting, no summarizing. A path to an existing file gets staged as the PRD source instead (via `run.ps1 -PrdPath`). No argument resumes whatever `PRD.md` already exists, or asks you for one if there isn't one yet.
@@ -161,7 +161,7 @@ Either way: **merging is your act — the engine never merges and never touches 
 
 ## 7. The next feature
 
-**Skill path:** `/loop-runtime <next requirement>` — same repo, new goal. If a `PRD.md` already exists and differs from the new text, the skill confirms with you before overwriting rather than doing it silently.
+**Skill path:** `/foreman <next requirement>` — same repo, new goal. If a `PRD.md` already exists and differs from the new text, the skill confirms with you before overwriting rather than doing it silently.
 
 **Manual path:** write a new `PRD.md`, run `run.ps1` again. Either way, `.harness/knowledge/` persists — verified commands and hard-won environmental lessons carry over; a new `.harness/run/` and a new loop branch are created for the run.
 

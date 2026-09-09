@@ -1,6 +1,6 @@
 ---
-name: loop-runtime
-description: Start or resume the Loop Runtime autonomous engine in this repo, from inline requirement text or a path to a requirement document. Supervises the run live, handles ESCALATE gates as normal conversation instead of manual file edits, and reports a roll-up summary of all loop branches when done.
+name: foreman
+description: Start or resume the Foreman engine in this repo, from inline requirement text or a path to a requirement document. Supervises the run live, handles ESCALATE gates as normal conversation instead of manual file edits, and reports a roll-up summary of all loop branches when done.
 disable-model-invocation: true
 ---
 
@@ -12,7 +12,7 @@ Follow these steps in order. Do not skip steps or add interpretation beyond what
 
 ## 1. Locate the installed runtime files
 
-Check `.claude/skills/loop-runtime/` and `.agents/skills/loop-runtime/` (identical copies) —
+Check `.claude/skills/foreman/` and `.agents/skills/foreman/` (identical copies) —
 use whichever exists; call it `<SkillDir>` below. It contains `ENGINE.md`, `POLICIES.md`,
 `models.json`, `agents/`, `capabilities/baseline.json`, `templates/`, `scripts/run.ps1`.
 
