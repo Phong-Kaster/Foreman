@@ -51,6 +51,17 @@ Day to day you only touch the skill. It exists precisely so you never have to op
 
 ## 2. How to use it
 
+### Before you start
+
+Four things need to be true, or the first run fails on the doorstep:
+
+| You need | Why |
+|---|---|
+| **A git repository** | Every save point is a commit. Start from a clean working tree — the engine treats leftover uncommitted changes as debris from a crash. |
+| **Claude Code CLI, logged in** | The loop calls `claude` once per cycle. If `claude` isn't on your `PATH`, nothing happens. |
+| **Windows PowerShell** | V1 ships `run.ps1` only. A `run.sh` waits for the first non-Windows user. |
+| **Node.js** | Only for the installer (`npx`). The loop itself doesn't need it — unless *your* project does. |
+
 ### Install once per repository
 
 ```
@@ -82,6 +93,62 @@ That drops the `foreman` skill into `.claude/skills/foreman/` (and `.agents/skil
 5. **It proves it's finished.** A fresh run that wrote none of the code re-tests every checklist item, wipes its scratch notes off the branch tip, and reports `DONE`.
 6. **You get a summary of every branch** — not just this one. What's mergeable, what's still going, what's stuck waiting on you.
 7. **You merge.** Always you. The engine never pushes, never merges, never touches your default branch.
+
+### Watching it work
+
+The chat is the live view, but everything also lands in a log file on disk. `run.ps1` prints the exact path when it starts — it's `%TEMP%\loop-run-<your-repo-folder-name>.log`. Follow it from any other terminal:
+
+```powershell
+Get-Content "$env:TEMP\loop-run-<your-repo-folder-name>.log" -Wait -Tail 20
+```
+
+What you'll see — one line per action, each stamped with a stopwatch showing how deep into the current cycle it is:
+
+```
+=== Iteration 2 / 50 === 2026-09-09T20:35:30.4821637+07:00
+[20:35:41 +00:00:10] engine> Read .ai\STATE.md
+[20:36:02 +00:00:31] engine> Bash ./gradlew.bat assembleDebug
+[20:39:14 +00:03:43] engine: Build succeeded. Running the test suite next.
+[20:44:58 +00:09:27] engine invocation finished (success)
+=== Status: CONTINUE === 2026-09-09T20:44:58.9930412+07:00
+```
+
+New lines appearing = it's alive. The console it was launched from shows the same feed with friendlier headers — `started 20:35:30 | total elapsed 00:04:44` in place of the raw timestamps — and there's a `.raw.jsonl` beside the log holding the unfiltered event stream, for when something is genuinely weird.
+
+**You can kill it at any time.** Close the terminal, stop the skill, reboot — it's safe. Every cycle ends at a commit, so the next run picks up from the last one. If it died *mid*-cycle, the next run notices the dirty working tree and either salvages the work or throws it away — it never builds on top of unverified debris.
+
+**Only one loop per repository.** A second one refuses to start while the first holds the lock. Two engines committing to the same branch would corrupt the run.
+
+### When it stops — and what to do
+
+Five ways a run ends. Only the first two need anything from you:
+
+| It stopped with | Meaning | What you do |
+|---|---|---|
+| `ESCALATE` (3) | A decision above its authority: approve the checklist, resolve an ambiguous requirement, grant a permission, or approve an architecture change. | Answer the question. That's it — the skill records your answer and restarts it. |
+| `FAILED` (4) | Execution itself is broken: build tool missing, disk full, repo corrupted. Not "the task was hard". | Fix the environment, then start it again. It resumes from the last commit. |
+| `DONE` (0) | A fresh verifier re-proved every checklist item. | Review and merge (below). |
+| Watchdog (2) | The AI died without reporting, 3 times in a row. | Usually a transient CLI or network problem. Start it again. |
+| Budget (5) | Hit the 50-cycle ceiling. | Not a verdict on the work — a deterministic stop. Check `.ai/STATE.md` to see where it got to, then continue. |
+
+**What makes a good answer when it asks:** you may always **narrow** a request — tighten a vague checklist item, cut the permission down to a single command, say "console output, not a desktop notification". You can't accidentally widen anything; the engine can only ever get less than it asked for. And say *why* — your reason gets recorded in the audit trail alongside the decision, which is what makes the branch readable in three months.
+
+### Reviewing and merging
+
+When it reports `DONE`, the branch tip holds the code, the tests, updated `knowledge/`, and **no scratch notes** — those were stripped in the final commit, whose message is the completion summary.
+
+```powershell
+git branch --list 'loop/*'              # every run this repo has ever done
+git log --oneline loop/<prd-slug>       # the execution history, cycle by cycle
+git log -1 loop/<prd-slug>              # the completion summary: criteria -> evidence
+git diff main...loop/<prd-slug>         # everything it changed, as one review
+git merge loop/<prd-slug>               # your call, your hands
+```
+
+- **Next feature:** `/foreman <the next requirement>` in the same repo. A new branch and new scratch notes get created, but `knowledge/` carries over — the build commands and environment quirks it learned the hard way are paid for once, not once per feature.
+- **Abandoning a run:** delete `.ai/` and delete the branch. Nothing else to clean up, and your default branch was never touched.
+
+Full operating manual — every `run.ps1` parameter, the manual (non-skill) path, and the engine's hard limits: [docs/consumer-guide.md](./docs/consumer-guide.md).
 
 ### A real run (not a hypothetical)
 
