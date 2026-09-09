@@ -87,6 +87,31 @@ Never queue a decision merely because implementation is difficult. Difficulty is
 - A Worker's report is a **manifest, not a payload**: files written, behavior now working, what it could not do, what it learned. The Iteration reads the diff from git, never from the report.
 - Scope is verified, not trusted: reported file sets must be pairwise disjoint, contained in their Declared File Scope, and their union must match `git status`. A violation means the plan was wrong to call the tasks independent.
 
+## Verification Class Criteria
+
+Every DoD criterion is either `machine` or `human` (ADR-015). The split is not usually a judgement call:
+
+| `machine` | `human` |
+|---|---|
+| Business logic: CRUD correctness, date arithmetic, validation, scoping rules | Appearance: colour, contrast, readability, spacing, alignment |
+| Behaviour and flow: an action reaches the intended screen, state transitions are correct, data survives a restart | Whether a control can actually be **seen and found** |
+| The app builds **and starts without crashing**, each screen opens without throwing | Whether the result looks like what was asked for |
+
+Building is not running. `assembleDebug` proves the code type-checks and says nothing about whether a
+screen renders. Where a device or emulator is available, launch-and-open-each-screen is `machine` and
+should be written that way; where it is not, that is a `human` item.
+
+**A user-facing capability usually needs one criterion of each class.** "The user can delete a note"
+is two claims: the record is removed (`machine`), and the delete control is visible and reachable
+(`human`). Asserting only the first is how a correctly-wired button ships rendered invisible.
+
+**A DoD covering user-facing behaviour with zero `human` criteria is a defect.** Zero does not mean
+the requirement was specified unusually well; it means the criteria are measuring a layer beneath the
+one the user experiences.
+
+When uncertain, classify `human`. The costs are asymmetric: over-classifying costs one look,
+under-classifying ships something nobody can see.
+
 ## Review Standards
 
 Fresh-Context Review checks, in priority order: correctness, security, edge cases, architecture conformance, duplication, maintainability, testability, performance.

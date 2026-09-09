@@ -12,7 +12,7 @@
 ## D-001 - <short title>
 
 - **Status:** pending | answered | archived
-- **Type:** DoD approval | Tier 2 (plan/architecture) | Tier 3 (intent) | Capability grant | Missing information
+- **Type:** DoD approval | Tier 2 (plan/architecture) | Tier 3 (intent) | Capability grant | Missing information | **Human verification** (ADR-015)
 - **Iteration:** N
 - **Timestamp:** ...
 - **Blocks tasks:** T-00x, T-00y
@@ -59,3 +59,33 @@
 ### Decision
 
 <!-- HUMAN WRITES HERE: the decision AND its rationale. The rationale becomes part of the audit trail. -->
+
+---
+
+## Human Verification Request — template
+
+<!-- Queued by the Verifier when every `machine` criterion holds but `human` criteria are unsigned.
+     The run stops here: no Cleanup Commit, no DONE, until every item below is marked.
+     Each item must be actionable WITHOUT reading code. Written badly ("check the UI looks right")
+     this gate is worthless; written well it is the only thing standing between a green test suite
+     and a delete button rendered invisible against its own background. -->
+
+- **Status:** pending
+- **Type:** Human verification
+- **Blocks:** `DONE` only — every task is complete and every `machine` criterion has been re-proved.
+
+### How to run this check
+
+Build and install: `<exact command>`. Then work through the list. Mark each item `PASS` or
+`FAIL: <what you saw>`. A FAIL is a normal discovery, not a rejection of the run.
+
+| # | DoD criterion | Open | Do | Expect | Result |
+|---|---|---|---|---|---|
+| 1 | 30 | Calendar screen | tap a day with a note | the note's text and its delete icon are both clearly legible against the background | |
+| 2 | 24 | Calendar screen | tap the delete icon on a note | the note disappears from the list | |
+
+### Decision
+
+<!-- HUMAN WRITES HERE: PASS/FAIL per row above, plus anything you noticed that is not on the list.
+     Anything you report here that no row asked about is itself a finding: it means the DoD had a
+     gap, and the gap should be recorded, not just fixed. -->

@@ -120,6 +120,14 @@ _Avoid_: Goal file, spec, requirements doc
 The one-time process that reads `PRD.md`, generates the Definition of Done, and initializes `.harness/run/`. Ends by escalating for DoD approval — the only mandatory human gate before autonomous execution.
 _Avoid_: Setup, init, onboarding
 
+**Verification Class**:
+Declared on every Definition of Done criterion: `machine` if a command's output or a named file proves it, `human` if a person must look at the running software. Business logic, behaviour and flow, and "builds and starts without crashing" are machine; appearance, contrast, and whether a control can be seen and found are human. A user-facing capability usually needs one of each — asserting only the machine half is how a correctly-wired control ships invisible. A DoD with user-facing behaviour and no human criteria is a defect.
+_Avoid_: Test type, manual test (the distinction is who can judge it, not how it is executed)
+
+**Human Verification Request**:
+The checklist the Verifier queues when every machine criterion holds but human ones are unsigned. One numbered row per criterion, each naming what to open, what to do and what to expect, written so a person can act on it without reading code. It blocks `DONE` — not any task — so the loop still runs to exhaustion first and asks once, at the end.
+_Avoid_: Manual QA, sign-off request (understates that it is a gate)
+
 **Definition of Done**:
 The testable acceptance criteria derived from the PRD and approved by the human. The only human-owned artifact inside `.harness/run/` (`DoD.md`); immutable after approval — the engine may propose changes but never apply them.
 _Avoid_: Acceptance criteria file, goal, DoD checklist

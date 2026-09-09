@@ -76,7 +76,7 @@ Where `<STATUS-WORD>` is exactly one of:
 | Status | Meaning |
 |---|---|
 | `CONTINUE` | Checkpoint persisted; executable work remains; invoke me again. |
-| `DONE` | Goal verified complete by a fresh verifier. Nothing abandoned, nothing deferred. The Loop Branch is the deliverable. |
+| `DONE` | Every `machine` criterion re-proved by a fresh verifier **and** every `human` criterion signed off by a person (ADR-015). Nothing abandoned, nothing deferred. The Loop Branch is the deliverable. |
 | `ESCALATE` | No executable task remains, and decisions are queued or tasks were abandoned. The human has a batch to answer. |
 | `FAILED` | Execution itself is broken (environment, repository corruption). Human repair needed. |
 
@@ -95,11 +95,20 @@ If `.harness/run/` does not exist, this invocation is the Bootstrap. Do not impl
 
 1. Read `PRD.md`. If it is missing: `FAILED`.
 2. Inspect the repository: build system, language, structure, existing conventions, `CLAUDE.md`, READMEs, CI config. These are sources — never edit them.
-3. **Fan out for analysis, converge to a single author.** For any PRD beyond a couple of tasks, dispatch parallel analysis subagents — one surveying conventions and structure, one proposing DoD criteria, one proposing a task decomposition, one independently critiquing that decomposition (missing tasks, wrong dependencies, tasks not shaped as observable behavior), and one **conflict analysis** mapping each candidate task to the files it would touch **and proposing a Model Tier per task** (ADR-013, criteria in `POLICIES.md`). The critique role also sanity-checks tier assignments, not only the decomposition — a task misclassified as Fast by the role that proposed it would defeat the point of arm's-length judgment. All fan-out analysis roles dispatch as the read-only **analyst** role defined in `.harness/loop/agents/` (it has no write, edit or shell access, because it proposes and you alone author), and all of them run at the **Capable** tier, being review/planning work. They propose. **You alone write** `DoD.md`, `PLAN.md` and the task files. Never let two contexts author the plan: neither would see the whole, so neither could establish the dependency graph that everything else depends on.
+3. **Fan out for analysis, converge to a single author.** For any PRD beyond a couple of tasks, dispatch parallel analysis subagents — one surveying conventions and structure, one proposing DoD criteria, one proposing a task decomposition, one independently critiquing that decomposition (missing tasks, wrong dependencies, tasks not shaped as observable behavior) **and the DoD's Verification Classes** (a criterion classed `machine` that only a person could judge, or a user-facing capability with no `human` criterion at all), and one **conflict analysis** mapping each candidate task to the files it would touch **and proposing a Model Tier per task** (ADR-013, criteria in `POLICIES.md`). The critique role also sanity-checks tier assignments, not only the decomposition — a task misclassified as Fast by the role that proposed it would defeat the point of arm's-length judgment. All fan-out analysis roles dispatch as the read-only **analyst** role defined in `.harness/loop/agents/` (it has no write, edit or shell access, because it proposes and you alone author), and all of them run at the **Capable** tier, being review/planning work. They propose. **You alone write** `DoD.md`, `PLAN.md` and the task files. Never let two contexts author the plan: neither would see the whole, so neither could establish the dependency graph that everything else depends on.
 4. If `.harness/knowledge/` does not exist, create `.harness/knowledge/PROJECT.md` from the template: verified build/test/lint commands (run them to verify where capabilities allow), architecture conventions, environmental facts.
 5. Create the Loop Branch: `loop/<prd-slug>` from current HEAD.
 6. Generate `.harness/run/` from `.harness/loop/templates/`:
-   - `DoD.md` — testable acceptance criteria derived from the PRD. This is the exam the whole run will be graded against; make every criterion verifiable by evidence.
+   - `DoD.md` — testable acceptance criteria derived from the PRD. This is the exam the whole run will be
+     graded against. **Every criterion declares a Verification Class** (ADR-015): `machine` if a command's
+     output or a named file proves it, `human` if a person must look at the running software. Business
+     logic, behaviour and flow, and "it builds and starts without crashing" are `machine`; anything about
+     appearance, contrast, or whether a control can be seen and found is `human`. A user-facing capability
+     usually needs one of each — "the user can delete a note" is both "the record is removed" (`machine`)
+     and "the delete control is visible and reachable" (`human`). A DoD covering user-facing behaviour with
+     **no** `human` criteria is a defect, not a well-specified requirement: it means the criteria are
+     measuring a layer beneath the one the user experiences. Every `human` criterion carries an instruction
+     a person can follow without reading the code: what to open, what to do, what to expect.
    - `PLAN.md` — your execution strategy, including the **Phase grouping** produced by the conflict analysis and each task's **Declared File Scope** and **Model Tier**.
    - `TASKS/` — one file per task; each task is a checkpoint of demonstrably working behavior, not an internal component (see `POLICIES.md` § Task Decomposition).
    - `STATE.md` — initialized from the template. Note its field is `Stage`, not `Phase`: `Phase` means a group of tasks.
@@ -287,6 +296,7 @@ It is a **derived cache**. It is never the source of truth, it never accumulates
 - unreachable tasks and which abandonment blocks them
 - queued decisions awaiting an answer
 - review findings recorded but not fixed
+- **`human` criteria still unsigned**, so someone returning to a stopped run sees what is waiting for them without opening the Decision Queue
 - assumptions you recorded for minor ambiguities
 
 No narrative of what succeeded — commit messages carry that. If there are no issues, say so in one line.
@@ -297,10 +307,31 @@ No narrative of what succeeded — commit messages carry that. If there are no i
 
 When `STATE.md` records a DONE-candidate, this invocation is the **Verifier**. You wrote none of this implementation. Distrust all of it.
 
-1. Re-verify every DoD criterion against fresh evidence: run the build, the tests, the lint yourself. Check each acceptance criterion explicitly.
+1. Re-verify every **`machine`** criterion against fresh evidence: run the build, the tests, the lint yourself. Check each explicitly.
 2. Gaps found → file tasks, clear the DONE-candidate flag, checkpoint, report `CONTINUE`.
-3. All criteria hold → create the **Cleanup Commit**: remove `.harness/run/` from the branch tip. `ISSUES.md` stays. The commit message is the completion summary: what was built, each DoD criterion with its evidence, notable amendments.
-4. Report `DONE`. Merging is the human's act, never yours.
+3. All `machine` criteria hold, and **`human` criteria remain unsigned** → queue a **Human Verification Request** (§7) and report `ESCALATE`. Do **not** create the Cleanup Commit and do **not** report `DONE`.
+4. All `machine` criteria hold **and** every `human` criterion is signed off → create the **Cleanup Commit**: remove `.harness/run/` from the branch tip. `ISSUES.md` stays. The commit message is the completion summary: what was built, each DoD criterion with its evidence and who verified it, notable amendments.
+5. Report `DONE`. Merging is the human's act, never yours.
+
+## Human Verification Requests
+
+You cannot see the running software. Reporting `DONE` on a criterion only a person can judge is a
+claim you have no standing to make — and it has been made wrongly before, on a run whose delete
+button was correctly wired and rendered invisible against its own background, with every test green.
+
+The request is a numbered checklist, one entry per unsigned `human` criterion, each written so a
+person can act on it **without reading any code**:
+
+- **what to open** — the exact screen or entry point, and how to reach it;
+- **what to do** — the precise interaction, if any;
+- **what to expect** — the observable result, stated concretely enough to be wrong.
+
+"Check the UI looks right" is not a checklist item. It is an apology for not having written one.
+
+The human marks each item pass or fail. A failed item is a discovery like any other: reconcile it
+(§8) into a task, an amendment, or a queued decision. Signed-off items are recorded in `STATE.md`
+with the date, so a later Verifier does not ask twice — but any item whose criterion's implementation
+changed afterwards is unsigned again, because the thing that was looked at no longer exists.
 
 A run with an abandoned or deferred task never reaches this section — it reports `ESCALATE` from §6.11 and the human reads `ISSUES.md`. Do not verify a partially-built feature: an incomplete run is a failure to report honestly, not a result to certify.
 

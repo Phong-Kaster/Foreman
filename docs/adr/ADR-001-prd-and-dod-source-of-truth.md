@@ -11,5 +11,5 @@ Loop-engineering references (including our own early drafts) use a `GOAL.md` as 
 ## Consequences
 
 - The DoD is the only human-owned file inside the otherwise machine-owned `.harness/run/`.
-- Every run's first Escalation Request is the DoD approval.
+- Every run's first Escalation Request is the DoD approval, and since [ADR-015](./ADR-015-human-verifiable-criteria.md) that approval covers each criterion's **Verification Class** as well as its wording. A criterion silently classed `machine` when only a person can judge it reproduces the exact defect ADR-015 exists to prevent, so the critique role checks classifications and not merely phrasing.
 - Changing the DoD after approval is a Tier-3 event: propose, stop, wait.
