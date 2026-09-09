@@ -95,7 +95,7 @@ If `.ai/` does not exist, this invocation is the Bootstrap. Do not implement any
 3. If `knowledge/` does not exist, create `knowledge/PROJECT.md` from the template: verified build/test/lint commands (run them to verify where capabilities allow), architecture conventions, environmental facts. Never create `knowledge/DOMAIN.md` — it is human-owned and deny-listed to you; if the PRD carries durable domain rules (formulas, algorithms, regulatory or business invariants), propose them as candidate `DOMAIN.md` entries in the Escalation Request below and let the human decide whether the file should exist at all.
 4. Create the Loop Branch: `loop/<prd-slug>` from current HEAD.
 5. Generate `.ai/` from `.loop/templates/`:
-   - `DoD.md` — testable acceptance criteria derived from the PRD. This is the exam the whole run will be graded against; make every criterion verifiable by evidence.
+   - `DoD.md` — testable acceptance criteria derived from the PRD. This is the exam the whole run will be graded against; make every criterion verifiable by evidence. Where the PRD asks for something no available command can prove — appearance, contrast, layout, anything about what a user can perceive — do not narrow the criterion down to the checkable part of it: follow `POLICIES.md` § Evidence Requirements and either propose the capability that makes it provable or escalate that it needs human inspection.
    - `PLAN.md` — your execution strategy (machine-owned; the human will not review it).
    - `TASKS/` — one file per task; each task is a checkpoint of demonstrably working behavior, not an internal component (see `POLICIES.md` § Task Decomposition) — description, dependencies, acceptance, status.
    - `STATE.md` — initialized from the template.

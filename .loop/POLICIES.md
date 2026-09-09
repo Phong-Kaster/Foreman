@@ -58,9 +58,52 @@ Finding severities:
 - **Major** — likely future defect or architectural erosion. File a task.
 - **Minor** — style, naming, polish. Fix opportunistically or record; never let minors block progress.
 
+## User-Interface Defects
+
+Every line here was earned by a real failure that a passing build, a passing test suite, and a
+fresh-context review all missed. They are **Critical**, not polish: each one makes a stated
+requirement untrue while every automated check stays green.
+
+- **A marker drawn on a filled shape must contrast with that fill, not repeat it.** A dot painted
+  in the same role as the container it sits on is invisible. Check the *combined* states, not each
+  in isolation — the broken case is usually the overlap (selected *and* flagged, today *and* has
+  content).
+- **A screen holding a variable-length list must scroll.** Fixed-height layouts silently push
+  content — including the controls for adding more — off the bottom, so the requirement fails
+  precisely for the users who rely on the feature most.
+- **Every list needs an empty state.** A blank region reads as a load failure, not as "nothing
+  here yet". If a component defers this to its caller, verify the caller actually does it.
+- **A destructive action needs a confirmation step**, and the confirming control must be visually
+  distinct from the safe one. One-tap irreversible deletion is a defect, not a shortcut.
+- **Text that can exceed its container needs a defined overflow behaviour** — wrap, expand, or an
+  affordance to read the rest. Truncating to one line with no route to the full value loses data
+  the user entered.
+- **Colour must come from the theme, never hardcoded.** Hardcoded values work only by coincidence
+  with whatever background happens to sit underneath, and fail as soon as that changes. If a
+  colour scheme is declared, fill in **every** role it defines: partial schemes leave components
+  reaching for roles nobody chose.
+
+Note also that a component preview rendered outside the app's real theme and ground colour proves
+nothing about what a user sees — this is exactly how hardcoded colours survive review.
+
 ## Evidence Requirements
 
 A claim without evidence is not a fact. Task completion requires recorded evidence per ENGINE.md §10. "It should work" is never evidence. Evidence must be reproducible from the checkpoint: command + observed output.
+
+**A requirement no available command can prove is a gap to report, never a criterion to drop.**
+When the DoD carries a requirement whose satisfaction cannot be observed in any command's output —
+anything about appearance, contrast, layout, or what a user can actually perceive — say so
+explicitly, and take one of two routes:
+
+- propose the capability that would make it provable (for a UI, a host-side screenshot or snapshot
+  test usually runs in the existing test task with no device); or
+- escalate that the criterion needs human inspection, and record it as such.
+
+What must not happen is the third route: quietly treating the machine-checkable subset as the whole
+requirement. That subset passes, the fresh-context reviewer has no standard to judge the rest
+against, and the run reports a verified `DONE` over a requirement that is untrue. A reviewer cannot
+find what the Definition of Done never defined — more review passes do not fix this, only a
+criterion that can fail does.
 
 ## Capability Risk Classes
 
