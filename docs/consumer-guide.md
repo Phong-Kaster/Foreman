@@ -1,6 +1,10 @@
 # Consumer Guide — operating the loop in your repository
 
-How to install, run, and govern Foreman as the human in the loop. Design rationale lives in [architecture.md](./architecture.md); this is the operating manual.
+How to install, run, and govern Foreman as the human in the loop. This is the reference manual: every parameter, both install paths, and the engine's hard limits.
+
+- New here? Start with the [README](../README.md) — same material, plain language, decision-first.
+- Want the reasoning rather than the procedure? [architecture.md](./architecture.md), and [docs/adr/](./adr/) for each hard-to-reverse choice.
+- Vocabulary: [CONTEXT.md](../CONTEXT.md).
 
 There are two ways to operate the loop — pick one per repository, both talk to the same engine underneath:
 
@@ -11,10 +15,10 @@ There are two ways to operate the loop — pick one per repository, both talk to
 
 ## Prerequisites
 
-- A git repository (clean working tree recommended before starting a run)
-- Claude Code CLI installed and authenticated
-- Windows PowerShell (V1 ships `run.ps1`; the contract is shell-agnostic)
-- Skill path only: Node.js available (for `npx`)
+- **A git repository** — every Stable Checkpoint is a commit. Start from a clean working tree: the engine reads uncommitted changes at iteration start as debris from a crashed invocation and will salvage or discard them.
+- **Claude Code CLI, installed and authenticated** — the runtime invokes `claude` once per iteration. If it is not on `PATH`, `run.ps1` produces no status and the Watchdog stops the run.
+- **Windows PowerShell** — V1 ships `run.ps1` only; the contract itself is shell-agnostic (a `run.sh` waits for the first non-Windows consumer).
+- **Node.js** — skill path only, for `npx`. The loop does not need it; your project may.
 
 ## 1a. Install the skill (recommended)
 
@@ -90,6 +94,14 @@ Get-Content "$env:TEMP\loop-run-<repo-name>.log" -Wait -Tail 20
 Get-Content "$env:TEMP\loop-run-<repo-name>.raw.jsonl" -Wait -Tail 5
 ```
 
+The `engine>` / `engine:` lines are identical in both places, but the file's iteration and status headers carry a full ISO timestamp rather than the console's stopwatch phrasing — the same feed, formatted for a log rather than a terminal:
+
+```
+=== Iteration 2 / 50 === 2026-09-09T20:35:30.4821637+07:00
+[20:36:02 +00:00:31] engine> Bash ./gradlew.bat assembleDebug
+=== Status: CONTINUE === 2026-09-09T20:44:58.9930412+07:00
+```
+
 Other quick liveness checks:
 
 ```powershell
@@ -119,11 +131,17 @@ After approval the DoD is immutable to the engine either way: it may propose cha
 
 ## 5. While the loop runs
 
-Nothing is required from you. The loop stops only for:
+Nothing is required from you. There are exactly five ways a run ends, and `run.ps1` exits with a distinct code for each — the codes are the contract for scripted or CI invocation:
 
-- **`ESCALATE`** — a decision above the engine's authority: an architecture change (Tier 2), an intent gap (Tier 3), a capability request, missing product information. Skill path: answered as conversation, same as §4. Manual path: read `.ai/ESCALATION.md`, write decision + rationale, re-run. One pending escalation at a time, always.
-- **`FAILED`** — execution itself is broken (environment, corruption, exhausted resources). Fix the environment, re-run (or ask the skill to); the engine resumes from the last checkpoint.
-- **Watchdog / budget stops** — mechanical bounds tripped. Inspect, re-run to continue; the loop never loses verified work.
+| Ending | Exit | Meaning | Your move |
+|---|---|---|---|
+| `DONE` | 0 | Goal verified complete by a fresh verifier iteration. | Review and merge — §6. |
+| `ESCALATE` | 3 | A decision above the engine's authority: an architecture change (Tier 2), an intent gap (Tier 3), a capability request, missing product information. | Skill path: answer in conversation, as in §4. Manual path: read `.ai/ESCALATION.md`, write decision + rationale under `## Decision`, re-run. One pending escalation at a time, always. |
+| `FAILED` | 4 | Execution itself is broken — environment, repository corruption, exhausted resources. Not "the task was hard". | Repair the environment, re-run (or ask the skill to). The engine resumes from the last checkpoint. |
+| Watchdog | 2 | `MaxConsecutiveCrashes` (default 3) invocations died without producing any status. | Usually a transient CLI/network fault. Inspect `.ai/STATE.md`, re-run. |
+| Budget | 5 | `MaxIterations` (default 50) exhausted. A deterministic safety stop, never an interpretation of task failure. | Inspect `.ai/STATE.md` for actual progress, then re-run to continue — or raise `-MaxIterations`. |
+
+Exit code `1` is a prerequisite failure before any engine invocation: `.loop/ENGINE.md` missing (wrong working directory), a `-PrdPath` that does not resolve, or another runtime already holding the run lock.
 
 Interrupting is always safe: kill it whenever you like (or ask the skill to stop supervising). Every iteration ends at a Stable Checkpoint (one atomic commit of code + state); the next invocation recovers mechanically — even from a mid-iteration crash, which it detects as a dirty working tree.
 
@@ -137,7 +155,17 @@ Watching progress: `git log --oneline` on the loop branch is the execution histo
 
 **Skill path:** you get a roll-up summary across **every** `loop/*` branch in the repo, not just the one that finished — each one's status (done / in-progress / stuck on an escalation / stale), what it contains, and whether it's merge-ready — plus any non-blocking review notes that would otherwise be lost when `.ai/` is deleted.
 
-**Manual path:** review the branch like any contribution yourself; check other `loop/*` branches with `git branch --list 'loop/*'` if you've run more than one goal in this repo.
+**Manual path:** review the branch like any contribution yourself:
+
+```powershell
+git branch --list 'loop/*'              # every run this repository has done
+git log --oneline loop/<prd-slug>       # the execution history, one commit per iteration
+git log -1 loop/<prd-slug>              # the Cleanup Commit: completion summary, criteria -> evidence
+git diff <default-branch>...loop/<prd-slug>   # the whole change, as one review
+git merge loop/<prd-slug>
+```
+
+The three-dot form is deliberate: it diffs the branch against the point it diverged from, so unrelated commits landing on your default branch meanwhile don't pollute the review.
 
 Either way: **merging is your act — the engine never merges, never pushes, never touches your default branch.**
 
