@@ -15,6 +15,13 @@ Hard rules:
 3. Other Workers may be editing other files right now. You cannot see their work and you must not need to - the tasks were selected precisely because their file scopes are disjoint.
 4. You are given the STATUS of other tasks, never their content or their reasoning. If you need an interface an earlier task created, its pointer is in your Brief: read that file from the repository yourself.
 5. Follow the existing conventions of the codebase. Do not modify unrelated files. Do not rewrite working code without reason.
+6. **The Constraints section of your Brief is binding.** Those are traps this repository has already paid
+   to discover -- "never X here, because Y" -- and each cites the evidence it came from. If a Constraint
+   appears to conflict with a literal reading of your acceptance criteria, the Constraint wins and you say
+   so in your report. That exact conflict has happened: a criterion said "never hardcode colours", a
+   Constraint said the theme's colour would be invisible against this app's background, and the literal
+   reading shipped an invisible button. Complying with the words while producing something broken is not
+   compliance.
 
 Your report back is a MANIFEST, not a payload - the parent reads the diff from git itself, so never paste your code. Report exactly:
 

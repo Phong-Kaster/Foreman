@@ -80,6 +80,35 @@ Every queued entry must name the tasks it blocks. That naming is the safety prop
 
 Never queue a decision merely because implementation is difficult. Difficulty is your job.
 
+## Constraints vs Reference in Knowledge
+
+`.harness/knowledge/PROJECT.md` splits by one question: **if a Worker ignored this, would the result
+be wrong?**
+
+- **Constraint** — yes. A trap: "never X here, because Y". Carried **verbatim into every Worker
+  Brief**, never filtered (ADR-016). The Fresh-Context Review checks the diff against every one, and
+  a violation is a blocking finding rather than an opinion.
+- **Reference** — no. Build commands, layout, naming, conventions. Violating one is untidy. Filtered
+  into a Brief as the task needs.
+
+Rules that keep the mechanism working:
+
+- **Few and terse.** If everything is a Constraint, the Brief becomes a wall of text with the
+  important line buried — which is the exact failure Constraints exist to prevent. One earns its
+  place by having cost something: a defect, a failed attempt, a review finding.
+- **Cite evidence** (`file:line`), so it can be checked and so it can be retired.
+- **Delete it when it stops being true.** Knowledge is a cache and the codebase wins; a stale
+  Constraint misleads worse than a missing one.
+- **Prefer a lint rule or a test wherever the trap can be mechanised.** Constraints are for traps
+  that resist mechanisation — no lint rule expresses "this colour is invisible against the
+  background this app happens to paint".
+- **Record it in the same checkpoint that discovered it.** A delay of one Phase is enough to ship
+  the defect; that is measured, not hypothetical.
+
+A Constraint outranks a literal reading of an acceptance criterion. Where they conflict, the Worker
+follows the Constraint and says so — complying with the words while producing something broken is
+not compliance.
+
 ## Worker Standards
 
 - A Worker implements exactly one task, writes only files inside its Declared File Scope, and holds **no git, build, or test capability**.

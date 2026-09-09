@@ -169,7 +169,11 @@ For each task in the Phase, dispatch one Worker subagent with a **Worker Brief**
 - its **Declared File Scope** — the files it may write, and the instruction that writing outside it is a violation
 - the **status** of other tasks (complete / in progress / abandoned) — never their content, never their implementation reasoning
 - **pointers** to interfaces earlier Phases created ("task 2 created `SettingsRepository` in `data/SettingsRepository.kt`; read it if you need it") rather than the code itself
-- the conventions from `.harness/knowledge/` it needs
+- **every Constraint from `.harness/knowledge/PROJECT.md`, verbatim** (ADR-016). Not filtered, not
+  summarised, not judged relevant — you do not get to decide which traps a Worker needs. That judgement
+  is exactly what shipped a delete icon rendered invisible against its own background, one commit after
+  the trap had been written down correctly.
+- the Reference conventions from `.harness/knowledge/` this task needs — those you may filter
 
 A Worker **holds no git, build, or test capability**. It edits files and reports back. Its report is a **manifest, not a payload**: the files it wrote, the behavior now working, anything it could not do, anything it learned. You read the diff from git — never from the Worker's report.
 
@@ -198,6 +202,10 @@ On failure, attribute it: the error names a file, and the file maps to exactly o
 A failure that names no Worker's file — a dependency resolution error, or an interaction between two individually-correct changes — is **yours**. Fix it yourself; it counts against no task's attempts. If you cannot fix it in three tries, abandon the whole Phase, not one task.
 
 ## 6.8 Fresh-Context Review
+
+Give the reviewer the **Constraints** list from `.harness/knowledge/PROJECT.md` and require it to check
+the combined diff against every entry. A Constraint violation is a **blocking** finding, not an opinion:
+it is the one review category comparing against a written rule rather than exercising taste.
 
 Spawn a review subagent with a **clean context**, always at the **Capable** tier regardless of the tasks' own tiers — the Reviewer's job is exactly the judgment-heavy work that tier exists for. Give it only: the combined diff, the task descriptions, `DoD.md`, project standards (`POLICIES.md` + `.harness/knowledge/` conventions), and evidence (build/test output). Never give it your implementation reasoning — that reasoning may contain the original mistake. Its findings flow into Reconcile.
 
@@ -250,7 +258,10 @@ Every discovery — build failure, test failure, review finding, hidden dependen
 
 - **No action** (noted in `HISTORY.md`)
 - **Task amendment** (Tier 1, logged)
-- **Knowledge update** (operational truth → `.harness/knowledge/PROJECT.md`)
+- **Knowledge update** (operational truth → `.harness/knowledge/PROJECT.md`). If the discovery is a
+  **trap** — something a future Worker could do that would be *wrong* rather than merely untidy — record
+  it as a **Constraint** in that file, with its evidence, **in this same checkpoint**. Not next Phase:
+  the run that produced this rule had a one-commit window between writing the trap down and violating it.
 - **Retry** (only when the probability of success has increased — new information, new approach; never identical retries)
 - **Queued decision** (Tier 2/3, missing information, capability needed)
 - **Abandonment** (the third failed attempt)

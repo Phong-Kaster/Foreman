@@ -35,6 +35,15 @@ deliberately excluded. The Iteration wires those itself after your work is merge
 <!-- Interfaces earlier Phases created. A pointer, not the code: read the file if you need it. -->
 - T-00y created `SettingsRepository` in `data/SettingsRepository.kt` - read it if you need it.
 
+## Constraints (binding, copied verbatim from knowledge/PROJECT.md)
+
+<!-- EVERY Constraint, always, unfiltered (ADR-016). The Iteration does not choose which traps a
+     Worker needs -- that judgement is what shipped an invisible delete icon one commit after the
+     trap was written down. If a Constraint conflicts with a literal reading of the acceptance
+     criteria, the Constraint wins and the Worker says so in its report. -->
+
+- **Never** ... because ... — evidence: `path/to/File.kt:NN`
+
 ## Conventions
 
 <!-- The relevant subset of .harness/knowledge/PROJECT.md. -->

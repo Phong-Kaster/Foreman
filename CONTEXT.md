@@ -151,6 +151,10 @@ _Avoid_: Self-review, code review (generic)
 The state recorded when the engine believes the Goal is complete. The iteration that completed the last task may never emit DONE; the next, fresh iteration re-verifies every DoD criterion against evidence and alone may emit DONE. The builder creates, the reviewer challenges, the verifier confirms.
 _Avoid_: Done, complete (before fresh verification)
 
+**Constraint**:
+An entry in `knowledge/` recording a trap — "never X here, because Y", with the evidence it came from. Distinguished from Reference by one question: if a Worker ignored it, would the result be *wrong* rather than untidy? Constraints are carried verbatim into every Worker Brief, never filtered by the dispatching Iteration, and the Fresh-Context Review treats a violation as blocking. They outrank a literal reading of an acceptance criterion. This is the mechanism by which a lesson learned in one run binds every Worker in every later run.
+_Avoid_: Rule, guideline, convention (a convention is Reference — breaking it is untidy, not wrong)
+
 **Knowledge**:
 The engine-maintained cache of verified operational truth about a consumer repository — build/test/lint commands, conventions, environmental quirks learned through execution. Lives in `.harness/knowledge/` at the consumer root; survives every feature run; human-editable without approval gates. It is a cache, never the source of truth: on conflict, the codebase wins and the engine corrects the cache.
 _Avoid_: Docs, memory, wiki
