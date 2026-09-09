@@ -1,0 +1,23 @@
+{
+  "_comment": "Paste these entries into the consumer repository's knowledge/capabilities.json (the STANDING ledger) after reviewing them. Standing rather than goal-scoped because visual verification is needed by every run in this repository, not one goal. Note what is deliberately absent: updateDebugScreenshotTest. See SKILL.md, 'Capabilities: grant validate, withhold update'.",
+  "entries": [
+    {
+      "intent": "Verify rendered UI against the recorded reference images, so that acceptance criteria about appearance, contrast and layout are provable by command output instead of being narrowed away or escalated",
+      "command": "gradlew validateDebugScreenshotTest (host-side, layoutlib on the JVM; no emulator or device)",
+      "scope": "this repository's screenshotTest source set and its recorded references",
+      "lifetime": "permanent",
+      "allow": [
+        "Bash(*validateDebugScreenshotTest*)"
+      ]
+    },
+    {
+      "_withheld": "updateDebugScreenshotTest is NOT granted, on purpose.",
+      "_why": "It overwrites the reference images. An engine holding it, facing a failing screenshot test, has a one-command route to re-recording wrong output as correct — the same class of act as editing the approved Definition of Done. Moving a baseline is a human act, or a one-time goal-scoped grant made at an escalation once the human agrees the UI change is intentional.",
+      "intent": "(withheld — do not add this entry to a standing ledger)",
+      "command": "gradlew updateDebugScreenshotTest",
+      "scope": "-",
+      "lifetime": "goal, and only when a human has approved a deliberate baseline change",
+      "allow": []
+    }
+  ]
+}

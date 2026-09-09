@@ -260,6 +260,9 @@ Foreman/
 │   ├── templates/                    blueprints for .ai/ and knowledge/
 │   └── scripts/run.ps1               the loop script
 │
+├── skills/knowledge/                 ← OPT-IN STACK PACKS — platform knowledge, human-curated,
+│   └── android-compose-visual-testing/  never auto-promoted into .loop/ (ADR-007)
+│
 ├── .loop/                            ← THE SAME THING, standalone — for manual installs
 ├── tests/                            ← Pester tests for run.ps1, driven by a fake `claude` stub
 ├── docs/
