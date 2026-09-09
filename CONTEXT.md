@@ -100,12 +100,16 @@ The state recorded when the engine believes the Goal is complete. The iteration 
 _Avoid_: Done, complete (before fresh verification)
 
 **Knowledge**:
-What a consumer repository durably knows, kept in `knowledge/` at its root and surviving every feature run. Two files with different owners and **opposite** conflict rules — Project Knowledge and Domain Knowledge, below. Neither holds knowledge about a technology stack in general: that is not truth about this repository, nothing here can verify it, and it goes stale uncorrected (ADR-007).
+What a consumer repository durably knows, kept in `knowledge/` at its root and surviving every feature run. Three files with different owners and incompatible rules — Project Knowledge, Open Issues, and Domain Knowledge, below. None holds knowledge about a technology stack in general: that is not truth about this repository, nothing here can verify it, and it goes stale uncorrected (ADR-007).
 _Avoid_: Docs, memory, wiki
 
 **Project Knowledge**:
 The engine-maintained cache of verified operational truth about a consumer repository — build/test/lint commands, conventions, environmental quirks learned through execution. Lives in `knowledge/PROJECT.md`; human-editable without approval gates. It is a cache, never the source of truth: on conflict, the codebase wins and the engine corrects the cache.
 _Avoid_: Knowledge (unqualified — now ambiguous)
+
+**Open Issues**:
+The engine-maintained list of known defects that are **still wrong**, in `knowledge/ISSUES.md`, read at Orient every iteration so a known defect reaches the engine before it writes code rather than after. Its semantics are the inverse of Project Knowledge: entries are patterns to **avoid**, not conventions to conform to — a defect recorded as a fact gets reproduced on purpose (ADR-008). Each entry is actionable on its own and cites the commit SHA holding the full record, because paths into `.ai/` stop resolving once the Cleanup Commit removes it. An entry is deleted when resolved, never marked done.
+_Avoid_: Backlog, TODO list (those hold work not yet started; this holds work known to be wrong), technical debt register
 
 **Domain Knowledge**:
 Human-owned durable truth about the problem domain — rules, formulas, algorithms, business and regulatory invariants. Lives in `knowledge/DOMAIN.md`; optional, and absent rather than stubbed when a project has none. **It outranks the codebase**: the code is an *attempt* at the rule, so a difference is a defect in the code, never a reason to correct the file. Engine-immutable, enforced by runtime deny rules exactly like the Capability Ledgers — the engine may read it and propose entries through an Escalation Request, never write it.

@@ -182,6 +182,8 @@ git merge loop/<prd-slug>
 
 The three-dot form is deliberate: it diffs the branch against the point it diverged from, so unrelated commits landing on your default branch meanwhile don't pollute the review.
 
+**What the run knew was still wrong** is in `knowledge/ISSUES.md` — defects the engine found and did not fix, because they were out of scope, because a review finding was filed rather than resolved, or because you deferred them. That file survives the Cleanup Commit and is read by every future iteration as a list of patterns to *avoid*, so a later run does not reproduce them. Entries cite the commit SHA holding the full record; read it back with `git show <sha>:<path>`. Prune an entry once it is resolved — the file is worth reading only while everything in it is still true.
+
 Either way: **merging is your act — the engine never merges, never pushes, never touches your default branch.**
 
 ## 7. The next feature

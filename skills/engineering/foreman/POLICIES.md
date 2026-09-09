@@ -107,22 +107,27 @@ criterion that can fail does.
 
 ## Capability Risk Classes
 
-- **Low-risk (baseline, permanent, ships with the runtime):** reading repository files; `git status/diff/log/add/commit/checkout/branch` local operations; creating and editing files inside the consumer repository (excluding protected paths).
+- **Low-risk (baseline, permanent, ships with the runtime):** reading repository files; `git status/diff/log/show/add/commit/checkout/branch` local operations — `show` included because branch history is where a prior run's state survives the Cleanup Commit, and it is the only command that reads a file's contents at a commit; creating and editing files inside the consumer repository (excluding protected paths).
 - **Standing (per-repository, approved at the DoD gate, lives in Knowledge):** the repository's verified toolchain — build, test, lint, dependency install.
 - **High-risk (goal-scoped by default, always explicit):** deletion commands; network access beyond dependency resolution; process/system management (`docker`, `adb`, `kubectl`, service control); anything touching paths outside the repository; anything irreversible.
 
 Protected paths (never writable by the engine, enforced by runtime deny rules): `.loop/`, all Capability Ledgers, `knowledge/DOMAIN.md`, generated permission settings, runtime configuration.
 
-## The Two Knowledge Files
+## The Knowledge Files
 
-`knowledge/` holds two files with different owners and **opposite** conflict rules. Applying one file's rule to the other is a defect.
+`knowledge/` holds three files with different owners and **incompatible** rules. Applying one file's rule to another is a defect.
 
-| | `knowledge/PROJECT.md` | `knowledge/DOMAIN.md` |
-|---|---|---|
-| Content | Verified toolchain commands, conventions, environmental facts about *this repository* | Domain rules, formulas, algorithms, business and regulatory invariants |
-| Owner | Engine (human-editable, no gate) | **Human only** — engine may read and propose, never write |
-| Conflicts with the codebase | **Codebase wins** — it is a cache of facts about the code, so the code corrects it | **This file wins** — the code is an attempt at the rule; a difference is a defect in the code |
-| Lifetime | Per repository, cumulative | Per repository, cumulative |
+| | `knowledge/PROJECT.md` | `knowledge/ISSUES.md` | `knowledge/DOMAIN.md` |
+|---|---|---|---|
+| Content | Verified toolchain commands, conventions, environmental facts about *this repository* | Known defects that are **still unfixed** | Domain rules, formulas, algorithms, business and regulatory invariants |
+| Owner | Engine (human-editable, no gate) | Engine (human-editable, no gate) | **Human only** — engine may read and propose, never write |
+| How to treat an entry | **Conform to it** | **Avoid it** — never copy the pattern it describes | **Implement it exactly** |
+| Conflicts with the codebase | **Codebase wins** — a cache of facts about the code, so the code corrects it | n/a — an entry *is* a disagreement with the code, held open on purpose | **This file wins** — the code is an attempt at the rule; a difference is a defect in the code |
+| Lifetime | Per repository, cumulative | Per repository; each entry deleted when resolved | Per repository, cumulative |
+
+The `PROJECT.md`/`ISSUES.md` split is not bookkeeping. A defect written into `PROJECT.md` is read by the next iteration as the local convention and reproduced deliberately — this has happened (ADR-008). "How it is" and "what is wrong with it" cannot share a file.
+
+Entries in `ISSUES.md` must be actionable on their own and cite the **commit SHA** holding the full record, never a path alone: the Cleanup Commit removes `.ai/`, so a path into it stops resolving the moment the run ends. Read the record back with `git show <sha>:<path>` — a baseline capability, because history the engine cannot read is not an archive.
 
 Neither file is a place for knowledge about a technology stack in general (platform API behaviour, framework idioms). That is not truth about *this* repository, nothing here can verify it, and it goes stale with no mechanism to correct it — see ADR-007.
 
@@ -130,6 +135,7 @@ Neither file is a place for knowledge about a technology stack in general (platf
 
 - Every discovery is classified in the iteration it was made. Deferring classification is itself a violation.
 - Operational discoveries (commands, environment quirks, conventions) update `knowledge/PROJECT.md` in the same checkpoint.
+- A defect you are **not** fixing — a finding filed rather than resolved, something outside this run's scope, something the human deferred — becomes a `knowledge/ISSUES.md` entry in the same checkpoint, and the entry is deleted once resolved. Recording it as a fact in `PROJECT.md` instead is the failure mode ADR-008 exists to prevent.
 - A conflict between the codebase and `knowledge/DOMAIN.md` is a **defect report**, never a cache correction. Fix the code inside the current task or file a task; if you believe the rule itself is wrong or incomplete, escalate and propose the change.
 - Ambiguity in the PRD/DoD is never resolved by guessing on behalf of the human: minor ambiguity → record the assumption in `STATE.md` (auditable, reversible); behavior-defining ambiguity → Escalation Request.
 - **Earn each line.** Record a lesson only when a real failure demonstrated it — a broken build, a failing test, a review finding, a denied command. A lesson merely inferred is noise, and noise in files read every iteration makes earned lines matter less. Remove a line once the model no longer needs it.

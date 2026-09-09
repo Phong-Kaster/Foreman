@@ -16,7 +16,7 @@
       "allow": ["Edit(**)", "Write(**)"]
     },
     {
-      "intent": "Inspect and locally persist git state (checkpoints on the Loop Branch); no push, no merge, no history rewriting",
+      "intent": "Inspect and locally persist git state (checkpoints on the Loop Branch), and read back content from earlier commits — the branch history is the only place a prior run's execution state survives the Cleanup Commit, and `git show <sha>:<path>` is the only way to read it (`git log -p` yields diffs, not file contents); no push, no merge, no history rewriting",
       "command": "git (local, non-destructive)",
       "scope": "consumer repository",
       "lifetime": "permanent",
@@ -24,6 +24,7 @@
         "Bash(git status*)",
         "Bash(git diff*)",
         "Bash(git log*)",
+        "Bash(git show*)",
         "Bash(git add*)",
         "Bash(git commit*)",
         "Bash(git branch*)",

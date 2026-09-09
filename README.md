@@ -279,11 +279,13 @@ your-repo/
 ├── PRD.md                    ← yours. what you want.
 ├── .ai/                      ← the robot's working notes for this run. Disposable —
 │                               removed from the branch tip when it finishes.
-└── knowledge/                ← survives every run. Two files, opposite rules:
+└── knowledge/                ← survives every run. Three files, three rules:
     ├── PROJECT.md            ← what it learned about your repo (build commands,
-    │                           quirks, conventions). Engine writes it; code wins.
+    │                           quirks, conventions). CONFORM to it; code wins.
+    ├── ISSUES.md             ← what it knows is still broken and didn't fix.
+    │                           AVOID it. Deleted per entry once fixed.
     └── DOMAIN.md             ← your domain rules and formulas. Optional. Only YOU
-                                write it, and it beats the code.
+                                write it. IMPLEMENT it; it beats the code.
 ```
 
 ---
