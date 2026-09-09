@@ -32,8 +32,6 @@
 # either. A script with parameters makes PowerShell bind `--append-system-prompt-file` as a named
 # parameter and fail; with no param block every argument arrives verbatim in $args.
 
-# Optional: record the exact argument vector run.ps1 passed, so a test can assert the
-# invocation contract (e.g. that the engine spec travels by file, not inline).
 # Record whether the launcher left us "expecting input". The real npm `claude` shim branches on
 # $MyInvocation.ExpectingInput and, when true, does `$input | & claude.exe` -- which blocks forever
 # if stdin is an inherited pipe that never closes. run.ps1 must therefore hand the engine a
@@ -47,6 +45,8 @@ if ($env:FAKE_CLAUDE_STDINLOG) {
     try { Add-Content -Path $env:FAKE_CLAUDE_STDINLOG -Value ("stdinItems=" + $items.Count) } catch {}
 }
 
+# Optional: record the exact argument vector run.ps1 passed, so a test can assert the
+# invocation contract (e.g. that the engine spec travels by file, not inline).
 if ($env:FAKE_CLAUDE_ARGLOG) {
     try { Add-Content -Path $env:FAKE_CLAUDE_ARGLOG -Value ($args -join ' ') } catch {}
 }
