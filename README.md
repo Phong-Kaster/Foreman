@@ -1,8 +1,8 @@
 # Loop Runtime
 
-A **portable autonomous execution engine** for Claude Code: install one skill, hand it a requirement — inline text or a document path — and a loop of fresh AI iterations plans, implements, builds, tests, reviews, and verifies the feature until it is provably done, stopping for you only at genuine decision points.
+**You say what you want. A robot builds it while you go do something else. You check the result at the end.**
 
-An application of Addy Osmani's **Loop Engineering** concept: the human stops being the person who prompts the agent step-by-step and becomes the system designer who owns intent.
+That is the whole idea. The rest of this page explains it slowly — small words first, precise words second.
 
 > Human owns intent. The loop owns execution.
 > The agent forgets. The repository doesn't.
@@ -10,182 +10,225 @@ An application of Addy Osmani's **Loop Engineering** concept: the human stops be
 
 ---
 
-## What it is
+## 1. What is it?
 
-Loop Runtime is two things working together:
+### Explain it like I'm five
 
-1. **A Claude Code skill** (`/loop-runtime`) — the easy on-ramp. Install it once per repository, then type `/loop-runtime <requirement>` to start or resume a run. The skill materializes the runtime, stages your requirement as `PRD.md`, launches the engine in the background, streams its activity live into your conversation, and turns every decision point into a normal question instead of a file you have to open and edit.
-2. **A stateless execution engine underneath** (`.loop/`) — the actual "loop": a thin, dumb PowerShell runtime (`run.ps1`) that repeatedly re-invokes Claude Code headlessly, reading one status word after each invocation (`CONTINUE` / `DONE` / `ESCALATE` / `FAILED`) and reacting mechanically. All the intelligence lives in `ENGINE.md`, the engine's system-prompt specification — never in the runtime itself.
+Imagine you hire a builder with one very strange problem: **every morning, they forget everything.**
 
-You don't need to think about these as separate things day-to-day — the skill exists specifically so you never have to touch `.loop/` directly.
+No memory of yesterday. None. Most people would say that builder is useless. This project makes them genuinely good, using three rules.
+
+**Rule 1 — Write everything down.**
+Before the builder is allowed to stop, they must write in a notebook that stays on the desk: what I did, what I learned, what's next. Next morning a brand-new builder reads the notebook and carries on. The notebook is the repository. That's why forgetting stops being a problem.
+
+**Rule 2 — *You* decide what "finished" means.**
+On day one the builder writes a checklist: *"when this is done, the app will do X, Y and Z — and here is how you can check each one."* **You read that checklist and approve it.** After that the builder may never change it. It's their exam, and nobody gets to rewrite their own exam.
+
+**Rule 3 — The builder is not allowed to say "I'm done."**
+When the work looks finished, a *different* builder — one who wrote none of it — walks in, re-tests every item on your checklist from scratch, and only *that* builder may say "done."
+
+And one more, about keys:
+
+**Rule 4 — Keys are borrowed, not owned.**
+The builder starts with keys to the safe stuff only (read files, save work locally). If they need a key to something riskier — deleting things, reaching the internet, running your build tools — they must **ask you**, and say why, for what, and for how long. Most keys expire on their own when the job ends. The builder can never cut themselves a new key.
+
+That's Loop Runtime. Rule 1 is why it can run for hours with nobody watching. Rule 2 is why it builds the *right* thing. Rule 3 is why "done" actually means done. Rule 4 is why you can walk away without worrying.
+
+### Now the grown-up version
+
+Loop Runtime is a **portable autonomous execution engine for Claude Code**. You hand it a requirement; it plans, implements, builds, tests, reviews and verifies until the feature is provably finished, stopping only at genuine decision points. It's two pieces:
+
+| Piece | What it is | Where |
+|---|---|---|
+| **The skill** (`/loop-runtime`) | Your on-ramp. Installs the runtime, saves your requirement as `PRD.md`, launches the engine in the background, streams its work into your chat, and turns every decision point into a normal question. | `skills/engineering/loop-runtime/` |
+| **The engine + runtime** | The actual loop. A deliberately dumb PowerShell script (`run.ps1`) that re-runs Claude Code over and over, reads back **one word** each time (`CONTINUE` / `DONE` / `ESCALATE` / `FAILED`), and reacts mechanically. All the thinking lives in `ENGINE.md`, a spec injected as the AI's system prompt — never in the script. | `.loop/` |
+
+Day to day you only touch the skill. It exists precisely so you never have to open `.loop/` yourself.
+
+**What you get at the end:** one local git branch (`loop/<your-feature>`) holding the code, the tests, and a final commit message listing every checklist item with the evidence that proves it. Nothing pushed. Nothing merged. That last step is always yours.
 
 ---
 
-## Install (once per repository)
+## 2. How to use it
+
+### Install once per repository
 
 ```
-npx skills@latest add Phong-Kaster/Loop-Runtime
+npx skills@latest add Phong-Kaster/Foreman
 ```
 
-This installs the `loop-runtime` skill into `.claude/skills/loop-runtime/` (and `.agents/skills/loop-runtime/`) in your current repo, and records it in that repo's `skills-lock.json` — the same mechanism you'd use for any other shared Claude Code skill package. Nothing else needs to be copied by hand.
+That drops the `loop-runtime` skill into `.claude/skills/loop-runtime/` (and `.agents/skills/loop-runtime/`) and records it in `skills-lock.json` — the same way you'd install any shared Claude Code skill. Nothing else to copy by hand.
 
-> Prefer not to use the skill installer? `.loop/` is also a plain, self-contained distributable — copy it into a repo's root and run `powershell .loop/run.ps1` directly from a terminal. See [docs/consumer-guide.md](./docs/consumer-guide.md) for that path. The skill is the recommended way in for anyone already working inside Claude Code.
+> **Don't want the installer?** `.loop/` is a self-contained folder. Copy it into any repo's root and run `powershell .loop/run.ps1` from a terminal. Full instructions: [docs/consumer-guide.md](./docs/consumer-guide.md).
 
----
-
-## How to use it
+### Then start a run
 
 ```
-/loop-runtime <inline requirement text>
-/loop-runtime <path to a requirement document>
+/loop-runtime <describe what you want, in plain text>
+/loop-runtime <path to a requirements document>
 /loop-runtime
 ```
 
-- **Inline text** — e.g. `/loop-runtime add a dark mode toggle to Settings that persists via DataStore` — gets written verbatim into `PRD.md` at your repo root. No rewriting, no summarizing.
-- **A document path** — e.g. `/loop-runtime C:\reqs\dark-mode.md` — gets staged as the PRD source instead.
-- **No argument** — resumes with whatever `PRD.md` already exists (first run in a repo with no `PRD.md` yet will ask you for one).
+- **Plain text** — `/loop-runtime add a dark mode toggle to Settings that persists via DataStore`. Your words are saved into `PRD.md` **exactly as you typed them**. Nothing rewritten, nothing summarized.
+- **A file path** — `/loop-runtime C:\reqs\dark-mode.md`. That document becomes the requirement instead.
+- **Nothing at all** — continues with whatever `PRD.md` is already there. (First run in a fresh repo? It'll ask you for one.)
 
-From there, the skill:
+### What happens next
 
-1. Syncs `.loop/` at your repo root from the installed skill files (so the runtime is always current with whatever version you last installed).
-2. Launches `.loop/run.ps1` in the background and attaches a live log stream to the conversation — you watch the engine work the same way you'd watch any other command's output, without it ever tying up your terminal or hitting a foreground timeout.
-3. Turns every `ESCALATE` into a real question, right in the chat — the engine's own proposed options become your choices. You never open `.ai/ESCALATION.md` yourself; the skill writes your decision into it and resumes automatically.
-4. Reports a **roll-up summary across every `loop/*` branch** in the repo when the run reaches `DONE` — not just the one that just finished — so you always see the full picture of what's mergeable, what's still in progress, and what's stuck waiting on a decision.
-5. Never merges, pushes, or touches your default branch. That step is always yours.
+1. **It looks around.** Reads your requirement, inspects the repo (language, build tool, conventions), creates a branch, and writes down what it worked out.
+2. **It asks you the one important question.** *"Here's my checklist of what 'done' means — approve it? And may I have permission to run your build and test commands?"* This is the **only** stop that always happens. Read the checklist properly. Five minutes here is the highest-value five minutes of the whole run — it's what stops the robot from confidently building the wrong thing for three hours.
+3. **It works, and you watch — or don't.** Every line the engine writes streams into your chat: which files it's touching, which commands it's running, whether tests passed. Go make coffee. It never ties up your terminal.
+4. **It interrupts you only for real reasons.** Anything above its pay grade — change the architecture? the requirement is ambiguous? needs a risky key? — arrives as a normal chat question, with the engine's own suggested options as your choices. You answer in chat; it records your answer and carries on. You never open a file to reply.
+5. **It proves it's finished.** A fresh run that wrote none of the code re-tests every checklist item, wipes its scratch notes off the branch tip, and reports `DONE`.
+6. **You get a summary of every branch** — not just this one. What's mergeable, what's still going, what's stuck waiting on you.
+7. **You merge.** Always you. The engine never pushes, never merges, never touches your default branch.
 
----
+### A real run (not a hypothetical)
 
-## Worked example
+`/loop-runtime write a hello world notification`, in an empty scratch repo:
 
-This is a real, verified run — not a hypothetical. `/loop-runtime write a hello world notification` in an empty scratch repo:
+- **It set up:** confirmed Node was installed, created the branch `loop/hello-world-notification`, wrote its plan and its checklist.
+- **It asked two questions.** First: *"approve this checklist — and by 'notification' did you mean printing to the console (my recommendation, no dependencies) or a real desktop pop-up (needs a new permission)? Also, may I run `node`?"* Answered in chat. Later: *"final checks passed. May I have a one-time permission to delete my scratch folder for the cleanup commit?"* Granted — and it expired the moment it was used.
+- **It built:** `src/notify.js`, `test/notify.test.js`, updated README. Build and tests green. A separate reviewer sub-agent — given only the diff, the task and the checklist, *never* the reasoning behind the code — raised two minor notes and nothing serious.
+- **Result:** one merge-ready branch, 6 commits, two questions asked, zero files opened by hand.
 
-**1. Bootstrap runs automatically** (no `.ai/` existed yet). The engine reads the PRD, inspects the repo (nothing there, no conventions to infer), confirms Node.js is on `PATH`, creates the branch `loop/hello-world-notification`, and generates `knowledge/PROJECT.md` plus the full `.ai/` scaffold (`DoD.md`, `PLAN.md`, three task files, `STATE.md`).
+### When *not* to use it
 
-**2. First stop — a real question, not a file:**
+The cost per cycle is roughly fixed; the benefit grows with the size of the job. So:
 
-> Approve the Definition of Done? Also: "notification" is ambiguous in the PRD — console-printed output (recommended, zero dependencies) or a real OS-level desktop toast (needs a new capability)? And approve a standing `Bash(node *)` capability for this repo's toolchain?
-
-Answered in chat: console output, approve the capability, approve the DoD as drafted. The skill writes all three into `.ai/ESCALATION.md`'s Decision section and relaunches — no file opened by hand.
-
-**3. The loop implements unattended:** `src/notify.js` (prints `"Hello, World!"`, exits 0), `test/notify.test.js` (asserts the greeting via `node:test`), `README.md` updated with run/test instructions. Build and tests both pass. A **fresh-context review sub-agent** — given only the diff, the task, the DoD, and the policies, never the implementation reasoning — flags two non-blocking Minor notes (stdout path not directly asserted; trivial string duplication between source and test) and nothing Critical. One atomic checkpoint commit, `CONTINUE`.
-
-**4. A fresh Verifier iteration** — which wrote none of the code — independently re-runs all five DoD criteria from scratch. All hold. It then hits a genuine capability boundary: removing `.ai/` (the required Cleanup Commit) is a destructive git operation it isn't authorized for. Rather than force it, it escalates:
-
-> Final verification passed. May I be granted a one-time, goal-scoped capability to run the Cleanup Commit, or would you rather do that one step manually?
-
-Answered: grant the scoped, one-time capability. It expires the moment `.ai/` is removed — no standing deletion capability left behind afterward.
-
-**5. `DONE`.** Roll-up summary:
-
-| Branch | Status | Contains | Merge-ready? |
-|---|---|---|---|
-| `loop/hello-world-notification` | DONE | `src/notify.js`, `test/notify.test.js`, updated `README.md`, `knowledge/` cache | Yes — clean tree, `.ai/` removed, 6 commits |
-
-Two Minor review notes carried into the summary so they aren't lost when `.ai/` disappears. Merging `loop/hello-world-notification` into your default branch is left for you to do by hand.
-
-Total: two escalations, both answered as ordinary conversation; zero files opened; one mergeable branch at the end.
-
----
-
-## Repository tree
-
-```
-Loop-Runtime/
-├── skills/engineering/loop-runtime/          ← THE SKILL — what `npx skills@latest add` installs
-│   ├── SKILL.md                              ← the skill's own instructions (bootstrap, supervise, escalate, roll-up)
-│   ├── ENGINE.md                              ← copy of the Execution Engine Specification
-│   ├── POLICIES.md                           ← copy of the engineering policy
-│   ├── capabilities/baseline.json            ← copy of the permanent low-risk capability ledger
-│   ├── templates/                            ← copy of the .ai/ + knowledge/ blueprints
-│   └── scripts/run.ps1                       ← copy of the runtime script
-│
-├── .loop/                                    ← THE STANDALONE DISTRIBUTABLE — for manual/non-skill installs
-│   ├── capabilities/baseline.json
-│   ├── templates/
-│   ├── ENGINE.md
-│   ├── POLICIES.md
-│   └── run.ps1
-│
-├── tests/                                    ← Pester unit tests for run.ps1's own mechanics
-│   ├── run.Tests.ps1                         ← status reactions, PRD staging, prerequisites, via a fake-claude stub
-│   └── fixtures/fake-claude.ps1              ← stands in for the real `claude` CLI — no API calls, no cost
-│
-├── docs/
-│   ├── adr/                                  ← decision records (semantic filenames — self-explanatory)
-│   ├── architecture.md                       ← the complete design: planes, lifecycles, loop, contracts
-│   └── consumer-guide.md                     ← manual-install operating manual (parameters, escalations, merge)
-│
-├── examples/                                 ← (empty until the first real consumer validates V1)
-├── CONTEXT.md                                ← the glossary — canonical vocabulary of the architecture
-└── README.md                                 ← this file
-```
-
-### What lands in a consumer repository
-
-```
-consumer-repo/
-├── .claude/skills/loop-runtime/   ← installed by the skill installer
-├── .agents/skills/loop-runtime/   ← installed by the skill installer (identical copy)
-├── .loop/                         ← synced from the skill on every /loop-runtime invocation
-├── PRD.md                         ← human-owned product intent (per feature)
-├── .ai/                           ← generated per run; machine-owned execution state; disposable
-└── knowledge/                     ← generated at first bootstrap; survives every run
-```
-
----
-
-## How it works underneath (60 seconds)
-
-1. **Bootstrap** (automatic — the first invocation finds no `.ai/`): the engine reads the PRD and the repository, generates `knowledge/` and `.ai/`, creates a dedicated `loop/<prd-slug>` branch, and stops with one question: *approve the Definition of Done*.
-2. **The one mandatory human gate:** review the DoD (the testable meaning of "done") and the proposed toolchain capabilities. Answered as conversation now, not a hand-edited file.
-3. **The loop runs unattended:** each iteration is a fresh process that recovers, orients from repository state, selects the highest-value task, implements, builds, tests, gets a **fresh-context review** from a clean-context subagent, reconciles everything it learned, and commits **one atomic checkpoint** (code + state together). Status `CONTINUE` → the runtime invokes it again.
-4. **It stops only for real reasons:** `ESCALATE` (a decision above its authority — architecture change, intent gap, capability request) or `FAILED` (execution environment broken).
-5. **Completion is earned, not claimed:** the iteration that finishes the last task may not declare victory. A *fresh* verifier iteration — which wrote none of the code — re-proves every DoD criterion, strips the execution state from the branch tip (Cleanup Commit, whose message is the completion summary), and only then reports `DONE`.
-6. **You merge.** The engine never touches your default branch, never pushes, never merges.
-
-Full operating manual for the manual-install path (parameters, watching the loop, escalations, merge): [docs/consumer-guide.md](./docs/consumer-guide.md).
-
----
-
-## Core design commitments
-
-- **Stateless iterations, dumb runtime.** Every iteration starts from repository state, so resumability is *tested continuously*, not trusted. The runtime has no judgment — its whole intelligence is a status reaction table plus two mechanical safety bounds (crash watchdog, iteration budget).
-- **Status contract.** Every engine invocation ends with exactly one of `CONTINUE / DONE / ESCALATE / FAILED`; producing no status *is* the crash signal.
-- **Tiered mutability.** Tier 1: the engine freely reshapes tasks (always logged). Tier 2: architecture/strategy changes hard-stop for approval. Tier 3: intent belongs to the human, forever.
-- **Capability-based permissions.** No permanent allowlists — grants carry intent, command, scope, and lifetime (goal-scoped by default, auto-expiring), enforced through the trust chain *Human → Ledger → Runtime Compiler → Settings → Engine*. A guardrail against accidents and drift — documented honestly as not being a boundary against an adversarial engine.
-- **Three minds.** The builder implements, a clean-context reviewer challenges (it never sees the builder's reasoning — that reasoning may contain the original mistake), and a fresh verifier confirms completion.
-- **Everything auditable.** Plan amendments logged with reasons; human decisions recorded with rationale; every checkpoint a commit; the branch history *is* the execution history.
-- **The skill never widens what the engine can do.** It stages input and supervises output; every capability grant — standing or goal-scoped — still flows through the same human-approved ledger the engine has always used.
-
-The complete vocabulary lives in [CONTEXT.md](./CONTEXT.md); the full design in [docs/architecture.md](./docs/architecture.md); the reasoning behind each hard-to-reverse choice in [docs/adr/](./docs/adr/).
-
----
-
-## When to use the loop — and when not to
-
-The loop's per-iteration overhead is roughly **constant** (fresh-process orientation ~1 min, a build per checkpoint, review passes, one extra verification iteration). Its value — unattended execution, no context rot, crash resume, audited decisions, completion you don't have to verify yourself — **scales with feature size**. So the economics invert with task size:
-
-| Task | Right tool |
+| Your task | Use |
 |---|---|
-| Small fix, one-file feature, anything you'd finish in one sitting | An interactive AI session — the loop's overhead dominates and it will feel slow |
-| A real feature PRD (hours-to-days of work you'd otherwise prompt-and-review step by step) | The loop — the overhead amortizes and the guarantees take over |
-| Anything you want to run unattended (overnight, while doing other work) | The loop — that's what it's for |
+| A small fix, one file, something you'd finish in one sitting | A normal chat session — the loop's overhead will just feel slow |
+| A real feature you'd otherwise babysit prompt-by-prompt for hours | **The loop** — the overhead disappears into the size of the job |
+| Anything you want running overnight, or while you do other work | **The loop** — that's exactly what it's for |
 
-Don't judge the loop by a hello-world; judge it by unattended correctness on work you didn't want to babysit.
+Don't judge it by a hello-world. Judge it by whether it got a real feature right while you weren't looking.
+
+---
+
+## 3. How this repo applies loop engineering
+
+**Loop engineering** (a concept from Addy Osmani) is a change in *your* job. Normally you sit beside the AI and poke it: "now do this… no, not like that… okay now run the tests." In loop engineering you stop being the poker. You write down what you want once, and you design the *loop* that drives the AI. You own **intent**; the loop owns **execution**.
+
+This repo builds that idea out of five moving parts. Small words first, real name second.
+
+### a) The forgetful builder with a notebook
+
+*Every cycle is a brand-new AI process with zero memory. It learns everything from files in the repo, and must write everything it learns back into them.*
+
+Here's the clever bit: because *every* cycle starts from scratch, the question "could this survive a crash and resume?" gets **tested every few minutes** instead of merely hoped for. If the notebook were missing something, cycle 2 breaks loudly and immediately — not months later at the worst possible moment.
+→ *stateless iterations* ([ADR-002](./docs/adr/ADR-002-stateless-iteration-dumb-runtime.md))
+
+### b) A timer that knows four words
+
+*The script running the loop is deliberately stupid. It doesn't understand code, plans, or progress. It runs the AI once, reads back one word, and reacts:*
+
+| Word | Meaning | What the script does |
+|---|---|---|
+| `CONTINUE` | progress saved, more to do | run it again |
+| `DONE` | verified finished | stop — success |
+| `ESCALATE` | I need a human decision | stop — ask you |
+| `FAILED` | something is genuinely broken | stop — ask you to repair it |
+| *(silence)* | the AI died mid-sentence | try again, up to 3 times, then stop |
+
+Why keep it stupid? Because a rule enforced by a script **is** a rule, while a rule living only inside a prompt is a *wish*. "Stop and ask before changing the architecture" is enforced here by the process genuinely exiting — not by the AI remembering to behave.
+→ *the dumb runtime and the status contract*
+
+### c) The exam you write, and they can't touch
+
+*Your requirement (`PRD.md`) is yours forever — the AI may propose changes but never make them. From it, the AI drafts a checklist of testable criteria, and you approve it. Then that's locked too.*
+
+Notice what you *don't* approve: the plan. How to get there is the machine's business. What "done" means is yours.
+→ *PRD + Definition of Done, and tiered mutability* ([ADR-001](./docs/adr/ADR-001-prd-and-dod-source-of-truth.md))
+
+### d) Three different minds
+
+*One AI builds it. A second AI checks it — and is shown only the diff, the task and the checklist, **never** the first one's reasoning. A third AI, which wrote nothing at all, decides whether the whole thing is finished.*
+
+Why hide the reasoning? Because the usual way self-review fails isn't sloppiness — it's a **shared wrong assumption**. The mind that made the mistake is the worst possible mind to catch it. So the checker never gets to read the story that contained the mistake.
+→ *fresh-context review + the DONE-candidate rule* ([ADR-005](./docs/adr/ADR-005-fresh-context-review-done-candidate.md))
+
+### e) A keyring where every key has a note on it
+
+*Every permission carries four things: why, which command, where, and for how long. Most expire by themselves when the job ends. You can always narrow a request — the AI can never widen one.*
+
+The chain only runs one way: **you → the keyring file → the script that compiles it → the AI.** The AI cannot edit the keyring, cannot edit the script, and cannot write its own permissions file. If it could, asking permission would be theater.
+
+Stated honestly: this is a guardrail against **accidents and drift**, not a wall against a genuinely hostile AI. Matching on command text will always be a little leaky. If you need real containment, run the whole thing in a VM.
+→ *capability-based permissions and the trust chain* ([ADR-004](./docs/adr/ADR-004-capability-permission-and-trust-chain.md))
+
+### And everything leaves a paper trail
+
+Each cycle is one git commit holding the code *and* the notes together, so the two can never disagree. Every plan change is logged with its reason. Every decision you make is stored with your rationale. `git log` on the branch **is** the story of how the feature got built.
+
+### Word swaps
+
+| I said | The docs say |
+|---|---|
+| what you want | PRD |
+| the checklist | Definition of Done (DoD) |
+| the notebook | `.ai/` (this run) and `knowledge/` (worth keeping forever) |
+| one cycle | an Iteration |
+| a save point | a Stable Checkpoint (one git commit) |
+| "I need to ask you something" | an Escalation Request → `ESCALATE` |
+| a key with a note on it | a Capability |
+| the stupid timer script | the Runtime (`run.ps1`) |
+| the AI doing the work | the Execution Engine (`ENGINE.md`) |
+
+Full glossary: [CONTEXT.md](./CONTEXT.md). Full design: [docs/architecture.md](./docs/architecture.md). The reasoning behind each hard-to-undo choice: [docs/adr/](./docs/adr/).
+
+---
+
+## What's in this repo
+
+```
+Foreman/
+├── skills/engineering/loop-runtime/   ← THE SKILL — what the installer installs
+│   ├── SKILL.md                        the skill's own instructions
+│   ├── ENGINE.md                       the AI's operating contract
+│   ├── POLICIES.md                     engineering policy (retries, reviews, evidence)
+│   ├── capabilities/baseline.json      the starter keyring — safe stuff only
+│   ├── templates/                      blueprints for .ai/ and knowledge/
+│   └── scripts/run.ps1                 the loop script
+│
+├── .loop/                             ← THE SAME THING, standalone — for manual installs
+├── tests/                             ← Pester tests for run.ps1, driven by a fake `claude`
+│                                        stub — no API calls, no cost
+├── docs/  ├── architecture.md          the complete design
+│          ├── consumer-guide.md        manual-install operating manual
+│          └── adr/                     why each big decision was made
+├── CONTEXT.md                          the glossary
+└── README.md                           this file
+```
+
+### What appears in *your* repo when you use it
+
+```
+your-repo/
+├── .claude/skills/loop-runtime/   ← the installed skill
+├── .loop/                         ← the runtime, refreshed on every /loop-runtime
+├── PRD.md                         ← yours. what you want.
+├── .ai/                           ← the robot's working notes for this run. Disposable —
+│                                    removed from the branch tip when it finishes.
+└── knowledge/                     ← what it learned about your repo (build commands,
+                                     quirks, conventions). Survives every run. Edit freely.
+```
+
+---
 
 ## Status
 
-**V1 validated against its first real consumer** (Android Jetpack Compose project, hello-world-notification PRD, 2026-07-08). Every contract fired correctly in a real run: bootstrap → DoD escalation gate → capability grants → checkpoint commits with build evidence → fresh-context review → the engine invoking the DONE-Candidate rule on itself (refusing to self-certify and deferring completion to a clean verifier iteration).
+**V1 works on real projects, validated twice:**
 
-**Skill packaging validated end-to-end** (scratch repo, hello-world-notification PRD, 2026-07-15): install → `/loop-runtime` → live background streaming → two real `ESCALATE`s handled as conversation (DoD/interpretation approval, then a capability grant) → `DONE` → roll-up summary, all without opening a single file by hand. One real bug found and fixed along the way: the skill's own frontmatter needed `disable-model-invocation: true`, otherwise a nested engine invocation running inside the same repo could see and auto-trigger the launcher skill on itself.
+- **A real consumer project** (Android Jetpack Compose, 2026-07-08, manual install). Every contract fired correctly — including the engine refusing to declare its own work finished and deferring to a clean verifier, unprompted.
+- **Skill packaging, end to end** (scratch repo, 2026-07-15). Install → run → live streaming → two real questions answered in chat → `DONE` → summary, without opening a single file by hand. Found and fixed one real bug on the way: the skill needed `disable-model-invocation: true`, or a nested engine run in the same repo could trigger the launcher on itself.
 
-Field findings driving the next iteration of the runtime:
+**Known rough edges, being worked on:**
 
-- **Compound Bash commands can get denied even when the base command is capability-approved** (e.g. `cd X && node ...`) — the engine self-corrected by retrying with simpler forms both times this was hit; worth tightening the capability-proposal format so this doesn't cost a retry.
-- **Plan granularity must scale with PRD size** — bootstrap split a 2-task feature into 5 tasks, multiplying the per-iteration overhead (policy tune, pending).
-- Observability must never kill execution — a log-tail file lock once crashed the whole loop; log writes are now shared-mode and fail-silent, and a run lock allows only one runtime per repository (fixed).
-- Iteration counters differ between engine (counts from STATE, includes bootstrap) and runtime (counts this session's invocations) — cosmetic, pending alignment.
-- Console shows mojibake for UTF-8 punctuation on default Windows code pages — cosmetic, pending `[Console]::OutputEncoding` fix.
-- Multi-engine portability (Codex, Gemini) is architecturally confined to one adapter surface in `run.ps1` — see [ADR-006](./docs/adr/ADR-006-engine-adapter-boundary.md).
+- Compound shell commands can be denied even when the base command is approved (e.g. `cd X && node …`). The engine worked around it both times it happened, but it costs a retry — the permission format needs tightening.
+- Plan granularity doesn't scale down for small requirements yet: a 2-task feature got split into 5, paying full overhead five times.
+- **Fixed:** a log file-lock once killed an entire run. Log writes are now shared-mode and fail-silent, and only one loop may run per repository. Observability must never be able to kill execution.
+- Cosmetic: the engine's and the script's cycle counters disagree; UTF-8 punctuation shows as mojibake on default Windows code pages.
+- Portability to other AI CLIs (Codex, Gemini) is confined to a single adapter surface inside `run.ps1` — see [ADR-006](./docs/adr/ADR-006-engine-adapter-boundary.md).
 
-The repository stays intentionally small: additional structure earns its way in through real usage, not anticipated complexity. Deferred items and their revisit-triggers: [docs/architecture.md §12](./docs/architecture.md).
+This repo stays deliberately small. New structure has to earn its place through real use, not anticipated complexity. Everything deliberately postponed — and what would make us revisit it — is listed in [docs/architecture.md §12](./docs/architecture.md).
