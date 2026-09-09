@@ -16,6 +16,6 @@ The engine **requests** (structured proposals via Escalation Request), the human
 ## Consequences
 
 - V1: the human physically writes approved entries into the ledger (the approval boundary made visible). V2: a structured approval flow where the Runtime transcribes the exact approved block verbatim — authority placement unchanged.
-- The `/loop-runtime` Skill is one instance of this V2-style transcription: the human still decides (now via conversation instead of a hand-edited file), and the Skill writes the exact approved entry into the named ledger — standing or goal-scoped, whichever the decision specified — verbatim, never expanding or editorializing it. The boundary the human crosses is identical; only its presentation changed.
+- The `/foreman` Skill is one instance of this V2-style transcription: the human still decides (now via conversation instead of a hand-edited file), and the Skill writes the exact approved entry into the named ledger — standing or goal-scoped, whichever the decision specified — verbatim, never expanding or editorializing it. The boundary the human crosses is identical; only its presentation changed.
 - The ledger stores the exact permission rule strings the human approved; the Runtime concatenates, never translates — it cannot interpret or expand intent.
 - **Documented limitation:** this is a guardrail against accidents and drift, not a security boundary against an adversarial engine. Hard containment is the VM path.

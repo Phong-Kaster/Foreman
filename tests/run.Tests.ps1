@@ -23,7 +23,7 @@ $FakeClaude = Join-Path $PSScriptRoot "fixtures\fake-claude.ps1"
 
 function New-TestRepo {
     param([switch]$WithoutEngineSpec)
-    $dir = Join-Path ([System.IO.Path]::GetTempPath()) ("loop-runtime-unit-" + [System.Guid]::NewGuid().ToString("N").Substring(0, 12))
+    $dir = Join-Path ([System.IO.Path]::GetTempPath()) ("foreman-unit-" + [System.Guid]::NewGuid().ToString("N").Substring(0, 12))
     New-Item -ItemType Directory -Path $dir -Force | Out-Null
     if (-not $WithoutEngineSpec) {
         New-Item -ItemType Directory -Path (Join-Path $dir ".loop") -Force | Out-Null

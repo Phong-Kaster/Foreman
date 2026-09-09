@@ -1,6 +1,6 @@
-# Loop Runtime — Architecture
+# Foreman — Architecture
 
-This document is the complete design of the Loop Runtime. Terms in **bold capitals** are defined in [CONTEXT.md](../CONTEXT.md); decisions with real trade-offs are recorded in [docs/adr/](./adr/).
+This document is the complete design of Foreman. Terms in **bold capitals** are defined in [CONTEXT.md](../CONTEXT.md); decisions with real trade-offs are recorded in [docs/adr/](./adr/).
 
 ---
 
@@ -8,11 +8,11 @@ This document is the complete design of the Loop Runtime. Terms in **bold capita
 
 An application of Addy Osmani's **Loop Engineering** idea: instead of a human prompting an AI step by step, the human provides intent once (a PRD), and a self-orchestrating loop drives the AI through *read state → pick task → implement → build → test → review → reconcile → persist → repeat* until a verifiable goal is met.
 
-The Loop Runtime packages that idea as a **portable artifact**: one `.loop/` directory that can be copied into any repository — Android, Spring, React, Python, anything — and immediately becomes that repository's autonomous execution engine.
+Foreman packages that idea as a **portable artifact**: one `.loop/` directory that can be copied into any repository — Android, Spring, React, Python, anything — and immediately becomes that repository's autonomous execution engine.
 
 Two surfaces install and operate that artifact. Both drive the exact same engine and contracts described in this document — neither changes the architecture, only how a human reaches it:
 
-- **The Skill** (recommended) — `npx skills@latest add <owner>/Loop-Runtime`, then `/loop-runtime <requirement>`. Carries its own copy of `.loop/`'s contents, materializes them at the consumer repo root, stages the requirement as `PRD.md`, launches and supervises `run.ps1` live in the conversation, mediates Escalation Requests as ordinary questions instead of file edits, and produces a Roll-up Summary across every Loop Branch at completion.
+- **The Skill** (recommended) — `npx skills@latest add <owner>/Foreman`, then `/foreman <requirement>`. Carries its own copy of `.loop/`'s contents, materializes them at the consumer repo root, stages the requirement as `PRD.md`, launches and supervises `run.ps1` live in the conversation, mediates Escalation Requests as ordinary questions instead of file edits, and produces a Roll-up Summary across every Loop Branch at completion.
 - **Manual** — copy `.loop/` into the repository root by hand, write `PRD.md` yourself, run `powershell .loop/run.ps1` from a terminal.
 
 The Skill is additive: it stages input and supervises/summarizes output, but exercises no authority the Trust Chain (§9) didn't already grant through a human-approved Capability. Everything from §2 onward describes the engine and runtime both surfaces drive identically.
@@ -45,7 +45,7 @@ A consumer repository contains four loop artifacts. There are four **because the
 
 | Artifact | Lifecycle | Owner | Content |
 |---|---|---|---|
-| `.loop/` | Install-time; replaced only by runtime upgrades | Loop-Runtime product | Engine spec, policies, runtime script, templates, baseline capabilities |
+| `.loop/` | Install-time; replaced only by runtime upgrades | Foreman product | Engine spec, policies, runtime script, templates, baseline capabilities |
 | `PRD.md` | Per feature; written before a run | Human | Product intent: objective, requirements, constraints |
 | `.ai/` | Per feature run; disposable | Engine (plus one human-owned file: `DoD.md`) | Plan, tasks, state, amendments, escalations, goal-scoped capabilities |
 | `knowledge/` | Per repository; cumulative across runs | Engine-maintained, human-editable | Verified toolchain commands, conventions, environmental facts, standing capabilities |
@@ -229,6 +229,6 @@ Deliberately deferred until real usage demands them, with the trigger for each:
 | Non-git checkpoint persistence | Git assumed | A real non-git consumer appears |
 | Separate `GOAL.md` for very large PRDs | PRD + DoD suffice | PRDs too large to serve as working intent reference |
 | Capability rules that tolerate compound shell commands | Exact-prefix match on the literal command string (e.g. `Bash(node *)`) | Recurs often enough in practice that proposals need a broader/looser matching form |
-| Skill distribution beyond `npx skills@latest` (e.g. a Claude Code Plugin) | Skill only, invoked bare (`/loop-runtime`) | A consumer needs marketplace install/versioning and accepts the resulting `plugin:command` namespacing |
+| Skill distribution beyond `npx skills@latest` (e.g. a Claude Code Plugin) | Skill only, invoked bare (`/foreman`) | A consumer needs marketplace install/versioning and accepts the resulting `plugin:command` namespacing |
 
 Validated so far: a real consumer project (Android-Compose-Skeleton, manual `.loop/` path) and, separately, the Skill-based install/operate/escalate/roll-up flow end-to-end in a scratch repository — not toy examples in either case.

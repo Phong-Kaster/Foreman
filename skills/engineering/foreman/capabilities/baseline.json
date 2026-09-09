@@ -1,5 +1,5 @@
 {
-  "description": "Baseline Capability Ledger — permanent, low-risk capabilities that ship with the Loop Runtime. Identical in every consumer repository. Higher-risk capabilities live in knowledge/capabilities.json (standing, per-repo) or .ai/capabilities.json (goal-scoped).",
+  "description": "Baseline Capability Ledger — permanent, low-risk capabilities that ship with Foreman. Identical in every consumer repository. Higher-risk capabilities live in knowledge/capabilities.json (standing, per-repo) or .ai/capabilities.json (goal-scoped).",
   "entries": [
     {
       "intent": "Read repository files and search the codebase",

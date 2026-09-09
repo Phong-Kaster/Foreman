@@ -1,4 +1,4 @@
-# Loop Runtime
+# Foreman
 
 **You say what you want. A robot builds it while you go do something else. You check the result at the end.**
 
@@ -32,15 +32,15 @@ And one more, about keys:
 **Rule 4 — Keys are borrowed, not owned.**
 The builder starts with keys to the safe stuff only (read files, save work locally). If they need a key to something riskier — deleting things, reaching the internet, running your build tools — they must **ask you**, and say why, for what, and for how long. Most keys expire on their own when the job ends. The builder can never cut themselves a new key.
 
-That's Loop Runtime. Rule 1 is why it can run for hours with nobody watching. Rule 2 is why it builds the *right* thing. Rule 3 is why "done" actually means done. Rule 4 is why you can walk away without worrying.
+That's Foreman. Rule 1 is why it can run for hours with nobody watching. Rule 2 is why it builds the *right* thing. Rule 3 is why "done" actually means done. Rule 4 is why you can walk away without worrying.
 
 ### Now the grown-up version
 
-Loop Runtime is a **portable autonomous execution engine for Claude Code**. You hand it a requirement; it plans, implements, builds, tests, reviews and verifies until the feature is provably finished, stopping only at genuine decision points. It's two pieces:
+Foreman is a **portable autonomous execution engine for Claude Code**. You hand it a requirement; it plans, implements, builds, tests, reviews and verifies until the feature is provably finished, stopping only at genuine decision points. It's two pieces:
 
 | Piece | What it is | Where |
 |---|---|---|
-| **The skill** (`/loop-runtime`) | Your on-ramp. Installs the runtime, saves your requirement as `PRD.md`, launches the engine in the background, streams its work into your chat, and turns every decision point into a normal question. | `skills/engineering/loop-runtime/` |
+| **The skill** (`/foreman`) | Your on-ramp. Installs the runtime, saves your requirement as `PRD.md`, launches the engine in the background, streams its work into your chat, and turns every decision point into a normal question. | `skills/engineering/foreman/` |
 | **The engine + runtime** | The actual loop. A deliberately dumb PowerShell script (`run.ps1`) that re-runs Claude Code over and over, reads back **one word** each time (`CONTINUE` / `DONE` / `ESCALATE` / `FAILED`), and reacts mechanically. All the thinking lives in `ENGINE.md`, a spec injected as the AI's system prompt — never in the script. | `.loop/` |
 
 Day to day you only touch the skill. It exists precisely so you never have to open `.loop/` yourself.
@@ -57,20 +57,20 @@ Day to day you only touch the skill. It exists precisely so you never have to op
 npx skills@latest add Phong-Kaster/Foreman
 ```
 
-That drops the `loop-runtime` skill into `.claude/skills/loop-runtime/` (and `.agents/skills/loop-runtime/`) and records it in `skills-lock.json` — the same way you'd install any shared Claude Code skill. Nothing else to copy by hand.
+That drops the `foreman` skill into `.claude/skills/foreman/` (and `.agents/skills/foreman/`) and records it in `skills-lock.json` — the same way you'd install any shared Claude Code skill. Nothing else to copy by hand.
 
 > **Don't want the installer?** `.loop/` is a self-contained folder. Copy it into any repo's root and run `powershell .loop/run.ps1` from a terminal. Full instructions: [docs/consumer-guide.md](./docs/consumer-guide.md).
 
 ### Then start a run
 
 ```
-/loop-runtime <describe what you want, in plain text>
-/loop-runtime <path to a requirements document>
-/loop-runtime
+/foreman <describe what you want, in plain text>
+/foreman <path to a requirements document>
+/foreman
 ```
 
-- **Plain text** — `/loop-runtime add a dark mode toggle to Settings that persists via DataStore`. Your words are saved into `PRD.md` **exactly as you typed them**. Nothing rewritten, nothing summarized.
-- **A file path** — `/loop-runtime C:\reqs\dark-mode.md`. That document becomes the requirement instead.
+- **Plain text** — `/foreman add a dark mode toggle to Settings that persists via DataStore`. Your words are saved into `PRD.md` **exactly as you typed them**. Nothing rewritten, nothing summarized.
+- **A file path** — `/foreman C:\reqs\dark-mode.md`. That document becomes the requirement instead.
 - **Nothing at all** — continues with whatever `PRD.md` is already there. (First run in a fresh repo? It'll ask you for one.)
 
 ### What happens next
@@ -85,7 +85,7 @@ That drops the `loop-runtime` skill into `.claude/skills/loop-runtime/` (and `.a
 
 ### A real run (not a hypothetical)
 
-`/loop-runtime write a hello world notification`, in an empty scratch repo:
+`/foreman write a hello world notification`, in an empty scratch repo:
 
 - **It set up:** confirmed Node was installed, created the branch `loop/hello-world-notification`, wrote its plan and its checklist.
 - **It asked two questions.** First: *"approve this checklist — and by 'notification' did you mean printing to the console (my recommendation, no dependencies) or a real desktop pop-up (needs a new permission)? Also, may I run `node`?"* Answered in chat. Later: *"final checks passed. May I have a one-time permission to delete my scratch folder for the cleanup commit?"* Granted — and it expired the moment it was used.
@@ -183,35 +183,35 @@ Full glossary: [CONTEXT.md](./CONTEXT.md). Full design: [docs/architecture.md](.
 
 ```
 Foreman/
-├── skills/engineering/loop-runtime/   ← THE SKILL — what the installer installs
-│   ├── SKILL.md                        the skill's own instructions
-│   ├── ENGINE.md                       the AI's operating contract
-│   ├── POLICIES.md                     engineering policy (retries, reviews, evidence)
-│   ├── capabilities/baseline.json      the starter keyring — safe stuff only
-│   ├── templates/                      blueprints for .ai/ and knowledge/
-│   └── scripts/run.ps1                 the loop script
+├── skills/engineering/foreman/       ← THE SKILL — what the installer installs
+│   ├── SKILL.md                      the skill's own instructions
+│   ├── ENGINE.md                     the AI's operating contract
+│   ├── POLICIES.md                   engineering policy (retries, reviews, evidence)
+│   ├── capabilities/baseline.json    the starter keyring — safe stuff only
+│   ├── templates/                    blueprints for .ai/ and knowledge/
+│   └── scripts/run.ps1               the loop script
 │
-├── .loop/                             ← THE SAME THING, standalone — for manual installs
-├── tests/                             ← Pester tests for run.ps1, driven by a fake `claude`
-│                                        stub — no API calls, no cost
-├── docs/  ├── architecture.md          the complete design
-│          ├── consumer-guide.md        manual-install operating manual
-│          └── adr/                     why each big decision was made
-├── CONTEXT.md                          the glossary
-└── README.md                           this file
+├── .loop/                            ← THE SAME THING, standalone — for manual installs
+├── tests/                            ← Pester tests for run.ps1, driven by a fake `claude` stub
+├── docs/
+│   ├── architecture.md               the complete design
+│   ├── consumer-guide.md             manual-install operating manual
+│   └── adr/                          why each big decision was made
+├── CONTEXT.md                        the glossary
+└── README.md                         this file
 ```
 
 ### What appears in *your* repo when you use it
 
 ```
 your-repo/
-├── .claude/skills/loop-runtime/   ← the installed skill
-├── .loop/                         ← the runtime, refreshed on every /loop-runtime
-├── PRD.md                         ← yours. what you want.
-├── .ai/                           ← the robot's working notes for this run. Disposable —
-│                                    removed from the branch tip when it finishes.
-└── knowledge/                     ← what it learned about your repo (build commands,
-                                     quirks, conventions). Survives every run. Edit freely.
+├── .claude/skills/foreman/   ← the installed skill
+├── .loop/                    ← the runtime, refreshed on every /foreman
+├── PRD.md                    ← yours. what you want.
+├── .ai/                      ← the robot's working notes for this run. Disposable —
+│                               removed from the branch tip when it finishes.
+└── knowledge/                ← what it learned about your repo (build commands,
+                                quirks, conventions). Survives every run. Edit freely.
 ```
 
 ---

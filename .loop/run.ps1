@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Loop Runtime V1 — the thin, intentionally dumb outer loop.
+    Foreman V1 — the thin, intentionally dumb outer loop.
 
 .DESCRIPTION
     The Runtime is the enforcement plane of the AI Software Factory.
@@ -63,7 +63,7 @@ if ($PrdPath -ne "") {
 # The fixed, judgment-free user prompt. All intelligence lives in ENGINE.md and the repository.
 $IterationPrompt = "Execute exactly one Iteration according to your Execution Engine Specification, then stop."
 
-# Run lock: at most ONE Loop Runtime per repository. Two concurrent engines committing to the
+# Run lock: at most ONE Foreman run per repository. Two concurrent engines committing to the
 # same branch would corrupt the run — refuse to start if a live instance holds the lock.
 $LockFile = Join-Path $env:TEMP ("loop-run-" + (Split-Path $RepoRoot -Leaf) + ".lock")
 if (Test-Path $LockFile) {
@@ -71,7 +71,7 @@ if (Test-Path $LockFile) {
     $alive = $false
     if ($oldPid -match '^\d+$') { $alive = ($null -ne (Get-Process -Id ([int]$oldPid) -ErrorAction SilentlyContinue)) }
     if ($alive) {
-        Write-Host "Another Loop Runtime (PID $oldPid) is already running against this repository. Only one loop may run at a time." -ForegroundColor Red
+        Write-Host "Another Foreman run (PID $oldPid) is already running against this repository. Only one loop may run at a time." -ForegroundColor Red
         exit 1
     }
     # Stale lock from a dead process — take over.
@@ -101,7 +101,7 @@ function Write-RunLog([string]$line) {
 function Write-RawLog([string]$line) {
     if ($null -ne $script:RawWriter) { try { $script:RawWriter.WriteLine($line) } catch {} }
 }
-Write-Host "Loop Runtime starting. PID: $PID" -ForegroundColor Cyan
+Write-Host "Foreman starting. PID: $PID" -ForegroundColor Cyan
 Write-Host "Activity log: $RunLog"
 Write-Host "Watch live from another terminal:  Get-Content `"$RunLog`" -Wait -Tail 20"
 Write-Host "Raw engine events (debugging): $RawLog"
