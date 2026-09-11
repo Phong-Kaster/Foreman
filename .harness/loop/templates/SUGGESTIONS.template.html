@@ -1,0 +1,209 @@
+<title>Hòm thư góp ý</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+  :root{
+    --paper:#E7E8E4; --surface:#F4F5F2; --surface-2:#DDDFDA;
+    --ink:#191D1E; --ink-2:#3D4547; --muted:#667072;
+    --rule:#C6CAC4; --rule-soft:#D6D9D3;
+    --accent:#0F5C63; --accent-ink:#0B4750;
+    --core:#35618E; --pack:#6B4E9C; --local:#667072; --new:#9C6206;
+    --f-display:"Archivo","Helvetica Neue",Arial,sans-serif;
+    --f-body:"Source Serif 4",Georgia,"Times New Roman",serif;
+    --f-mono:"JetBrains Mono",ui-monospace,"SF Mono",Consolas,monospace;
+  }
+  @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+    --paper:#14181A; --surface:#1B2023; --surface-2:#232A2D;
+    --ink:#E8EBE9; --ink-2:#BAC3C2; --muted:#8A9694;
+    --rule:#2E373A; --rule-soft:#262E31;
+    --accent:#4FBDC7; --accent-ink:#7FD5DC;
+    --core:#74A8DB; --pack:#B394E0; --local:#8A9694; --new:#DFA53F;
+  }}
+  :root[data-theme="dark"]{
+    --paper:#14181A; --surface:#1B2023; --surface-2:#232A2D;
+    --ink:#E8EBE9; --ink-2:#BAC3C2; --muted:#8A9694;
+    --rule:#2E373A; --rule-soft:#262E31;
+    --accent:#4FBDC7; --accent-ink:#7FD5DC;
+    --core:#74A8DB; --pack:#B394E0; --local:#8A9694; --new:#DFA53F;
+  }
+  [data-lang="en"]{display:none}
+  :root[data-ui-lang="en"] [data-lang="en"]{display:revert}
+  :root[data-ui-lang="en"] [data-lang="vi"]{display:none}
+
+  *{box-sizing:border-box}
+  body{background:var(--paper);color:var(--ink);font-family:var(--f-body);font-size:17px;line-height:1.72;-webkit-font-smoothing:antialiased}
+  .topbar{position:sticky;top:0;z-index:50;background:var(--paper);border-bottom:1px solid var(--rule)}
+  .topbar-inner{max-width:900px;margin:0 auto;padding:9px 28px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+  .topbar .who{font-family:var(--f-mono);font-size:11px;letter-spacing:.11em;text-transform:uppercase;color:var(--muted)}
+  select{font-family:var(--f-mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;padding:4px 26px 4px 9px;color:var(--ink);background-color:var(--surface);border:1px solid var(--rule);border-radius:2px;-webkit-appearance:none;appearance:none;
+    background-image:linear-gradient(45deg,transparent 50%,currentColor 50%),linear-gradient(135deg,currentColor 50%,transparent 50%);
+    background-position:calc(100% - 14px) 52%,calc(100% - 9px) 52%;background-size:5px 5px,5px 5px;background-repeat:no-repeat;cursor:pointer}
+  select option{background:var(--surface);color:var(--ink)}
+  .wrap{max-width:900px;margin:0 auto;padding:0 28px 90px}
+  header.mast{border-bottom:2px solid var(--ink);padding:34px 0 18px;margin-bottom:28px}
+  .eyebrow{font-family:var(--f-mono);font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:var(--accent-ink);margin:0 0 12px}
+  h1{font-family:var(--f-display);font-weight:700;font-size:clamp(2rem,5vw,2.9rem);line-height:1.12;letter-spacing:-.02em;margin:0 0 13px;text-wrap:balance}
+  .standfirst{font-size:1.1rem;color:var(--ink-2);margin:0;max-width:60ch}
+  .banner{border:1px solid var(--new);border-left:3px solid var(--new);background:var(--surface);padding:14px 18px;margin:26px 0 34px;font-size:.98rem}
+  .banner strong{color:var(--new)}
+  .banner p{margin:0 0 8px} .banner p:last-child{margin:0}
+  h2{font-family:var(--f-display);font-weight:700;font-size:1.55rem;line-height:1.3;letter-spacing:-.012em;margin:52px 0 6px;text-wrap:balance}
+  h2+.note{margin:0 0 24px;color:var(--muted);font-size:.95rem;max-width:62ch}
+  h3{font-family:var(--f-display);font-weight:600;font-size:1.08rem;line-height:1.42;margin:0 0 8px}
+  p{margin:0 0 14px}
+  code,.mono{font-family:var(--f-mono);font-size:.85em;background:var(--surface-2);padding:.08em .34em;border-radius:2px}
+  .kid{border-left:3px solid var(--accent);background:var(--surface);padding:13px 18px;margin:14px 0 0;font-size:.97rem}
+  .kid .lbl{font-family:var(--f-mono);font-size:10px;letter-spacing:.11em;text-transform:uppercase;color:var(--accent-ink);display:block;margin-bottom:5px}
+  .kid p{margin:0 0 9px} .kid p:last-child{margin:0}
+  .card{border-top:1px solid var(--rule-soft);padding:22px 0 24px}
+  .card:first-of-type{border-top:1px solid var(--rule)}
+  .tagrow{display:flex;flex-wrap:wrap;gap:7px;margin:0 0 10px;align-items:center}
+  .tag{font-family:var(--f-mono);font-size:10px;letter-spacing:.07em;text-transform:uppercase;padding:3px 8px;border:1px solid var(--rule);color:var(--muted);border-radius:2px}
+  .tag.core{color:var(--core);border-color:var(--core)}
+  .tag.pack{color:var(--pack);border-color:var(--pack)}
+  .tag.local{color:var(--local);border-color:var(--local)}
+  .id{font-family:var(--f-mono);font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
+  .ev{font-family:var(--f-mono);font-size:12.2px;line-height:1.6;background:var(--surface);border:1px solid var(--rule-soft);border-left:2px solid var(--rule);padding:10px 14px;margin:12px 0;overflow-x:auto;white-space:pre;color:var(--ink-2)}
+  .ask{margin:13px 0 0;padding-left:15px;border-left:2px solid var(--accent)}
+  .ask .lbl{font-family:var(--f-mono);font-size:10px;letter-spacing:.11em;text-transform:uppercase;color:var(--accent-ink);display:block;margin-bottom:3px}
+  .ask p{margin:0;font-size:.95rem}
+  table{width:100%;border-collapse:collapse;font-size:.94rem}
+  th,td{text-align:left;padding:9px 12px 9px 0;border-bottom:1px solid var(--rule-soft);vertical-align:top}
+  th{font-family:var(--f-mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--rule);font-weight:400}
+  .scroll{overflow-x:auto}
+  footer{margin-top:56px;padding-top:17px;border-top:2px solid var(--ink);font-family:var(--f-mono);font-size:11.5px;color:var(--muted);line-height:1.8}
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+
+<div class="topbar"><div class="topbar-inner">
+  <span class="who" data-lang="vi">Calendar-Note · hòm thư góp ý</span>
+  <span class="who" data-lang="en">Calendar-Note · suggestion box</span>
+  <select id="lang" aria-label="Ngôn ngữ / Language">
+    <option value="vi">Tiếng Việt</option>
+    <option value="en">English</option>
+  </select>
+</div></div>
+
+<div class="wrap">
+
+<header class="mast">
+  <p class="eyebrow" data-lang="vi">Cập nhật 11-09-2026 · nhánh loop/calendar-note-app</p>
+  <p class="eyebrow" data-lang="en">Updated 2026-09-11 · branch loop/calendar-note-app</p>
+  <h1 data-lang="vi">Hòm thư góp ý</h1>
+  <h1 data-lang="en">Suggestion Box</h1>
+  <p class="standfirst" data-lang="vi">Những bài học mà engine học được ở ngôi nhà này, nhưng đúng với <em>mọi</em> ngôi nhà — nên lẽ ra không nên nằm lại đây.</p>
+  <p class="standfirst" data-lang="en">Lessons the engine learned in this house that are true of <em>every</em> house — so they should not be staying here.</p>
+</header>
+
+<div class="banner">
+  <p data-lang="vi"><strong>Chưa có gì được sửa.</strong> Đây là bản đề nghị để bạn đọc, không phải việc đã làm. Không một dòng code hay doctrine nào thay đổi theo các mục dưới đây cho tới khi bạn đồng ý từng mục một.</p>
+  <p data-lang="en"><strong>Nothing has been changed.</strong> This is a proposal for you to read, not work already done. No line of code or doctrine has moved because of anything below, and none will until you approve each item.</p>
+  <p data-lang="vi">Engine <em>không được phép</em> tự ghi vào sổ luật của chính nó. Nó chỉ được bỏ giấy vào hộp này. Chìa khoá vẫn trong tay bạn.</p>
+  <p data-lang="en">The engine <em>may not</em> write into its own rulebook. It may only drop a note in this box. The key stays with you.</p>
+</div>
+
+<h2 data-lang="vi">Vấn đề, giải thích cho một đứa trẻ 5 tuổi</h2>
+<h2 data-lang="en">The problem, explained to a five-year-old</h2>
+<div class="kid">
+  <span class="lbl" data-lang="vi">Kể như một câu chuyện</span>
+  <span class="lbl" data-lang="en">Told as a story</span>
+  <div data-lang="vi">
+    <p>Bạn thuê một con robot xây nhà. Nó có một tật lạ: <strong>mỗi sáng nó quên sạch mọi thứ.</strong> Nên nó phải ghi chép.</p>
+    <p>Nó có hai loại sổ. <strong>Sổ "ngôi nhà này"</strong> — <em>"nhà này dùng búa loại B, cầu thang bên trái bị lún, đừng dẫm."</em> Sổ đó để ở trong nhà, đúng chỗ. Và <strong>sổ "cách làm thợ"</strong> — <em>"đo hai lần rồi hẵng cưa."</em> Điều này đúng ở <strong>mọi</strong> ngôi nhà. Nó thuộc về nghề, không thuộc về nhà nào.</p>
+    <p>Nhưng robot chỉ được viết vào sổ thứ nhất. Sổ thứ hai bị khoá — và khoá là <strong>đúng</strong>, vì sổ đó cũng ghi <em>"robot được phép làm gì"</em>. Nếu robot tự viết được vào đó, nó có thể tự cho mình quyền đập cả ngôi nhà.</p>
+    <p>Thành ra: robot học được một bài của <strong>nghề</strong>, nhưng chỗ duy nhất nó ghi được là sổ của <strong>một ngôi nhà</strong>. Rồi bài học nằm luôn ở đó. Ngôi nhà sau lại vấp đúng cái hố cũ.</p>
+    <p><strong>Cái hộp này là hộp thư góp ý.</strong> Robot không viết được vào sổ luật, nhưng nó bỏ được mẩu giấy vào hộp: <em>"cháu nghĩ điều này nên vào sổ 'cách làm thợ', vì hôm nay cháu suýt làm sai vì nó."</em> Bạn mở hộp, đọc, thấy đúng thì chép sang. Thấy sai thì vứt.</p>
+  </div>
+  <div data-lang="en">
+    <p>You hire a robot to build houses. It has one strange problem: <strong>every morning it forgets everything.</strong> So it takes notes.</p>
+    <p>It keeps two notebooks. <strong>"This house"</strong> — <em>"this house uses the type-B hammer; the left stair sags, don't step on it."</em> That belongs in the house. And <strong>"how to be a builder"</strong> — <em>"measure twice, cut once."</em> That is true in <strong>every</strong> house. It belongs to the trade, not to any one house.</p>
+    <p>But the robot may only write in the first notebook. The second is locked — and locking it is <strong>right</strong>, because that notebook also records <em>what the robot is allowed to do</em>. A robot that could write there could grant itself permission to knock the house down.</p>
+    <p>So: the robot learns something about <strong>the trade</strong>, and the only place it can write it down is one <strong>house's</strong> notebook. The lesson stays there. The next house falls into the same hole.</p>
+    <p><strong>This box is a suggestion box.</strong> The robot cannot write in the rulebook, but it can drop a note in the box: <em>"I think this belongs in 'how to be a builder' — here is the day it nearly caught me."</em> You open the box, read, and copy across what you agree with. The rest you throw away.</p>
+  </div>
+</div>
+
+<h2 data-lang="vi">Vì sao có cái hộp này</h2>
+<h2 data-lang="en">Why this box exists</h2>
+<p class="note" data-lang="vi">Phiên bản dành cho người lớn, ngắn.</p>
+<p class="note" data-lang="en">The grown-up version, briefly.</p>
+<p data-lang="vi">Tri thức trong Foreman chia ba tầng (ADR-019). Tầng <strong>loop</strong> — <code>.harness/loop/</code> — là doctrine, đi theo sản phẩm tới mọi repo. Tầng <strong>stack</strong> là kiến thức về một nền tảng, nằm trong gói cài thêm. Tầng <strong>repo</strong> — <code>knowledge/PROJECT.md</code> — là sự thật về riêng repo này.</p>
+<p data-lang="en">Foreman stratifies knowledge into three tiers (ADR-019). The <strong>loop</strong> tier — <code>.harness/loop/</code> — is doctrine, and travels with the product to every repository. The <strong>stack</strong> tier is platform knowledge, shipped as an opt-in pack. The <strong>repo</strong> tier — <code>knowledge/PROJECT.md</code> — is truth about this repository alone.</p>
+<p data-lang="vi">Engine bị chặn ghi vào tầng loop bằng deny rule của runtime, và chặn như vậy là đúng — đó là nơi ghi cả quyền hạn của nó. Nhưng hệ quả là: <strong>mọi bài học mang đi được đều rơi xuống tầng repo</strong>, vì đó là tầng duy nhất nó viết được. Và ở đó thì chúng không đi đâu cả.</p>
+<p data-lang="en">The engine is denied write access to the loop tier by runtime deny rules, and correctly so — that tier also records its own permissions. The consequence: <strong>every portable lesson falls into the repo tier</strong>, because that is the only tier it can write to. And there it stays.</p>
+<p data-lang="vi">ADR-019 đã lường trước và hoãn lại, với điều kiện xem xét lại rất rõ: <em>"khi một bài học thật sự bị mất vì không có ai ngồi xem."</em> Điều kiện đó <strong>đã xảy ra</strong> — bảng dưới là bằng chứng, và chúng chỉ được tìm thấy vì có người tình cờ đọc lại <code>PROJECT.md</code>.</p>
+<p data-lang="en">ADR-019 anticipated this and deferred it with an explicit revisit condition: <em>"when a lesson is actually lost because nobody was watching."</em> That condition <strong>has now been met</strong> — the table below is the evidence, and it was found only because someone happened to re-read <code>PROJECT.md</code>.</p>
+
+<h2 data-lang="vi">Đề nghị</h2>
+<h2 data-lang="en">The suggestions</h2>
+<p class="note" data-lang="vi">Tám mục, mỗi mục kèm nơi tôi nghĩ nó nên tới. Mỗi mục đều đã phải trả giá bằng một lần hỏng thật trong lần chạy này.</p>
+<p class="note" data-lang="en">Eight items, each with where I think it belongs. Every one was paid for by a real failure during this run.</p>
+
+<div class="card">
+  <div class="tagrow"><span class="id">S-01</span><span class="tag core" data-lang="vi">Đề nghị: tầng loop</span><span class="tag core" data-lang="en">Proposed: loop tier</span></div>
+  <h3 data-lang="vi">Lệnh có ống dẫn (<code>|</code>) nói dối về thất bại</h3>
+  <h3 data-lang="en">A piped command lies about failure</h3>
+  <p data-lang="vi"><code>./gradlew build | tail -20</code> thoát với mã <strong>0 ngay cả khi build hỏng</strong>, vì mã thoát thuộc về <code>tail</code>. Một lần <code>BUILD FAILED</code> thật đã bị đọc nhầm thành pass.</p>
+  <p data-lang="en"><code>./gradlew build | tail -20</code> exits <strong>0 even when the build failed</strong>, because the exit status belongs to <code>tail</code>. A real <code>BUILD FAILED</code> was read as a pass this way.</p>
+  <div class="ev">$ false | tail -1 ; echo $?
+0                          <- "thành công" / "success"
+
+$ set -o pipefail; false | tail -1 ; echo $?
+1                          <- sự thật / the truth</div>
+  <div class="ask"><span class="lbl" data-lang="vi">Vì sao thuộc tầng loop</span><span class="lbl" data-lang="en">Why the loop tier</span>
+    <p data-lang="vi">Không liên quan gì tới Gradle. Đúng với npm, pytest, cargo, make — mọi công cụ, mọi repo. Và hướng hỏng là hướng nguy hiểm: nó <em>không dừng</em> lần chạy, nó để lần chạy đi tiếp trên một niềm tin sai.</p>
+    <p data-lang="en">Nothing to do with Gradle. True of npm, pytest, cargo, make — every tool, every repository. And the failure direction is the dangerous one: it does not <em>stop</em> the run, it lets the run continue believing something false.</p></div>
+</div>
+
+<!-- ============================================================================
+     ONE CARD PER SUGGESTION. Copy the S-01 block above as the shape.
+       id     S-NN, in the order they were found
+       tag    core | pack | local  - and say plainly when something should STAY
+       h3     what the lesson is, in one line
+       p      the technical explanation, with the evidence that earned it
+       .ev    optional: the command, the log line, the measurement
+       .ask   why that destination and not another
+     Both languages on every element: data-lang="vi" and data-lang="en".
+     Delete this comment and the S-01 example when the box has real entries.
+============================================================================ -->
+
+<h2 data-lang="vi">Bạn cần làm gì</h2>
+<h2 data-lang="en">What you do</h2>
+<div class="scroll"><table>
+  <thead>
+    <tr data-lang="vi"><th>Quyết định</th><th>Nghĩa là</th></tr>
+    <tr data-lang="en"><th>Decision</th><th>Means</th></tr>
+  </thead>
+  <tbody>
+    <tr data-lang="vi"><td><strong>Đồng ý</strong> một mục</td><td>Tôi chép nội dung sang tầng bạn chọn, trong một commit riêng, có trích dẫn lần hỏng đã sinh ra nó.</td></tr>
+    <tr data-lang="en"><td><strong>Accept</strong> an item</td><td>I copy it into the tier you name, in its own commit, citing the failure that earned it.</td></tr>
+    <tr data-lang="vi"><td><strong>Đổi tầng</strong></td><td>Ví dụ S-05 bạn thấy chỉ nên nằm ở gói Windows chứ không phải doctrine chung — nói là được.</td></tr>
+    <tr data-lang="en"><td><strong>Re-tier</strong> it</td><td>Say S-05 belongs in a Windows pack rather than core doctrine, and it goes there instead.</td></tr>
+    <tr data-lang="vi"><td><strong>Từ chối</strong></td><td>Mục bị xoá khỏi hộp. Không cần giải thích.</td></tr>
+    <tr data-lang="en"><td><strong>Reject</strong> it</td><td>The item leaves the box. No justification needed.</td></tr>
+    <tr data-lang="vi"><td><strong>Không làm gì</strong></td><td>Cũng được. Hộp cứ nằm đó; không có gì tự động xảy ra.</td></tr>
+    <tr data-lang="en"><td><strong>Do nothing</strong></td><td>Also fine. The box simply sits there; nothing happens on its own.</td></tr>
+  </tbody>
+</table></div>
+
+<footer>
+  <span data-lang="vi">Tạo bởi engine trong lần chạy <span class="mono">loop/calendar-note-app</span>, 11-09-2026. Nguồn: <span class="mono">knowledge/PROJECT.md</span>, mọi mục đều kèm vòng lặp đã phát hiện ra nó.<br>
+  Engine bị deny rule của runtime chặn ghi vào <span class="mono">.harness/loop/</span>. File này là kênh duy nhất để nó đề nghị một thay đổi ở đó — và chỉ là đề nghị.<br>
+  Không có gì ở đây đã được áp dụng.</span>
+  <span data-lang="en">Written by the engine during the <span class="mono">loop/calendar-note-app</span> run, 2026-09-11. Source: <span class="mono">knowledge/PROJECT.md</span>, each item citing the iteration that found it.<br>
+  The engine is denied write access to <span class="mono">.harness/loop/</span> by runtime deny rules. This file is its only channel for proposing a change there — and it is only a proposal.<br>
+  Nothing here has been applied.</span>
+</footer>
+
+</div>
+
+<script>
+  (function(){
+    var root=document.documentElement, sel=document.getElementById('lang'), KEY='cn-suggestions-lang';
+    function apply(l){root.setAttribute('data-ui-lang',l);root.setAttribute('lang',l);sel.value=l;try{localStorage.setItem(KEY,l)}catch(e){}}
+    var init='vi';
+    try{var s=localStorage.getItem(KEY); if(s==='vi'||s==='en') init=s;
+        else if((navigator.language||'').toLowerCase().indexOf('vi')!==0) init='en';}catch(e){}
+    apply(init);
+    sel.addEventListener('change',function(){apply(sel.value)});
+  })();
+</script>

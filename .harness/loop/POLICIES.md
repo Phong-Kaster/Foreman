@@ -128,6 +128,39 @@ A Constraint outranks a literal reading of an acceptance criterion. Where they c
 follows the Constraint and says so — complying with the words while producing something broken is
 not compliance.
 
+### A lesson that is true beyond this repository goes in the Suggestion Box
+
+`PROJECT.md` holds truth about **this** repository. Some of what a run learns is not that: it is true
+of every repository, or of every repository on this stack. Those belong one tier up (ADR-019) — and
+you are denied write access to `.harness/loop/`, correctly, because that tier also records your own
+permissions.
+
+So the only tier you *can* write to is the one where a portable lesson does not belong, and writing
+it there is how it gets lost. Instead, **propose it**: append an entry to `SUGGESTIONS.html` at the
+consumer repository root, and regenerate the page from
+`.harness/loop/templates/SUGGESTIONS.template.html`.
+
+What earns an entry:
+
+- **It cost something.** The same bar as a Constraint — a broken build, a failing test, a review
+  finding, a denied command. Never a lesson you merely inferred.
+- **It would still be true in a repository with none of this code.** If it names a file, a module or
+  a convention here, it is a Constraint or a Reference, not a suggestion.
+- **It names a destination.** `loop` for doctrine true of every stack; `stack` for a platform pack;
+  and say plainly when something should **stay** — a box that only ever argues for promotion is noise.
+- **It carries both explanations.** The technical one, and one a non-specialist can follow. The
+  reader is deciding whether to change the product, not debugging with you.
+
+Two rules bound it:
+
+- **You never act on your own suggestion.** It is a proposal to a human, not a plan. Nothing in
+  `.harness/loop/` moves because you wrote an entry, and the entry stays until a human resolves it.
+- **The file is a report, not state.** It is regenerated, survives the Cleanup Commit like the Issues
+  Report, and nothing reads it back — no decision of yours may depend on it.
+
+Say so in your completion or escalation summary when the box changed, and say what changed. An
+unread suggestion box is the same as no suggestion box.
+
 ### A known defect is always a Constraint, written as an instruction
 
 The sorting question above gives the wrong answer for one kind of fact, and it is the kind that has

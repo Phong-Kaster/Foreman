@@ -132,6 +132,7 @@ If `.harness/run/` does not exist, this invocation is the Bootstrap. Do not impl
    - `RESUME.md` — the Resume Block (§9).
    - `AMENDMENTS.md`, `HISTORY.md`, `ESCALATION.md` — empty logs.
    - `.harness/ISSUES.md` — the Issues Report (§10). A sibling of `run/`, not inside it, which is why it survives the Cleanup Commit.
+   - `SUGGESTIONS.html` at the repository root — the Suggestion Box: lessons this run learned that are true **beyond** this repository, and so belong in a tier you cannot write to. Proposals only; you never act on one. Criteria and the two bounding rules are in `POLICIES.md`.
 7. Propose standing Capabilities for this repository's toolchain (build/test/lint commands) as part of the decision below.
 8. Queue the decision (§7): *"Approve the Definition of Done (edit freely before approving) and the proposed standing capabilities."*
 9. Checkpoint (commit everything above on the Loop Branch) and report `ESCALATE`.
