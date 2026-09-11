@@ -9,14 +9,14 @@ How to install, run, and govern Foreman as the human in the loop. This is the re
 There are two ways to operate the loop — pick one per repository, both talk to the same engine underneath:
 
 - **Skill path (recommended)** — the `/foreman` Claude Code skill installs, stages, launches, supervises, and summarizes for you. This is the path most people want; skip to [§1a](#1a-install-the-skill-recommended).
-- **Manual path** — copy `.loop/` yourself and run `run.ps1` from a terminal. Useful outside Claude Code, for scripted/CI-style invocation, or if you want direct control over every parameter. See [§1b](#1b-install-manually).
+- **Manual path** — copy `.harness/loop/` yourself and run `run.ps1` from a terminal. Useful outside Claude Code, for scripted/CI-style invocation, or if you want direct control over every parameter. See [§1b](#1b-install-manually).
 
 ---
 
 ## Prerequisites
 
 - **A git repository** — every Stable Checkpoint is a commit. Start from a clean working tree: the engine reads uncommitted changes at iteration start as debris from a crashed invocation and will salvage or discard them.
-- **Claude Code CLI, installed and authenticated** — the runtime invokes `claude` once per iteration. If it is not on `PATH` the run stops immediately as `FAILED` (exit 4) naming the launch error; it is not retried, because a missing binary cannot appear between attempts.
+- **Claude Code CLI, installed and authenticated** — the runtime invokes `claude` once per iteration. If it is not on `PATH`, `run.ps1` produces no status and the Watchdog stops the run.
 - **Windows PowerShell** — V1 ships `run.ps1` only; the contract itself is shell-agnostic (a `run.sh` waits for the first non-Windows consumer).
 - **Node.js** — skill path only, for `npx`. The loop does not need it; your project may.
 
@@ -26,11 +26,11 @@ There are two ways to operate the loop — pick one per repository, both talk to
 npx skills@latest add Phong-Kaster/Foreman
 ```
 
-Installs `foreman` into `.claude/skills/foreman/` and `.agents/skills/foreman/` in the current repo. Nothing else to copy — the skill carries its own copy of `ENGINE.md`, `POLICIES.md`, the capability baseline, the templates, and `run.ps1`, and materializes `.loop/` at your repo root itself the first time you invoke it.
+Installs `foreman` into `.claude/skills/foreman/` and `.agents/skills/foreman/` in the current repo. Nothing else to copy — the skill carries its own copy of `ENGINE.md`, `POLICIES.md`, the capability baseline, the templates, and `run.ps1`, and materializes `.harness/loop/` at your repo root itself the first time you invoke it.
 
 ## 1b. Install manually
 
-Copy the `.loop/` directory into your repository root by hand. That is the entire installation — never edit its contents per-project (repository-specific truth belongs in `knowledge/PROJECT.md`, which the loop maintains itself; domain rules belong in `knowledge/DOMAIN.md`, which only you write). Use this path if you're not working inside Claude Code, or want to invoke `run.ps1` from a script/CI job instead of a conversation.
+Copy the `.harness/loop/` directory into your repository root by hand. That is the entire installation — never edit its contents per-project (repository-specific truth belongs in `.harness/knowledge/PROJECT.md`, which the loop maintains itself; domain rules belong in `.harness/knowledge/DOMAIN.md`, which only you write). Use this path if you're not working inside Claude Code, or want to invoke `run.ps1` from a script/CI job instead of a conversation.
 
 ---
 
@@ -50,12 +50,12 @@ Inline text is written verbatim into `PRD.md` — no rewriting, no summarizing. 
 
 ## 3. Start the runtime
 
-**Skill path:** the skill starts it for you — `.loop/run.ps1` is launched in the background and its log is streamed live into the conversation via a Monitor, the same way you'd see output from any other command. Nothing to run by hand; nothing ties up your terminal, and there's no foreground-command timeout to worry about on a long run.
+**Skill path:** the skill starts it for you — `.harness/loop/run.ps1` is launched in the background and its log is streamed live into the conversation via a Monitor, the same way you'd see output from any other command. Nothing to run by hand; nothing ties up your terminal, and there's no foreground-command timeout to worry about on a long run.
 
 **Manual path:**
 
 ```powershell
-powershell -File .loop/run.ps1
+powershell -File .harness/loop/run.ps1
 ```
 
 Useful parameters:
@@ -114,32 +114,32 @@ git log --oneline loop/<prd-slug>
 
 Only one runtime may run per repository — a second `run.ps1` refuses to start while another holds the run lock (`$env:TEMP\loop-run-<repo-name>.lock`; stale locks from dead processes are taken over automatically). This holds regardless of which path launched it.
 
-The first invocation finds no `.ai/` and therefore bootstraps: it reads your PRD, inspects the repository (including `CLAUDE.md` and READMEs — it never edits them), generates `knowledge/` and `.ai/`, creates the `loop/<prd-slug>` branch, and stops with `ESCALATE`.
+The first invocation finds no `.harness/run/` and therefore bootstraps: it reads your PRD, inspects the repository (including `CLAUDE.md` and READMEs — it never edits them), generates `.harness/knowledge/` and `.harness/run/`, creates the `loop/<prd-slug>` branch, and stops with `ESCALATE`.
 
 ## 4. The one mandatory gate: approve the Definition of Done
 
-**Skill path:** the skill reads `.ai/ESCALATION.md` and asks you directly in conversation — the DoD, the proposed capabilities, and any ambiguity the engine flagged, presented as a normal question with the engine's own considered options as choices. Answer it like any other question; the skill writes your decision (and rationale) into `.ai/ESCALATION.md`'s `## Decision` section and any approved capability into the right ledger file, then resumes automatically. You never open a file yourself.
+**Skill path:** the skill reads `.harness/run/ESCALATION.md` and asks you directly in conversation — the DoD, the proposed capabilities, and any ambiguity the engine flagged, presented as a normal question with the engine's own considered options as choices. Answer it like any other question; the skill writes your decision (and rationale) into `.harness/run/ESCALATION.md`'s `## Decision` section and any approved capability into the right ledger file, then resumes automatically. You never open a file yourself.
 
-**Manual path:** open `.ai/DoD.md` and `.ai/ESCALATION.md`. The DoD is the exam the whole run will be graded against — this is your highest-leverage five minutes:
+**Manual path:** open `.harness/run/DoD.md` and `.harness/run/ESCALATION.md`. The DoD is the exam the whole run will be graded against — this is your highest-leverage five minutes:
 
 1. Edit the criteria freely: tighten vague ones, delete wrong ones, add missing ones. Every criterion must be provable by evidence.
 2. Review the proposed standing capabilities (your repo's build/test/lint commands). Narrow anything too broad; paste approved entries into the named ledger file.
-3. Write your decision **and rationale** under `## Decision` in `.ai/ESCALATION.md`.
+3. Write your decision **and rationale** under `## Decision` in `.harness/run/ESCALATION.md`.
 4. Re-run `run.ps1`.
 
 After approval the DoD is immutable to the engine either way: it may propose changes, never apply them.
 
-### The other file you own: `knowledge/DOMAIN.md`
+### The other file you own: `.harness/knowledge/DOMAIN.md`
 
 Optional, and only worth creating if your project has **durable domain rules** — a formula, an algorithm, a regulatory or business invariant. Blood-pressure maths; the tolerances a background-removal algorithm must hold to; what "active subscriber" is defined to mean this quarter.
 
-It matters because of one inverted rule. `knowledge/PROJECT.md` is a cache of facts *about* your code, so when they disagree, the code wins and the engine fixes the file. `DOMAIN.md` is the opposite: your code is an *attempt* at the rule, so when they disagree, **the rule wins and the code is a defect**. Without that inversion, an engine finding a wrongly-implemented formula would "correct" the correct formula to match the bug — and then the fresh-context reviewer, which is handed your domain rules as its standard, would validate every later change against the corruption.
+It matters because of one inverted rule. `.harness/knowledge/PROJECT.md` is a cache of facts *about* your code, so when they disagree, the code wins and the engine fixes the file. `DOMAIN.md` is the opposite: your code is an *attempt* at the rule, so when they disagree, **the rule wins and the code is a defect**. Without that inversion, an engine finding a wrongly-implemented formula would "correct" the correct formula to match the bug — and then the fresh-context reviewer, which is handed your domain rules as its standard, would validate every later change against the corruption.
 
 So the engine is **deny-listed** from writing it, mechanically, the same as the Capability Ledgers. It reads the file, implements what is written, reports code that contradicts it, and proposes new entries through an Escalation Request. You (or the skill, transcribing a decision you approved) do the writing.
 
 Practically:
 
-- Start from `.loop/templates/DOMAIN-KNOWLEDGE.template.md`. State each rule precisely enough to be implemented and tested from that text alone, and cite the authority so it can be re-checked later.
+- Start from `.harness/loop/templates/DOMAIN-KNOWLEDGE.template.md`. State each rule precisely enough to be implemented and tested from that text alone, and cite the authority so it can be re-checked later.
 - Be explicit about units, valid ranges and boundary behaviour. That is where implementations silently diverge.
 - Don't create an empty one. No domain rules means no file — a stub is clutter that every iteration reads.
 - Don't put general stack knowledge here ("Android 13 changed notification permissions"). That is not truth about *your* project, nothing in your repo can verify it, and it goes stale with nothing to correct it — see [ADR-007](./adr/ADR-007-knowledge-stratification-and-ratchet.md).
@@ -151,24 +151,24 @@ Nothing is required from you. There are exactly five ways a run ends, and `run.p
 | Ending | Exit | Meaning | Your move |
 |---|---|---|---|
 | `DONE` | 0 | Goal verified complete by a fresh verifier iteration. | Review and merge — §6. |
-| `ESCALATE` | 3 | A decision above the engine's authority: an architecture change (Tier 2), an intent gap (Tier 3), a capability request, missing product information. | Skill path: answer in conversation, as in §4. Manual path: read `.ai/ESCALATION.md`, write decision + rationale under `## Decision`, re-run. One pending escalation at a time, always. |
+| `ESCALATE` | 3 | A decision above the engine's authority: an architecture change (Tier 2), an intent gap (Tier 3), a capability request, missing product information. | Skill path: answer in conversation, as in §4. Manual path: read `.harness/run/ESCALATION.md`, write decision + rationale under `## Decision`, re-run. One pending escalation at a time, always. |
 | `FAILED` | 4 | Execution itself is broken — environment, repository corruption, exhausted resources. Not "the task was hard". | Repair the environment, re-run (or ask the skill to). The engine resumes from the last checkpoint. |
-| Watchdog | 2 | `MaxConsecutiveCrashes` (default 3) invocations *did work and then died* without producing any status, with a growing backoff between attempts. | A genuinely transient CLI/network fault. Inspect `.ai/STATE.md`, re-run. |
-| Budget | 5 | `MaxIterations` (default 50) exhausted. A deterministic safety stop, never an interpretation of task failure. | Inspect `.ai/STATE.md` for actual progress, then re-run to continue — or raise `-MaxIterations`. |
+| Watchdog | 2 | `MaxConsecutiveCrashes` (default 3) invocations died without producing any status. | Usually a transient CLI/network fault. Inspect `.harness/run/STATE.md`, re-run. |
+| Budget | 5 | `MaxIterations` (default 50) exhausted. A deterministic safety stop, never an interpretation of task failure. | Inspect `.harness/run/STATE.md` for actual progress, then re-run to continue — or raise `-MaxIterations`. |
 
-Exit code `1` is a prerequisite failure before any engine invocation: `.loop/ENGINE.md` missing (wrong working directory), a `-PrdPath` that does not resolve, or another runtime already holding the run lock.
+Exit code `1` is a prerequisite failure before any engine invocation: `.harness/loop/ENGINE.md` missing (wrong working directory), a `-PrdPath` that does not resolve, or another runtime already holding the run lock.
 
 Interrupting is always safe: kill it whenever you like (or ask the skill to stop supervising). Every iteration ends at a Stable Checkpoint (one atomic commit of code + state); the next invocation recovers mechanically — even from a mid-iteration crash, which it detects as a dirty working tree.
 
-Watching progress: `git log --oneline` on the loop branch is the execution history; `.ai/STATE.md` is the engine's current memory; `.ai/AMENDMENTS.md` is the audited log of every plan mutation.
+Watching progress: `git log --oneline` on the loop branch is the execution history; `.harness/run/STATE.md` is the engine's current memory; `.harness/run/AMENDMENTS.md` is the audited log of every plan mutation.
 
-**Capability grants can be goal-scoped, not just standing.** A denied-but-needed action (e.g. a destructive git operation the engine isn't authorized for, even late in a run) escalates the same way — the request can propose either a standing capability (`knowledge/capabilities.json`, survives future runs) or a one-time, goal-scoped one (`.ai/capabilities.json`, expires automatically when `.ai/` is removed at completion). Prefer goal-scoped whenever the need is specific to this one run.
+**Capability grants can be goal-scoped, not just standing.** A denied-but-needed action (e.g. a destructive git operation the engine isn't authorized for, even late in a run) escalates the same way — the request can propose either a standing capability (`.harness/knowledge/capabilities.json`, survives future runs) or a one-time, goal-scoped one (`.harness/run/capabilities.json`, expires automatically when `.harness/run/` is removed at completion). Prefer goal-scoped whenever the need is specific to this one run.
 
 ## 6. Completion and merge
 
-`DONE` is only ever reported by a fresh verifier iteration that wrote none of the implementation and re-proved every DoD criterion. At that point the branch tip contains the implementation, updated `knowledge/`, and a **Cleanup Commit** whose message is the completion summary (criteria → evidence, notable amendments) — and no `.ai/` (execution state is the loop's memory, not your product; its full history remains in the branch's earlier commits).
+`DONE` is only ever reported by a fresh verifier iteration that wrote none of the implementation and re-proved every DoD criterion. At that point the branch tip contains the implementation, updated `.harness/knowledge/`, and a **Cleanup Commit** whose message is the completion summary (criteria → evidence, notable amendments) — and no `.harness/run/` (execution state is the loop's memory, not your product; its full history remains in the branch's earlier commits).
 
-**Skill path:** you get a roll-up summary across **every** `loop/*` branch in the repo, not just the one that finished — each one's status (done / in-progress / stuck on an escalation / stale), what it contains, and whether it's merge-ready — plus any non-blocking review notes that would otherwise be lost when `.ai/` is deleted.
+**Skill path:** you get a roll-up summary across **every** `loop/*` branch in the repo, not just the one that finished — each one's status (done / in-progress / stuck on an escalation / stale), what it contains, and whether it's merge-ready — plus any non-blocking review notes that would otherwise be lost when `.harness/run/` is deleted.
 
 **Manual path:** review the branch like any contribution yourself:
 
@@ -176,13 +176,13 @@ Watching progress: `git log --oneline` on the loop branch is the execution histo
 git branch --list 'loop/*'              # every run this repository has done
 git log --oneline loop/<prd-slug>       # the execution history, one commit per iteration
 git log -1 loop/<prd-slug>              # the Cleanup Commit: completion summary, criteria -> evidence
-git diff <default-branch>...loop/<prd-slug>   # the whole change, as one review
+git diff <default-branch>...harness/loop/<prd-slug>   # the whole change, as one review
 git merge loop/<prd-slug>
 ```
 
 The three-dot form is deliberate: it diffs the branch against the point it diverged from, so unrelated commits landing on your default branch meanwhile don't pollute the review.
 
-**What the run knew was still wrong** is in `knowledge/ISSUES.md` — defects the engine found and did not fix, because they were out of scope, because a review finding was filed rather than resolved, or because you deferred them. That file survives the Cleanup Commit and is read by every future iteration as a list of patterns to *avoid*, so a later run does not reproduce them. Entries cite the commit SHA holding the full record; read it back with `git show <sha>:<path>`. Prune an entry once it is resolved — the file is worth reading only while everything in it is still true.
+**What the run knew was still wrong** is in `.harness/ISSUES.md` — defects the engine found and did not fix, because they were out of scope, because a review finding was filed rather than resolved, or because you deferred them. That file survives the Cleanup Commit and is read by every future iteration as a list of patterns to *avoid*, so a later run does not reproduce them. Entries cite the commit SHA holding the full record; read it back with `git show <sha>:<path>`. Prune an entry once it is resolved — the file is worth reading only while everything in it is still true.
 
 Either way: **merging is your act — the engine never merges, never pushes, never touches your default branch.**
 
@@ -190,9 +190,9 @@ Either way: **merging is your act — the engine never merges, never pushes, nev
 
 **Skill path:** `/foreman <next requirement>` — same repo, new goal. If a `PRD.md` already exists and differs from the new text, the skill confirms with you before overwriting rather than doing it silently.
 
-**Manual path:** write a new `PRD.md`, run `run.ps1` again. Either way, `knowledge/` persists — verified commands and hard-won environmental lessons carry over; a new `.ai/` and a new loop branch are created for the run.
+**Manual path:** write a new `PRD.md`, run `run.ps1` again. Either way, `.harness/knowledge/` persists — verified commands and hard-won environmental lessons carry over; a new `.harness/run/` and a new loop branch are created for the run.
 
-To abandon a run: delete `.ai/` and the loop branch. Nothing else to clean.
+To abandon a run: delete `.harness/run/` and the loop branch. Nothing else to clean.
 
 ---
 
@@ -200,7 +200,7 @@ To abandon a run: delete `.ai/` and the loop branch. Nothing else to clean.
 
 Enforced mechanically (runtime deny rules) or by hard-stop protocol — true regardless of which path launched it:
 
-- Modify `.loop/`, any capability ledger, `knowledge/DOMAIN.md`, or its own permission settings
+- Modify `.harness/loop/`, any capability ledger, `.harness/knowledge/DOMAIN.md`, or its own permission settings
 - Modify `PRD.md` or the approved `DoD.md`
 - Widen a capability beyond what you approved
 - Touch your default branch, push, merge, or rewrite history
@@ -215,4 +215,4 @@ The skill adds no authority of its own on top of this — it only stages input (
 - V1 assumes git and PowerShell; both are persistence/transport details, not architecture.
 - Compound Bash commands (e.g. `cd <dir> && node ...`) can be denied even when the base command is capability-approved, since the approval matches on the literal command form. Expect the engine to self-correct by retrying with a simpler form — it costs a retry, not a failure.
 - Skill path only: the skill's own frontmatter must keep `disable-model-invocation: true`. Without it, a nested engine invocation running inside the same repo can see the skill and auto-trigger it on itself instead of following `ENGINE.md` directly — this was a real bug found during testing, now fixed, but worth knowing if you ever fork or repackage the skill.
-- Automated agent-skill security scanners on skill installers (e.g. Snyk, Socket) rate this skill High-risk, and correctly so — this is an accurate read of its real capability surface, not a false positive: the baseline capability ledger (`capabilities/baseline.json`) grants `Edit(**)`, `Write(**)`, and git commit/branch/checkout as **permanent, automatic** capabilities — no per-action approval once a run starts; `run.ps1` ships a `-DangerouslySkipPermissions` switch that fully bypasses the permission system (documented for sandboxed/VM use only); and the engine runs unattended for up to 50 iterations, writing and committing code on its own branch with a human in the loop only at escalations. Consistent with this project's own documented position (ADR-004): a guardrail against accidents and drift, not a security boundary against an adversarial engine. The mitigations that make this an acceptable tradeoff are independently verifiable in the same files: the engine never touches the default branch, never pushes, never merges, never force-pushes or rebases; `.loop/`, all capability ledgers, and generated permission settings are deny-listed against the engine's own edits; and it escalates for any capability grant or architecture/intent change rather than expanding its own authority.
+- Automated agent-skill security scanners on skill installers (e.g. Snyk, Socket) rate this skill High-risk, and correctly so — this is an accurate read of its real capability surface, not a false positive: the baseline capability ledger (`capabilities/baseline.json`) grants `Edit(**)`, `Write(**)`, and git commit/branch/checkout as **permanent, automatic** capabilities — no per-action approval once a run starts; `run.ps1` ships a `-DangerouslySkipPermissions` switch that fully bypasses the permission system (documented for sandboxed/VM use only); and the engine runs unattended for up to 50 iterations, writing and committing code on its own branch with a human in the loop only at escalations. Consistent with this project's own documented position (ADR-004): a guardrail against accidents and drift, not a security boundary against an adversarial engine. The mitigations that make this an acceptable tradeoff are independently verifiable in the same files: the engine never touches the default branch, never pushes, never merges, never force-pushes or rebases; `.harness/loop/`, all capability ledgers, and generated permission settings are deny-listed against the engine's own edits; and it escalates for any capability grant or architecture/intent change rather than expanding its own authority.
