@@ -126,9 +126,9 @@ Five ways a run ends. Only the first two need anything from you:
 | It stopped with | Meaning | What you do |
 |---|---|---|
 | `ESCALATE` (3) | A decision above its authority: approve the checklist, resolve an ambiguous requirement, grant a permission, or approve an architecture change. | Answer the question. That's it — the skill records your answer and restarts it. |
-| `FAILED` (4) | Execution itself is broken: build tool missing, disk full, repo corrupted. Not "the task was hard". | Fix the environment, then start it again. It resumes from the last commit. |
+| `FAILED` (4) | Execution itself is broken, or the CLI refused: build tool missing, disk full, repo corrupted, quota exhausted, not logged in. Not "the task was hard". | Read the reason it printed — for a refusal it is the CLI's own words, usually naming what to do. Fix that, then start it again. It resumes from the last commit. |
 | `DONE` (0) | A fresh verifier re-proved every checklist item. | Review and merge (below). |
-| Watchdog (2) | The AI died without reporting, 3 times in a row. | Usually a transient CLI or network problem. Start it again. |
+| Watchdog (2) | The AI was working and died mid-task without reporting, 3 times in a row. | A genuinely transient CLI or network problem. Start it again. (A CLI that *refused* — out of quota, logged out — stops as `FAILED` instead, without burning retries.) |
 | Budget (5) | Hit the 50-cycle ceiling. | Not a verdict on the work — a deterministic stop. Check `.ai/STATE.md` to see where it got to, then continue. |
 
 **What makes a good answer when it asks:** you may always **narrow** a request — tighten a vague checklist item, cut the permission down to a single command, say "console output, not a desktop notification". You can't accidentally widen anything; the engine can only ever get less than it asked for. And say *why* — your reason gets recorded in the audit trail alongside the decision, which is what makes the branch readable in three months.

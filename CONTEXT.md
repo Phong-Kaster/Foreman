@@ -57,11 +57,11 @@ The durable artifact the engine must persist before stopping whenever it require
 _Avoid_: Question file, blocker, ticket
 
 **Crash**:
-An engine invocation that ends without producing any Execution Status. Only the Runtime can detect it — an engine cannot supervise its own death.
-_Avoid_: Failure (that's FAILED, which is reported deliberately)
+An engine invocation that **did work and then ended** without producing any Execution Status. Only the Runtime can detect it — an engine cannot supervise its own death. Two neighbouring conditions look identical at the status file and are deliberately *not* Crashes, because retrying them cannot help: an invocation that **never started** (CLI absent, argument list too long) and one that **started and refused** (quota exhausted, not authenticated). Both stop as FAILED (ADR-009).
+_Avoid_: Failure (that's FAILED, which is reported deliberately), "no status" (that is the symptom the three conditions share, not the diagnosis)
 
 **Watchdog**:
-The one policy the Runtime owns: how to react to a Crash (re-invoke up to a bounded number of consecutive crashes, then stop). All other policy lives in the engine.
+The one policy the Runtime owns: how to react to a Crash (re-invoke after a growing backoff, up to a bounded number of consecutive crashes, then stop). Its budget exists for transient faults, so spending it on a permanent one is the failure mode it must avoid — hence the classification in Crash above. All other policy lives in the engine.
 _Avoid_: Supervisor, monitor
 
 **Stable Checkpoint**:
@@ -100,7 +100,7 @@ The state recorded when the engine believes the Goal is complete. The iteration 
 _Avoid_: Done, complete (before fresh verification)
 
 **Knowledge**:
-What a consumer repository durably knows, kept in `knowledge/` at its root and surviving every feature run. Three files with different owners and incompatible rules — Project Knowledge, Open Issues, and Domain Knowledge, below. None holds knowledge about a technology stack in general: that is not truth about this repository, nothing here can verify it, and it goes stale uncorrected (ADR-007).
+What a consumer repository durably knows, kept in `knowledge/` at its root and surviving every feature run — along one branch lineage. It rides on the Loop Branch, and the engine never merges, so a run started elsewhere cannot read it; the cross-branch index is the commit log, which bootstrap reads (ADR-011). Three files with different owners and incompatible rules — Project Knowledge, Open Issues, and Domain Knowledge, below. None holds knowledge about a technology stack in general: that is not truth about this repository, nothing here can verify it, and it goes stale uncorrected (ADR-007).
 _Avoid_: Docs, memory, wiki
 
 **Project Knowledge**:

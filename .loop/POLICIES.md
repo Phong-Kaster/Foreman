@@ -90,6 +90,24 @@ nothing about what a user sees — this is exactly how hardcoded colours survive
 
 A claim without evidence is not a fact. Task completion requires recorded evidence per ENGINE.md §10. "It should work" is never evidence. Evidence must be reproducible from the checkpoint: command + observed output.
 
+**Never take a piped command's exit code as evidence.** `./gradlew build 2>&1 | tail -20` exits **0
+when the build failed**, because the exit status belongs to `tail`. This is not hypothetical: a real
+`BUILD FAILED` was first read as a pass this way, and the failure direction is the dangerous one —
+it does not stop the run, it lets the run continue believing something false, past every reviewer
+whose job assumed the build was green.
+
+Two forms are acceptable, in this order:
+
+- **Prefix the pipeline**: `set -o pipefail; <build command> | tail -20`. `Bash(set -o pipefail)` is a
+  baseline capability precisely so this form is always available; the option makes a pipeline return
+  the first non-zero status in it, and can do nothing else.
+- **Read the tool's own verdict**: run the command unpiped and check for its success/failure line
+  (`BUILD SUCCESSFUL`, `BUILD FAILED`, `N tests, M failures`). Record that line as the evidence, not
+  the exit code.
+
+`${PIPESTATUS[0]}` is refused by the permission matcher and is not an option. Neither is redirecting
+to a file (`> out.txt`), which is also refused. Both were verified, 2026-09-11.
+
 **A requirement no available command can prove is a gap to report, never a criterion to drop.**
 When the DoD carries a requirement whose satisfaction cannot be observed in any command's output —
 anything about appearance, contrast, layout, or what a user can actually perceive — say so
@@ -107,7 +125,7 @@ criterion that can fail does.
 
 ## Capability Risk Classes
 
-- **Low-risk (baseline, permanent, ships with the runtime):** reading repository files; `git status/diff/log/show/add/commit/checkout/branch` local operations — `show` included because branch history is where a prior run's state survives the Cleanup Commit, and it is the only command that reads a file's contents at a commit; creating and editing files inside the consumer repository (excluding protected paths).
+- **Low-risk (baseline, permanent, ships with the runtime):** reading repository files; `git status/diff/log/show/add/commit/checkout/branch` local operations — `show` included because branch history is where a prior run's state survives the Cleanup Commit, and it is the only command that reads a file's contents at a commit; creating and editing files inside the consumer repository (excluding protected paths); `set -o pipefail`, which executes nothing and exists only so a pipeline's exit code can be trusted as evidence (ADR-010).
 - **Standing (per-repository, approved at the DoD gate, lives in Knowledge):** the repository's verified toolchain — build, test, lint, dependency install.
 - **High-risk (goal-scoped by default, always explicit):** deletion commands; network access beyond dependency resolution; process/system management (`docker`, `adb`, `kubectl`, service control); anything touching paths outside the repository; anything irreversible.
 
@@ -144,4 +162,28 @@ Neither file is a place for knowledge about a technology stack in general (platf
 
 - All work on the Loop Branch. Never the default branch, never push, never merge, never rewrite history (`--force`, rebase) — the branch is an audit trail.
 - One atomic checkpoint commit per iteration: code + `.ai/` + `knowledge/` together.
-- Commit messages: first line `loop(<task-id>): <what changed>`; body lists evidence summary and amendments made.
+- Commit messages: first line `loop(<scope>): <what changed>`; body lists evidence summary and
+  amendments made.
+
+**The commit log is how a later run finds what an earlier one already solved.** `.ai/` is deleted at
+the Cleanup Commit and `knowledge/` rides on a branch nobody may have merged, so the only thing that
+reliably survives and stays readable across branches is `git log --all`. That makes the subject line
+an index, and an index is only as good as its wording.
+
+- **Scope** is the task id (`T-007`), or one of the fixed words: `bootstrap`, `decision`,
+  `knowledge`, `infra`, `complete`. Use `knowledge` when the commit's point is what the repository
+  now knows; use `infra` when it lands reusable tooling, test harness or build configuration.
+- **Name the artefact, not the activity.** A future run greps this text. `loop(infra): add
+  host-side Compose screenshot testing (no emulator)` is findable; `loop(T-010): wire up testing`
+  is not.
+- **Anything a future run could reuse gets a `Reusable:` trailer in the body** — one line, naming
+  the capability and where it lives:
+
+  ```
+  Reusable: host-side Compose screenshot testing, no emulator.
+            gradle/libs.versions.toml + app/src/screenshotTest/
+  ```
+
+  This is what makes `git log --all --grep="^Reusable:"` an exact query instead of a read-through of
+  every subject line ever written. Add it for test infrastructure, build configuration, tooling, and
+  hard-won environment fixes. Do not add it for feature work, which is not reusable by definition.

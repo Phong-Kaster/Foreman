@@ -67,7 +67,7 @@ Consequences that fall out mechanically:
 - **Install** = copy `.loop/`. Nothing to scrub, no stale state travels.
 - **Reset a run** = delete `.ai/` + delete the Loop Branch.
 - **Goal-scoped capability expiry** = automatic, because the scoped ledger lives in `.ai/`.
-- **Knowledge survives** every run because it lives outside `.ai/` — hard-won lessons ("tests need an emulator", "build needs JDK 17") are paid for once, not once per PRD.
+- **Knowledge survives** every run because it lives outside `.ai/` — hard-won lessons ("tests need an emulator", "build needs JDK 17") are paid for once, not once per PRD. That holds along **one branch lineage**: `knowledge/` rides on the Loop Branch and the engine never merges, so a run started from the default branch cannot see it. Bootstrap therefore reads `git log --all` — the one index that survives the Cleanup Commit and spans every branch — before concluding anything is missing ([ADR-011](./adr/ADR-011-the-commit-log-is-the-cross-branch-index.md)).
 - `knowledge/` is a **cache**, never a source of truth: on conflict the codebase wins and the engine corrects the cache.
 
 ---
@@ -120,13 +120,14 @@ The engine must end every successful invocation by producing exactly one **Execu
 | `DONE` | Goal verified complete by a fresh verifier | Stop — success (exit 0) |
 | `ESCALATE` | Engine healthy; a decision exceeds its authority | Stop — surface `.ai/ESCALATION.md` (exit 3) |
 | `FAILED` | Execution itself broken (environment, corruption, resources) | Stop — human repair (exit 4) |
-| *(none — Crash)* | Engine died without reporting | **Watchdog**: re-invoke, up to N consecutive crashes (default 3), then stop (exit 2) |
+| *(none — Crash)* | Engine did work, then died without reporting | **Watchdog**: re-invoke after a growing backoff, up to N consecutive crashes (default 3), then stop (exit 2) |
+| *(none — never started, or refused)* | The CLI could not be launched, or launched and declined on purpose (quota, auth) | **Not a Crash**: stop immediately as `FAILED` (exit 4), relaying the launch error or the CLI's own refusal text. Retrying cannot clear either condition, and doing so spends the budget that protects against real crashes |
 
 `ESCALATE` and `FAILED` both stop; they differ in what the human is asked to do — a **decision** vs a **repair**.
 
 The runtime owns exactly two safety bounds, both mechanical and judgment-free:
 
-- **Watchdog** — an engine cannot supervise its own death; the crash counter resets on any reported status.
+- **Watchdog** — an engine cannot supervise its own death; the crash counter resets on any reported status. The absence of a status is classified before it is reacted to, because it covers three different conditions and only one of them is a Crash: *never started* and *refused* are permanent and stop as `FAILED`, while *died mid-work* is what the retries exist for. Treating all three alike once burned all three retries in five seconds on a quota limit three hours from resetting — and then told the human it was probably transient ([ADR-009](./adr/ADR-009-classify-a-missing-status-before-retrying-it.md)).
 - **Iteration budget** (default 50/run) — stops an engine looping `CONTINUE` forever on an impossible goal. Budget exhaustion produces a deterministic report (exit 5), never an interpretation of task failure.
 
 ---
@@ -187,7 +188,7 @@ Ledger layers map onto the existing lifecycles — no new machinery:
 
 | Class | Example | Lifetime | Ledger |
 |---|---|---|---|
-| Baseline (low-risk, universal) | read files, local git | Permanent, ships with runtime | `.loop/capabilities/baseline.json` |
+| Baseline (low-risk, universal) | read files, local git, `set -o pipefail` | Permanent, ships with runtime | `.loop/capabilities/baseline.json` |
 | Standing (per-repo toolchain) | `./gradlew *`, `npm test` | Per repository, approved at the DoD gate | `knowledge/capabilities.json` |
 | Scoped (high-risk) | `Remove-Item ./build/**` | Current goal (default) | `.ai/capabilities.json` |
 
@@ -208,7 +209,7 @@ The trust chain:
 Git is a **persistence backend** for loop concepts, not their definition ([ADR-003](./adr/ADR-003-checkpoint-abstraction-and-git-persistence.md)). All git logic lives in the engine; the runtime never touches git.
 
 - **Loop Branch** per run (`loop/<prd-slug>`), created at bootstrap from HEAD. The engine never touches the default branch, never pushes, never merges, never rewrites history. A catastrophic run = delete the branch.
-- **Checkpoint = one atomic commit** of code + `.ai/` + `knowledge/` together. STATE.md at HEAD always describes HEAD; they cannot desync. `git log` on the branch *is* the execution history.
+- **Checkpoint = one atomic commit** of code + `.ai/` + `knowledge/` together. Its **subject line is written to be searched**, because `git log --all` is the only cross-branch index that outlives a run (ADR-011): name the durable artefact, and add a `Reusable:` trailer to anything a later run could adopt. STATE.md at HEAD always describes HEAD; they cannot desync. `git log` on the branch *is* the execution history.
 - **Because the branch is the history, `STATE.md` does not have to be.** It is read in full at Orient every iteration, so it keeps only the last three iterations verbatim; older iterations and consumed escalations compact to one-line rows carrying a checkpoint SHA, and the full text is fetched with `git show <sha>:.ai/STATE.md` when — and only when — the index is insufficient. Without this, orientation cost grows with run length until it competes with the work; with it, orienting on iteration 40 costs what it did on iteration 4. The compaction is safe only because `Bash(git show*)` is a baseline capability ([ADR-008](./adr/ADR-008-open-issues-survive-the-cleanup-commit.md)) — before that grant, trimming history would have destroyed it rather than relocated it.
 - **Crash recovery is mechanical**: dirty tree at iteration start = previous invocation died mid-flight. Salvage into a checkpoint if coherent, otherwise revert to the last checkpoint. Never build on unverified debris.
 - **Cleanup Commit** at verified completion: removes `.ai/` from the branch tip; its message carries the completion summary (what was built, DoD criteria → evidence, notable amendments). The mergeable tip contains the implementation, durable knowledge, and nothing disposable — *`.ai/` is the loop's memory while it works, not the product the human merges.* The full `.ai/` evolution stays in branch history for audit.

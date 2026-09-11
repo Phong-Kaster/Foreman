@@ -16,7 +16,7 @@ There are two ways to operate the loop — pick one per repository, both talk to
 ## Prerequisites
 
 - **A git repository** — every Stable Checkpoint is a commit. Start from a clean working tree: the engine reads uncommitted changes at iteration start as debris from a crashed invocation and will salvage or discard them.
-- **Claude Code CLI, installed and authenticated** — the runtime invokes `claude` once per iteration. If it is not on `PATH`, `run.ps1` produces no status and the Watchdog stops the run.
+- **Claude Code CLI, installed and authenticated** — the runtime invokes `claude` once per iteration. If it is not on `PATH` the run stops immediately as `FAILED` (exit 4) naming the launch error; it is not retried, because a missing binary cannot appear between attempts.
 - **Windows PowerShell** — V1 ships `run.ps1` only; the contract itself is shell-agnostic (a `run.sh` waits for the first non-Windows consumer).
 - **Node.js** — skill path only, for `npx`. The loop does not need it; your project may.
 
@@ -153,7 +153,7 @@ Nothing is required from you. There are exactly five ways a run ends, and `run.p
 | `DONE` | 0 | Goal verified complete by a fresh verifier iteration. | Review and merge — §6. |
 | `ESCALATE` | 3 | A decision above the engine's authority: an architecture change (Tier 2), an intent gap (Tier 3), a capability request, missing product information. | Skill path: answer in conversation, as in §4. Manual path: read `.ai/ESCALATION.md`, write decision + rationale under `## Decision`, re-run. One pending escalation at a time, always. |
 | `FAILED` | 4 | Execution itself is broken — environment, repository corruption, exhausted resources. Not "the task was hard". | Repair the environment, re-run (or ask the skill to). The engine resumes from the last checkpoint. |
-| Watchdog | 2 | `MaxConsecutiveCrashes` (default 3) invocations died without producing any status. | Usually a transient CLI/network fault. Inspect `.ai/STATE.md`, re-run. |
+| Watchdog | 2 | `MaxConsecutiveCrashes` (default 3) invocations *did work and then died* without producing any status, with a growing backoff between attempts. | A genuinely transient CLI/network fault. Inspect `.ai/STATE.md`, re-run. |
 | Budget | 5 | `MaxIterations` (default 50) exhausted. A deterministic safety stop, never an interpretation of task failure. | Inspect `.ai/STATE.md` for actual progress, then re-run to continue — or raise `-MaxIterations`. |
 
 Exit code `1` is a prerequisite failure before any engine invocation: `.loop/ENGINE.md` missing (wrong working directory), a `-PrdPath` that does not resolve, or another runtime already holding the run lock.
