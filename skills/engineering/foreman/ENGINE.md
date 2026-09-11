@@ -92,17 +92,36 @@ If `.ai/` does not exist, this invocation is the Bootstrap. Do not implement any
 
 1. Read `PRD.md`. If it is missing: `FAILED`.
 2. Inspect the repository: build system, language, structure, existing conventions, `CLAUDE.md`, READMEs, CI config. These are sources — never edit them.
-3. If `knowledge/` does not exist, create `knowledge/PROJECT.md` from the template: verified build/test/lint commands (run them to verify where capabilities allow), architecture conventions, environmental facts. Never create `knowledge/DOMAIN.md` — it is human-owned and deny-listed to you; if the PRD carries durable domain rules (formulas, algorithms, regulatory or business invariants), propose them as candidate `DOMAIN.md` entries in the Escalation Request below and let the human decide whether the file should exist at all.
-4. Create the Loop Branch: `loop/<prd-slug>` from current HEAD.
-5. Generate `.ai/` from `.loop/templates/`:
+3. **Read what earlier runs already solved, before deciding anything is missing.** Run
+   `git log --all --oneline` and `git log --all --grep="^Reusable:"`. Both are baseline
+   capabilities and cost one command each.
+
+   This repository may already contain a solved version of a problem you are about to solve again,
+   on a branch that was never merged — `.ai/` was deleted at its Cleanup Commit and its `knowledge/`
+   never reached the default branch, so the commit subjects are the only surviving index. The
+   failure this prevents is specific and has happened: an engine declared a repository had "no
+   host-side test setup" and proposed adopting a new framework, while a complete, verified
+   screenshot-testing harness sat on an unmerged sibling branch, plainly described in its own commit
+   message.
+
+   Read it with `MSYS_NO_PATHCONV=1 git show <sha>:<path>`, or resolve the branch to a SHA with
+   `git rev-parse` first — on Windows, `git show <branch-with-slash>:.ai/...` is mangled by the shell.
+
+   If you find prior work this run would otherwise re-derive, do not silently adopt it and do not
+   silently ignore it: name it in the Bootstrap Escalation Request as an explicit option — *"a prior
+   run on `<branch>` already solved X; import it, or re-derive it?"* — with what it contains and what
+   re-deriving would cost. Importing someone else's architecture is the human's call, not yours.
+4. If `knowledge/` does not exist, create `knowledge/PROJECT.md` from the template: verified build/test/lint commands (run them to verify where capabilities allow), architecture conventions, environmental facts. Never create `knowledge/DOMAIN.md` — it is human-owned and deny-listed to you; if the PRD carries durable domain rules (formulas, algorithms, regulatory or business invariants), propose them as candidate `DOMAIN.md` entries in the Escalation Request below and let the human decide whether the file should exist at all.
+5. Create the Loop Branch: `loop/<prd-slug>` from current HEAD.
+6. Generate `.ai/` from `.loop/templates/`:
    - `DoD.md` — testable acceptance criteria derived from the PRD. This is the exam the whole run will be graded against; make every criterion verifiable by evidence. Where the PRD asks for something no available command can prove — appearance, contrast, layout, anything about what a user can perceive — do not narrow the criterion down to the checkable part of it: follow `POLICIES.md` § Evidence Requirements and either propose the capability that makes it provable or escalate that it needs human inspection.
    - `PLAN.md` — your execution strategy (machine-owned; the human will not review it).
    - `TASKS/` — one file per task; each task is a checkpoint of demonstrably working behavior, not an internal component (see `POLICIES.md` § Task Decomposition) — description, dependencies, acceptance, status.
    - `STATE.md` — initialized from the template.
    - `AMENDMENTS.md` — empty log.
-6. Propose standing Capabilities for this repository's toolchain (build/test/lint commands) as part of the Escalation Request below — exact permission rule strings, with intent, command, scope, lifetime.
-7. Write the Escalation Request (§12): *"Approve the Definition of Done (edit freely before approving) and the proposed standing capabilities."*
-8. Checkpoint (commit everything above on the Loop Branch) and report `ESCALATE`.
+7. Propose standing Capabilities for this repository's toolchain (build/test/lint commands) as part of the Escalation Request below — exact permission rule strings, with intent, command, scope, lifetime.
+8. Write the Escalation Request (§12): *"Approve the Definition of Done (edit freely before approving) and the proposed standing capabilities."*
+9. Checkpoint (commit everything above on the Loop Branch) and report `ESCALATE`.
 
 The DoD approval is the only mandatory human gate before autonomous execution. After approval, `DoD.md` is immutable to you forever.
 
