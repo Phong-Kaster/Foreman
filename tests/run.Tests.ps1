@@ -412,39 +412,17 @@ Describe "run.ps1 -PrdPath staging" {
     }
 }
 
-Describe "run.ps1 distinguishes a refusal from a crash" {
+Describe "run.ps1 classifies a launch failure" {
 
-    # Regression for the 2026-09-11 incident: a quota refusal consumed all three watchdog retries
-    # in five seconds, against a limit that would not reset for three hours, and was then reported
-    # to the human as "usually a transient CLI or network problem. Start it again."
+    # feat/proactive-loop already separates a quota rejection from a Crash, and covers it above with
+    # a real rate_limit_event rather than by matching text. What it does not separate is an
+    # invocation that never STARTED: the exception is caught, downgraded to a warning, and then
+    # counted as a Crash because no status file appeared. Three retries against a missing binary.
 
-    It "exits 4 (FAILED) on a quota refusal instead of burning the watchdog" {
+    It "exits 4 (FAILED) when the engine binary cannot be started, without burning the watchdog" {
         $repo = New-TestRepo
         try {
-            Set-FakeClaudeQueue -TestRepo $repo -Directives @("REFUSE|You've hit your session limit - resets 2:30pm")
-            $exit = Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "5", "-MaxConsecutiveCrashes", "3", "-CrashBackoffSeconds", "0")
-            $exit | Should Be 4
-        } finally { Remove-TestRepo -TestRepo $repo }
-    }
-
-    It "does not re-invoke after a refusal" {
-        $repo = New-TestRepo
-        try {
-            # If the refusal were retried, the queued DONE would be consumed and the run would
-            # exit 0. Exit 4 with the DONE still unconsumed proves it stopped on the first refusal.
-            Set-FakeClaudeQueue -TestRepo $repo -Directives @("REFUSE|usage limit reached", "DONE|should never be reached")
-            $exit = Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "5", "-CrashBackoffSeconds", "0")
-
-            $exit | Should Be 4
-            $remaining = @(Get-Content (Join-Path $repo "queue.txt") | Where-Object { $_.Trim() -ne "" })
-            $remaining.Count | Should Be 1
-        } finally { Remove-TestRepo -TestRepo $repo }
-    }
-
-    It "exits 4 (FAILED) when the engine binary cannot be started" {
-        $repo = New-TestRepo
-        try {
-            Set-FakeClaudeQueue -TestRepo $repo -Directives @("DONE|should never run")
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("DONE|must not be reached")
             Push-Location $repo
             try {
                 $args = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $RunPs1,
@@ -454,26 +432,11 @@ Describe "run.ps1 distinguishes a refusal from a crash" {
                 $exit = $LASTEXITCODE
             } finally { Pop-Location }
 
+            # 4, not 2: a missing binary cannot appear between attempts. And the queued DONE must be
+            # untouched, which is what proves it stopped on the first attempt rather than retrying.
             $exit | Should Be 4
-        } finally { Remove-TestRepo -TestRepo $repo }
-    }
-
-    It "still treats a mid-work death as a crash (exit 2), not a refusal" {
-        $repo = New-TestRepo
-        try {
-            Set-FakeClaudeQueue -TestRepo $repo -Directives @("CRASH", "CRASH")
-            $exit = Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "5", "-MaxConsecutiveCrashes", "2", "-CrashBackoffSeconds", "0")
-            $exit | Should Be 2
-        } finally { Remove-TestRepo -TestRepo $repo }
-    }
-
-    It "does not treat a transient overload as a refusal" {
-        $repo = New-TestRepo
-        try {
-            # 'overloaded' is deliberately absent from the refusal list: it is what the Watchdog is for.
-            Set-FakeClaudeQueue -TestRepo $repo -Directives @("REFUSE|API Error 529 overloaded_error", "DONE|recovered")
-            $exit = Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "5", "-MaxConsecutiveCrashes", "3", "-CrashBackoffSeconds", "0")
-            $exit | Should Be 0
+            $remaining = @(Get-Content (Join-Path $repo "queue.txt") | Where-Object { $_.Trim() -ne "" })
+            $remaining.Count | Should Be 1
         } finally { Remove-TestRepo -TestRepo $repo }
     }
 }

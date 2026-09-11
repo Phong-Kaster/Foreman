@@ -24,6 +24,8 @@ param(
     # Mechanical safety bounds - the only "policy" the Runtime owns (ADR-012).
     [int]$MaxIterations = 50,
     [int]$MaxConsecutiveCrashes = 3,
+    # Seconds to wait before re-invoking after a Crash, multiplied by the consecutive crash count.
+    [int]$CrashBackoffSeconds = 15,
     # Idle timeout: no stream event for this long means a hung invocation. Must exceed the longest
     # legitimate single tool call, because one Bash call emits no events while it runs.
     [int]$MaxIdleMinutes = 20,
@@ -403,6 +405,9 @@ function Invoke-EngineOnce {
     $stdoutFile = Join-Path $env:TEMP ("loop-engine-" + [System.Guid]::NewGuid().ToString("N") + ".out")
     $stderrFile = "$stdoutFile.err"
     $timeoutKind = ""
+    # Cleared per invocation. Set only when the process could not be STARTED, which is a different
+    # condition from one that started and died - see the classification at the crash block.
+    $script:LaunchError = $null
 
     $launch = Resolve-EngineLaunch -EngineArgs $EngineArgs
 
@@ -420,11 +425,19 @@ function Invoke-EngineOnce {
     # -WorkingDirectory is explicit and load-bearing: Start-Process launches in .NET's current
     # directory, which is NOT PowerShell's location. Without it the engine runs somewhere else
     # entirely and writes its status file outside the consumer repository.
-    $proc = Start-Process -FilePath $launch.Exe -ArgumentList $launch.ArgString `
-                          -WorkingDirectory $RepoRoot `
-                          -RedirectStandardInput $stdinFile `
-                          -RedirectStandardOutput $stdoutFile -RedirectStandardError $stderrFile `
-                          -NoNewWindow -PassThru
+    # Start-Process sits outside the streaming try/catch below, so a failure to launch was
+    # previously an unhandled terminating error: the run died with exit 1 and no explanation.
+    # Catch it here and record it, so the caller can tell "never started" from "started and died".
+    try {
+        $proc = Start-Process -FilePath $launch.Exe -ArgumentList $launch.ArgString `
+                              -WorkingDirectory $RepoRoot `
+                              -RedirectStandardInput $stdinFile `
+                              -RedirectStandardOutput $stdoutFile -RedirectStandardError $stderrFile `
+                              -NoNewWindow -PassThru
+    } catch {
+        $script:LaunchError = "$_"
+        return ""
+    }
 
     $idleLimit   = New-TimeSpan -Minutes $MaxIdleMinutes
     $hardLimit   = New-TimeSpan -Minutes $MaxIterationMinutes
@@ -483,6 +496,7 @@ function Invoke-EngineOnce {
             Write-RunLog "=== Timeout ($timeoutKind) killed the engine process tree === $(Get-Date -Format o)"
         }
     } catch {
+        $script:LaunchError = "$_"
         Write-Warning "Engine process error: $_"
     } finally {
         if ($null -ne $reader) { try { $reader.Dispose() } catch {} }
@@ -629,6 +643,22 @@ for ($iteration = 1; $iteration -le $MaxIterations; $iteration++) {
         continue
     }
 
+    # ---- A process that never STARTED is not a Crash either ----
+    # Same reasoning as the quota branch above: the Watchdog's budget exists for faults that a retry
+    # can clear. A missing CLI or an over-long argument list clears only when a human acts, so three
+    # retries burn the budget and then report the failure as "probably transient, start it again".
+    # The distinguishing fact - the exception fired before the process ran - is already in hand.
+    if ($null -eq $status -and $null -ne $script:LaunchError) {
+        Write-Host ""
+        Write-Host "The engine could not be started." -ForegroundColor Red
+        Write-Host "  $script:LaunchError"
+        Write-Host "This is not a crash, so it is not retried: another invocation would fail the same way."
+        Write-Host "Repair the environment, then start the run again. It resumes from the last Stable Checkpoint."
+        Write-RunLog "=== Status: FAILED (launch) === $(Get-Date -Format o)"
+        Write-RunLog "FAILED: engine could not be started: $script:LaunchError"
+        exit 4
+    }
+
     if ($null -eq $status) {
         # Crash: the engine died without reporting. Only the Runtime can detect this (Watchdog).
         # A timeout kill lands here deliberately - it IS a crash, and existing recovery applies:
@@ -640,6 +670,14 @@ for ($iteration = 1; $iteration -le $MaxIterations; $iteration++) {
         if ($consecutiveCrashes -ge $MaxConsecutiveCrashes) {
             Write-Host "Watchdog limit reached. Stopping. The next run's engine will recover from the last Stable Checkpoint." -ForegroundColor Red
             exit 2
+        }
+        # Give a transient fault room to clear. Retrying three times inside a few seconds spends the
+        # budget before the condition it protects against has had any chance to pass.
+        $wait = $CrashBackoffSeconds * $consecutiveCrashes
+        if ($wait -gt 0) {
+            Write-Host "Waiting $wait s before re-invoking (backoff)." -ForegroundColor DarkGray
+            Write-RunLog "backoff $wait s after crash $consecutiveCrashes"
+            Start-Sleep -Seconds $wait
         }
         continue
     }
