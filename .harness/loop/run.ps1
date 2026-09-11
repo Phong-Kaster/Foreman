@@ -163,6 +163,11 @@ function Compile-PermissionSettings {
         "Write(.harness/knowledge/capabilities.json)",
         "Edit(.harness/run/capabilities.json)",
         "Write(.harness/run/capabilities.json)",
+        # Human-owned domain truth. It OUTRANKS the codebase (ENGINE.md, Source of Truth), so an
+        # engine able to rewrite it could quietly replace a correct rule with its own misreading -
+        # and the Fresh-Context Review would then validate all future code against the corruption.
+        "Edit(.harness/knowledge/DOMAIN.md)",
+        "Write(.harness/knowledge/DOMAIN.md)",
         # Pushing is capability-gated (ADR-011) and scoped to the Loop Branch. These deny the
         # operations that would make the engine an author on shared history rather than a
         # contributor on its own branch - regardless of what any allow rule grants.

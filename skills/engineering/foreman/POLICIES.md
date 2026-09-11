@@ -80,6 +80,25 @@ Every queued entry must name the tasks it blocks. That naming is the safety prop
 
 Never queue a decision merely because implementation is difficult. Difficulty is your job.
 
+## Domain Knowledge is human-owned and outranks the codebase
+
+`.harness/knowledge/DOMAIN.md` is optional, and absent rather than stubbed when a project has none.
+It holds durable truth about the problem domain - rules, formulas, algorithms, business and
+regulatory invariants - and its conflict rule is the **inverse** of `PROJECT.md`'s:
+
+| | `PROJECT.md` | `DOMAIN.md` |
+|---|---|---|
+| Owner | Engine (human-editable, no gate) | **Human only** - engine reads and proposes, never writes |
+| On conflict with the codebase | **Codebase wins**; it caches facts about the code | **This file wins**; the code is an attempt at the rule |
+
+Applying one file's rule to the other is a defect. A formula implemented plausibly-but-wrongly
+passes the build and passes tests written from the same misreading - the Fresh-Context Review
+holding the authoritative rule, rather than the Worker's reasoning, is the only mind placed to catch
+it. Give the reviewer every `DOMAIN.md` rule the diff touches.
+
+Engine-immutable is enforced by runtime deny rules, not by asking: a rule enforced by a script is a
+rule, a rule living only in a prompt is a wish (ADR-002).
+
 ## Constraints vs Reference in Knowledge
 
 `.harness/knowledge/PROJECT.md` splits by one question: **if a Worker ignored this, would the result
@@ -152,6 +171,34 @@ Finding severities:
 - **Minor** — style, naming, polish. Fix opportunistically or record; never let minors block progress.
 
 Findings recorded but not fixed belong in the Issues Report — otherwise they vanish when `.harness/run/` is removed.
+
+## User-Interface Defects
+
+Every line here was earned by a real failure that a passing build, a passing test suite, and a
+fresh-context review all missed. They are **Critical**, not polish: each one makes a stated
+requirement untrue while every automated check stays green.
+
+- **A marker drawn on a filled shape must contrast with that fill, not repeat it.** A dot painted
+  in the same role as the container it sits on is invisible. Check the *combined* states, not each
+  in isolation — the broken case is usually the overlap (selected *and* flagged, today *and* has
+  content).
+- **A screen holding a variable-length list must scroll.** Fixed-height layouts silently push
+  content — including the controls for adding more — off the bottom, so the requirement fails
+  precisely for the users who rely on the feature most.
+- **Every list needs an empty state.** A blank region reads as a load failure, not as "nothing
+  here yet". If a component defers this to its caller, verify the caller actually does it.
+- **A destructive action needs a confirmation step**, and the confirming control must be visually
+  distinct from the safe one. One-tap irreversible deletion is a defect, not a shortcut.
+- **Text that can exceed its container needs a defined overflow behaviour** — wrap, expand, or an
+  affordance to read the rest. Truncating to one line with no route to the full value loses data
+  the user entered.
+- **Colour must come from the theme, never hardcoded.** Hardcoded values work only by coincidence
+  with whatever background happens to sit underneath, and fail as soon as that changes. If a
+  colour scheme is declared, fill in **every** role it defines: partial schemes leave components
+  reaching for roles nobody chose.
+
+Note also that a component preview rendered outside the app's real theme and ground colour proves
+nothing about what a user sees — this is exactly how hardcoded colours survive review.
 
 ## Evidence Requirements
 
