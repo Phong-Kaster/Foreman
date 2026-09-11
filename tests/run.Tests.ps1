@@ -103,7 +103,7 @@ Describe "run.ps1 status reactions" {
         $repo = New-TestRepo
         try {
             Set-FakeClaudeQueue -TestRepo $repo -Directives @("CRASH", "CRASH")
-            $exit = Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "5", "-MaxConsecutiveCrashes", "2")
+            $exit = Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "5", "-MaxConsecutiveCrashes", "2", "-CrashBackoffSeconds", "0")
             $exit | Should Be 2
         } finally { Remove-TestRepo -TestRepo $repo }
     }
@@ -161,6 +161,72 @@ Describe "run.ps1 -PrdPath staging" {
 
             $exit | Should Be 0
             (Get-Content (Join-Path $repo "PRD.md") -Raw).Trim() | Should Be "original requirement text"
+        } finally { Remove-TestRepo -TestRepo $repo }
+    }
+}
+
+Describe "run.ps1 distinguishes a refusal from a crash" {
+
+    # Regression for the 2026-09-11 incident: a quota refusal consumed all three watchdog retries
+    # in five seconds, against a limit that would not reset for three hours, and was then reported
+    # to the human as "usually a transient CLI or network problem. Start it again."
+
+    It "exits 4 (FAILED) on a quota refusal instead of burning the watchdog" {
+        $repo = New-TestRepo
+        try {
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("REFUSE|You've hit your session limit - resets 2:30pm")
+            $exit = Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "5", "-MaxConsecutiveCrashes", "3", "-CrashBackoffSeconds", "0")
+            $exit | Should Be 4
+        } finally { Remove-TestRepo -TestRepo $repo }
+    }
+
+    It "does not re-invoke after a refusal" {
+        $repo = New-TestRepo
+        try {
+            # If the refusal were retried, the queued DONE would be consumed and the run would
+            # exit 0. Exit 4 with the DONE still unconsumed proves it stopped on the first refusal.
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("REFUSE|usage limit reached", "DONE|should never be reached")
+            $exit = Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "5", "-CrashBackoffSeconds", "0")
+
+            $exit | Should Be 4
+            $remaining = @(Get-Content (Join-Path $repo "queue.txt") | Where-Object { $_.Trim() -ne "" })
+            $remaining.Count | Should Be 1
+        } finally { Remove-TestRepo -TestRepo $repo }
+    }
+
+    It "exits 4 (FAILED) when the engine binary cannot be started" {
+        $repo = New-TestRepo
+        try {
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("DONE|should never run")
+            Push-Location $repo
+            try {
+                $args = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $RunPs1,
+                          "-ClaudeCommand", "claude-does-not-exist-on-this-machine",
+                          "-QuietEngine", "-MaxIterations", "5", "-CrashBackoffSeconds", "0")
+                & powershell @args | Out-Null
+                $exit = $LASTEXITCODE
+            } finally { Pop-Location }
+
+            $exit | Should Be 4
+        } finally { Remove-TestRepo -TestRepo $repo }
+    }
+
+    It "still treats a mid-work death as a crash (exit 2), not a refusal" {
+        $repo = New-TestRepo
+        try {
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("CRASH", "CRASH")
+            $exit = Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "5", "-MaxConsecutiveCrashes", "2", "-CrashBackoffSeconds", "0")
+            $exit | Should Be 2
+        } finally { Remove-TestRepo -TestRepo $repo }
+    }
+
+    It "does not treat a transient overload as a refusal" {
+        $repo = New-TestRepo
+        try {
+            # 'overloaded' is deliberately absent from the refusal list: it is what the Watchdog is for.
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("REFUSE|API Error 529 overloaded_error", "DONE|recovered")
+            $exit = Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "5", "-MaxConsecutiveCrashes", "3", "-CrashBackoffSeconds", "0")
+            $exit | Should Be 0
         } finally { Remove-TestRepo -TestRepo $repo }
     }
 }

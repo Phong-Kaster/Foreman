@@ -18,12 +18,20 @@
 .NOTES
     Run from the consumer repository root. Requires: git, Claude Code CLI, PRD.md.
     Exit codes: 0=DONE  2=crash limit  3=ESCALATE  4=FAILED  5=iteration budget exhausted
+
+    A Crash is specifically "the engine was working and died before reporting". An engine that
+    never started, or that started and deliberately refused (quota, auth), is FAILED - not a
+    Crash - because retrying it cannot help and only spends the Watchdog budget.
 #>
 
 param(
     # Mechanical safety bounds — the only "policy" the Runtime owns.
     [int]$MaxIterations = 50,
     [int]$MaxConsecutiveCrashes = 3,
+    # Seconds to wait before re-invoking after a Crash, multiplied by the consecutive crash count.
+    # Three invocations inside five seconds is not a retry policy: it exhausts the budget before a
+    # genuinely transient fault has had any chance to clear.
+    [int]$CrashBackoffSeconds = 15,
     # Invocation mechanics.
     [string]$ClaudeCommand = "claude",
     [string]$Model = "",
@@ -171,6 +179,51 @@ function Read-ExecutionStatus {
     return $null  # Malformed status = no status = crash.
 }
 
+# ---------- Invocation outcome classifier ----------
+# The absence of a status is not one condition, it is three, and only one of them is a Crash:
+#   never started  -> environment fault (CLI missing, argument list too long). Permanent.
+#   refused        -> the CLI ran and declined on purpose (quota, auth). Permanent until a human acts.
+#   died mid-work  -> a real Crash. This is the one the Watchdog exists for.
+# Retrying the first two is worse than useless: it burns the retries that protect against the third.
+# Observed 2026-09-11 - a quota refusal consumed all three retries in five seconds against a limit
+# that would not reset for three hours, then reported it as "usually transient, start it again".
+#
+# Deliberately NOT listed: overloaded, 529, timeout, connection reset. Those are transient by
+# definition and must keep reaching the Watchdog.
+$RefusalPatterns = @(
+    'session limit',
+    'usage limit',
+    'rate limit',
+    'quota',
+    'credit balance',
+    'insufficient credit',
+    'please run /login',
+    'not logged in',
+    'invalid api key',
+    'authentication_error',
+    'unauthorized'
+)
+
+function Get-EngineRefusal([string[]]$lines) {
+    if ($null -eq $lines -or $lines.Count -eq 0) { return $null }
+    foreach ($line in $lines) {
+        foreach ($pattern in $RefusalPatterns) {
+            if ($line -match [regex]::Escape($pattern)) { return $line.Trim() }
+        }
+    }
+    return $null
+}
+
+# Stop the run for a reason the engine cannot resolve by being invoked again.
+function Stop-AsFailed([string]$headline, [string]$detail) {
+    Write-Host ""
+    Write-Host $headline -ForegroundColor Red
+    if ($detail -ne "") { Write-Host "  $detail" }
+    Write-Host "This is not a crash, so it is not retried: another invocation would fail the same way."
+    Write-RunLog "=== Status: FAILED === $(Get-Date -Format o)"
+    Write-RunLog "FAILED: $headline $detail"
+}
+
 # ---------- Timer ----------
 $RunStart = Get-Date
 function Format-Elapsed([datetime]$since) {
@@ -204,8 +257,24 @@ for ($iteration = 1; $iteration -le $MaxIterations; $iteration++) {
     # Invoke the engine. Its exit code is irrelevant; only the persisted status counts.
     # Default: stream engine events so a human can SEE that the loop is alive and what it is doing.
     # Purely mechanical passthrough — the Runtime relays events, it never interprets them.
+    # Per-invocation facts the classifier needs. An engine that made no tool call did no work,
+    # which is what distinguishes a refusal from a death mid-task.
+    $script:LaunchError   = $null
+    $script:ToolCallCount = 0
+    $script:EngineText    = New-Object System.Collections.ArrayList
+
     if ($QuietEngine) {
-        try { & $ClaudeCommand @claudeArgs } catch { Write-Warning "Engine process error: $_" }
+        # No 2>&1 here: in PS 5.1 redirecting a native command's stderr wraps each line in an
+        # ErrorRecord and trips $ErrorActionPreference. stdout carries the refusal text anyway.
+        try {
+            & $ClaudeCommand @claudeArgs | ForEach-Object {
+                Write-Host $_
+                if ("$_".Trim() -ne "") { [void]$script:EngineText.Add("$_") }
+            }
+        } catch {
+            $script:LaunchError = "$_"
+            Write-Warning "Engine process error: $_"
+        }
     } else {
         $claudeArgs += @("--output-format", "stream-json", "--verbose")
         try {
@@ -219,6 +288,7 @@ for ($iteration = 1; $iteration -le $MaxIterations; $iteration++) {
                     if ($evt.type -eq "assistant" -and $null -ne $evt.message.content) {
                         foreach ($block in $evt.message.content) {
                             if ($block.type -eq "tool_use") {
+                                $script:ToolCallCount++
                                 $detail = ""
                                 if ($null -ne $block.input.file_path) { $detail = " " + $block.input.file_path }
                                 elseif ($null -ne $block.input.command) { $detail = " " + $block.input.command }
@@ -227,6 +297,9 @@ for ($iteration = 1; $iteration -le $MaxIterations; $iteration++) {
                                 Write-RunLog $line
                             }
                             if ($block.type -eq "text" -and $block.text.Trim() -ne "") {
+                                # Full text, not the console snippet: the console truncates at
+                                # 160 chars and refusal wording must survive intact for matching.
+                                [void]$script:EngineText.Add($block.text.Trim())
                                 $snippet = ($block.text.Trim() -replace "\s+", " ")
                                 if ($snippet.Length -gt 160) { $snippet = $snippet.Substring(0, 160) + "..." }
                                 $line = "[$stamp] engine: $snippet"
@@ -242,18 +315,56 @@ for ($iteration = 1; $iteration -le $MaxIterations; $iteration++) {
                     }
                 }
             }
-        } catch { Write-Warning "Engine process error: $_" }
+        } catch {
+            $script:LaunchError = "$_"
+            Write-Warning "Engine process error: $_"
+        }
     }
 
     $status = Read-ExecutionStatus
 
     if ($null -eq $status) {
-        # Crash: the engine died without reporting. Only the Runtime can detect this (Watchdog).
+        # No status is not one condition but three - see the Invocation outcome classifier above.
+        $capturedText = @($script:EngineText)
+        $refusalLine  = Get-EngineRefusal $capturedText
+
+        # (a) The process never ran: CLI not on PATH, argument list too long, exec denied.
+        if ($null -ne $script:LaunchError) {
+            Stop-AsFailed "The engine could not be started." $script:LaunchError
+            Write-Host "Repair the environment, then start the run again. It resumes from the last Stable Checkpoint."
+            exit 4
+        }
+
+        # (b) The process ran and declined on purpose. Permanent until a human acts, and the CLI's
+        #     own message usually says exactly what to do - so it is relayed verbatim.
+        if ($null -ne $refusalLine) {
+            Stop-AsFailed "The engine refused to run:" $refusalLine
+            Write-Host "Resolve that, then start the run again. It resumes from the last Stable Checkpoint."
+            exit 4
+        }
+
+        # (c) The process ran, made no tool call, reported nothing: it did no work, so a retry has
+        #     nothing to land on. Only detectable while the event stream is being parsed.
+        if (-not $QuietEngine -and $script:ToolCallCount -eq 0) {
+            $tail = ""
+            if ($capturedText.Count -gt 0) { $tail = $capturedText[$capturedText.Count - 1] }
+            Stop-AsFailed "The engine exited without doing any work and without reporting a status." $tail
+            exit 4
+        }
+
+        # (d) A genuine Crash: it was working and died before reporting. The Watchdog's actual job.
         $consecutiveCrashes++
         Write-Warning "Crash detected (no Execution Status). Consecutive crashes: $consecutiveCrashes / $MaxConsecutiveCrashes"
         if ($consecutiveCrashes -ge $MaxConsecutiveCrashes) {
             Write-Host "Watchdog limit reached. Stopping. The next run's engine will recover from the last Stable Checkpoint." -ForegroundColor Red
             exit 2
+        }
+        # Back off before re-invoking, so a transient fault has room to clear.
+        $wait = $CrashBackoffSeconds * $consecutiveCrashes
+        if ($wait -gt 0) {
+            Write-Host "Waiting $wait s before re-invoking (backoff)." -ForegroundColor DarkGray
+            Write-RunLog "backoff $wait s after crash $consecutiveCrashes"
+            Start-Sleep -Seconds $wait
         }
         continue
     }

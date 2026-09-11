@@ -10,7 +10,11 @@
       DONE|<reason>       -> writes .ai/STATUS.md = DONE
       ESCALATE|<reason>   -> writes .ai/STATUS.md = ESCALATE
       FAILED|<reason>     -> writes .ai/STATUS.md = FAILED
-      CRASH               -> writes nothing (simulates a crashed engine invocation)
+      CRASH               -> emits a tool_use event, then writes nothing. This is a REAL crash:
+                             the engine did work and died before reporting.
+      REFUSE|<message>    -> prints <message>, makes no tool call, writes nothing. Simulates the
+                             CLI declining on purpose (quota, auth) and exiting 0.
+      SILENT              -> exits 0 having printed nothing and done nothing.
       SLEEP:<seconds>     -> sleeps, writes nothing (used for run-lock overlap tests)
 
     An empty or missing queue also writes nothing (crash), so an unconfigured test fails loudly
@@ -36,7 +40,24 @@ $directive = $lines[0]
 $rest = if ($lines.Count -gt 1) { $lines[1..($lines.Count - 1)] } else { @() }
 Set-Content -Path $QueueFile -Value $rest
 
-if ($directive -eq "CRASH") { exit 0 }
+# A crash is "did work, then died". The tool_use event is what makes it distinguishable from a
+# refusal, which is exactly the distinction run.ps1's classifier depends on.
+if ($directive -eq "CRASH") {
+    $evt = '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","input":{"command":"echo working"}}]}}'
+    Write-Output $evt
+    exit 0
+}
+
+# Ran, declined on purpose, exited 0. No tool call, no status.
+if ($directive -like "REFUSE|*") {
+    $message = $directive.Substring(7)
+    $clean = $message -replace '[\\\\"]', ''
+    Write-Output ('{"type":"assistant","message":{"content":[{"type":"text","text":"' + $clean + '"}]}}')
+    exit 0
+}
+
+# Ran, said nothing, did nothing.
+if ($directive -eq "SILENT") { exit 0 }
 
 if ($directive -like "SLEEP:*") {
     $seconds = [int]($directive.Substring(6))
