@@ -319,6 +319,18 @@ is always available; it executes nothing and only makes a pipeline report the fi
 in it. `${PIPESTATUS[0]}` and redirecting to a file are both refused by the permission matcher
 (verified 2026-09-11), so neither is an option.
 
+**Read a result file only from a run whose own success line you saw.** Asking for four tasks in one
+command does not mean four tasks ran: the first failure aborts the rest, and the results file from
+the *previous* invocation is still on disk with its old counts and `failures="0"`. Reading it
+produces a confident, wrong "the new tests pass", and the tell is subtle — the counts did not go
+**up** after tests were added. Treat an unchanged count as a failure to run, not as a pass.
+
+**A green subset of commands is not a green tree.** Know which commands cover which source sets, and
+which cover none. A build task and a unit-test task can both report success while a third source set
+does not compile at all — changing a signature the third one calls is enough. When you change
+anything shared, run the command set that covers the whole tree, and say which commands that was.
+"Everything I ran passed" is only evidence if you can name what you did not run.
+
 ## Capability Risk Classes
 
 - **Low-risk (baseline, permanent, ships with the runtime):** reading repository files; `git status/diff/log/add/commit/checkout/branch` local operations; creating and editing files inside the consumer repository (excluding protected paths).
@@ -341,3 +353,14 @@ Protected paths (never writable by the engine, enforced by runtime deny rules): 
 - `git push` of the Loop Branch is permitted only under a granted capability, and only for that branch. Pushing makes a mid-run machine failure survivable and lets the human review from elsewhere; it is never a step toward merging, which stays a human act.
 - One atomic checkpoint commit per iteration: code + `.harness/run/` + `.harness/knowledge/` together.
 - Commit messages: first line `loop(phase-<n>): <what a human would call this>` — a plain-language summary, not a list of task ids. Body lists what each Worker did, the evidence summary, and amendments made.
+
+**Reading a file out of an earlier commit or another branch is not symmetric across paths.**
+`git show <ref>:<path>` behaves for ordinary source paths. For a path beginning with a dot-directory
+— `.harness/**` included, which is every path this loop writes — Git Bash rewrites `ref:path` into
+`ref;path` and fails with *"unknown revision or path not in the working tree"*. That message reads
+exactly like the file is absent when it is present, so the natural conclusion is the wrong one: that
+the history holds nothing.
+
+Prefix those reads with `MSYS_NO_PATHCONV=1`, or resolve the ref to a SHA with `git rev-parse` first
+— the SHA form is unaffected. Never conclude a record is missing from that error alone; re-read it
+the other way before believing it.

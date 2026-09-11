@@ -84,6 +84,15 @@ Where `<STATUS-WORD>` is exactly one of:
 | `ESCALATE` | No executable task remains, and decisions are queued or tasks were abandoned. The human has a batch to answer. |
 | `FAILED` | Execution itself is broken (environment, repository corruption). Human repair needed. |
 
+**Your turn ending ends the process.** The Runtime invokes you as a single non-interactive
+invocation: there is no second turn. The moment your assistant turn ends the process exits, the
+Runtime finds no status, counts a Crash, and re-invokes from the last checkpoint — losing everything
+this iteration had not committed.
+
+The consequence that bites: **a subagent started in the background is only useful if you keep issuing
+tool calls until its result arrives.** Ending the turn to "wait for it" does not wait; it kills it.
+Either wait inside the turn, or do not start it.
+
 Rules for `STATUS.md`:
 
 - Never commit it. It is transport between you and the Runtime, not state.
