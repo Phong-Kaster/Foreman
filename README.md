@@ -41,9 +41,9 @@ Foreman is a **portable autonomous execution engine for Claude Code**. You hand 
 | Piece | What it is | Where |
 |---|---|---|
 | **The skill** (`/foreman`) | Your on-ramp. Installs the runtime, saves your requirement as `PRD.md`, launches the engine in the background, streams its work into your chat, and turns every decision point into a normal question. | `skills/engineering/foreman/` |
-| **The engine + runtime** | The actual loop. A deliberately dumb PowerShell script (`run.ps1`) that re-runs Claude Code over and over, reads back **one word** each time (`CONTINUE` / `DONE` / `ESCALATE` / `FAILED`), and reacts mechanically. All the thinking lives in `ENGINE.md`, a spec injected as the AI's system prompt — never in the script. | `.loop/` |
+| **The engine + runtime** | The actual loop. A deliberately dumb PowerShell script (`run.ps1`) that re-runs Claude Code over and over, reads back **one word** each time (`CONTINUE` / `DONE` / `ESCALATE` / `FAILED`), and reacts mechanically. All the thinking lives in `ENGINE.md`, a spec injected as the AI's system prompt — never in the script. | `.harness/loop/` |
 
-Day to day you only touch the skill. It exists precisely so you never have to open `.loop/` yourself.
+Day to day you only touch the skill. It exists precisely so you never have to open `.harness/loop/` yourself.
 
 **What you get at the end:** one local git branch (`loop/<your-feature>`) holding the code, the tests, and a final commit message listing every checklist item with the evidence that proves it. Nothing pushed. Nothing merged. That last step is always yours.
 
@@ -70,7 +70,7 @@ npx skills@latest add Phong-Kaster/Foreman
 
 That drops the `foreman` skill into `.claude/skills/foreman/` (and `.agents/skills/foreman/`) and records it in `skills-lock.json` — the same way you'd install any shared Claude Code skill. Nothing else to copy by hand.
 
-> **Don't want the installer?** `.loop/` is a self-contained folder. Copy it into any repo's root and run `powershell .loop/run.ps1` from a terminal. Full instructions: [docs/consumer-guide.md](./docs/consumer-guide.md).
+> **Don't want the installer?** `.harness/loop/` is a self-contained folder. Copy it into any repo's root and run `powershell .harness/loop/run.ps1` from a terminal. Full instructions: [docs/consumer-guide.md](./docs/consumer-guide.md).
 
 ### Then start a run
 
@@ -129,24 +129,24 @@ Five ways a run ends. Only the first two need anything from you:
 | `FAILED` (4) | Execution itself is broken: build tool missing, disk full, repo corrupted. Not "the task was hard". | Fix the environment, then start it again. It resumes from the last commit. |
 | `DONE` (0) | A fresh verifier re-proved every checklist item. | Review and merge (below). |
 | Watchdog (2) | The AI died without reporting, 3 times in a row. | Usually a transient CLI or network problem. Start it again. |
-| Budget (5) | Hit the 50-cycle ceiling. | Not a verdict on the work — a deterministic stop. Check `.ai/STATE.md` to see where it got to, then continue. |
+| Budget (5) | Hit the 50-cycle ceiling. | Not a verdict on the work — a deterministic stop. Check `.harness/run/STATE.md` to see where it got to, then continue. |
 
 **What makes a good answer when it asks:** you may always **narrow** a request — tighten a vague checklist item, cut the permission down to a single command, say "console output, not a desktop notification". You can't accidentally widen anything; the engine can only ever get less than it asked for. And say *why* — your reason gets recorded in the audit trail alongside the decision, which is what makes the branch readable in three months.
 
 ### Reviewing and merging
 
-When it reports `DONE`, the branch tip holds the code, the tests, updated `knowledge/`, and **no scratch notes** — those were stripped in the final commit, whose message is the completion summary.
+When it reports `DONE`, the branch tip holds the code, the tests, updated `.harness/knowledge/`, and **no scratch notes** — those were stripped in the final commit, whose message is the completion summary.
 
 ```powershell
 git branch --list 'loop/*'              # every run this repo has ever done
 git log --oneline loop/<prd-slug>       # the execution history, cycle by cycle
 git log -1 loop/<prd-slug>              # the completion summary: criteria -> evidence
-git diff main...loop/<prd-slug>         # everything it changed, as one review
+git diff main...harness/loop/<prd-slug>         # everything it changed, as one review
 git merge loop/<prd-slug>               # your call, your hands
 ```
 
-- **Next feature:** `/foreman <the next requirement>` in the same repo. A new branch and new scratch notes get created, but `knowledge/` carries over — the build commands and environment quirks it learned the hard way are paid for once, not once per feature.
-- **Abandoning a run:** delete `.ai/` and delete the branch. Nothing else to clean up, and your default branch was never touched.
+- **Next feature:** `/foreman <the next requirement>` in the same repo. A new branch and new scratch notes get created, but `.harness/knowledge/` carries over — the build commands and environment quirks it learned the hard way are paid for once, not once per feature.
+- **Abandoning a run:** delete `.harness/run/` and delete the branch. Nothing else to clean up, and your default branch was never touched.
 
 Full operating manual — every `run.ps1` parameter, the manual (non-skill) path, and the engine's hard limits: [docs/consumer-guide.md](./docs/consumer-guide.md).
 
@@ -234,8 +234,8 @@ Each cycle is one git commit holding the code *and* the notes together, so the t
 |---|---|
 | what you want | PRD |
 | the checklist | Definition of Done (DoD) |
-| the notebook | `.ai/` (this run) and `knowledge/` (worth keeping forever) |
-| the house rules only you can change | `knowledge/DOMAIN.md` — Domain Knowledge |
+| the notebook | `.harness/run/` (this run) and `.harness/knowledge/` (worth keeping forever) |
+| the house rules only you can change | `.harness/knowledge/DOMAIN.md` — Domain Knowledge |
 | "a rule has to be earned by a real mistake" | the Ratchet |
 | one cycle | an Iteration |
 | a save point | a Stable Checkpoint (one git commit) |
@@ -257,13 +257,13 @@ Foreman/
 │   ├── ENGINE.md                     the AI's operating contract
 │   ├── POLICIES.md                   engineering policy (retries, reviews, evidence)
 │   ├── capabilities/baseline.json    the starter keyring — safe stuff only
-│   ├── templates/                    blueprints for .ai/ and knowledge/
+│   ├── templates/                    blueprints for .harness/run/ and knowledge/
 │   └── scripts/run.ps1               the loop script
 │
 ├── skills/knowledge/                 ← OPT-IN STACK PACKS — platform knowledge, human-curated,
-│   └── android-compose-visual-testing/  never auto-promoted into .loop/ (ADR-007)
+│   └── android-compose-visual-testing/  never auto-promoted into .harness/loop/ (ADR-007)
 │
-├── .loop/                            ← THE SAME THING, standalone — for manual installs
+├── .harness/loop/                            ← THE SAME THING, standalone — for manual installs
 ├── tests/                            ← Pester tests for run.ps1, driven by a fake `claude` stub
 ├── docs/
 │   ├── architecture.md               the complete design
@@ -278,9 +278,9 @@ Foreman/
 ```
 your-repo/
 ├── .claude/skills/foreman/   ← the installed skill
-├── .loop/                    ← the runtime, refreshed on every /foreman
+├── .harness/loop/                    ← the runtime, refreshed on every /foreman
 ├── PRD.md                    ← yours. what you want.
-├── .ai/                      ← the robot's working notes for this run. Disposable —
+├── .harness/run/                      ← the robot's working notes for this run. Disposable —
 │                               removed from the branch tip when it finishes.
 └── knowledge/                ← survives every run. Three files, three rules:
     ├── PROJECT.md            ← what it learned about your repo (build commands,

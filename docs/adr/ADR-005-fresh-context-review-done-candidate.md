@@ -15,4 +15,5 @@ The builder creates. The reviewer challenges. The verifier confirms.
 ## Consequences
 
 - Completion is declared by a context that never wrote the implementation, which is the property §Verification demands but cannot otherwise enforce.
+- **Narrowed by [ADR-015](./ADR-015-human-verifiable-criteria.md):** the Verifier certifies the `machine` half of the DoD. It cannot see the running software, so it never had standing over the rest — and by reporting `DONE` it was implicitly claiming that standing anyway. A run whose `human` criteria are unsigned now stops at `ESCALATE` with a checklist instead.
 - Cost: one subagent call per task, plus exactly one extra iteration per run.

@@ -8,12 +8,12 @@ This document is the complete design of Foreman. Terms in **bold capitals** are 
 
 An application of Addy Osmani's **Loop Engineering** idea: instead of a human prompting an AI step by step, the human provides intent once (a PRD), and a self-orchestrating loop drives the AI through *read state → pick task → implement → build → test → review → reconcile → persist → repeat* until a verifiable goal is met.
 
-Foreman packages that idea as a **portable artifact**: one `.loop/` directory that can be copied into any repository — Android, Spring, React, Python, anything — and immediately becomes that repository's autonomous execution engine.
+Foreman packages that idea as a **portable artifact**: one `.harness/loop/` directory that can be copied into any repository — Android, Spring, React, Python, anything — and immediately becomes that repository's autonomous execution engine.
 
 Two surfaces install and operate that artifact. Both drive the exact same engine and contracts described in this document — neither changes the architecture, only how a human reaches it:
 
-- **The Skill** (recommended) — `npx skills@latest add <owner>/Foreman`, then `/foreman <requirement>`. Carries its own copy of `.loop/`'s contents, materializes them at the consumer repo root, stages the requirement as `PRD.md`, launches and supervises `run.ps1` live in the conversation, mediates Escalation Requests as ordinary questions instead of file edits, and produces a Roll-up Summary across every Loop Branch at completion.
-- **Manual** — copy `.loop/` into the repository root by hand, write `PRD.md` yourself, run `powershell .loop/run.ps1` from a terminal.
+- **The Skill** (recommended) — `npx skills@latest add <owner>/Foreman`, then `/foreman <requirement>`. Carries its own copy of `.harness/loop/`'s contents, materializes them at the consumer repo root, stages the requirement as `PRD.md`, launches and supervises `run.ps1` live in the conversation, mediates Escalation Requests as ordinary questions instead of file edits, and produces a Roll-up Summary across every Loop Branch at completion.
+- **Manual** — copy `.harness/loop/` into the repository root by hand, write `PRD.md` yourself, run `powershell .harness/loop/run.ps1` from a terminal.
 
 The Skill is additive: it stages input and supervises/summarizes output, but exercises no authority the Trust Chain (§9) didn't already grant through a human-approved Capability. Everything from §2 onward describes the engine and runtime both surfaces drive identically.
 
@@ -45,12 +45,12 @@ A consumer repository contains four loop artifacts. There are four **because the
 
 | Artifact | Lifecycle | Owner | Content |
 |---|---|---|---|
-| `.loop/` | Install-time; replaced only by runtime upgrades | Foreman product | Engine spec, policies, runtime script, templates, baseline capabilities |
+| `.harness/loop/` | Install-time; replaced only by runtime upgrades | Foreman product | Engine spec, policies, runtime script, templates, baseline capabilities |
 | `PRD.md` | Per feature; written before a run | Human | Product intent: objective, requirements, constraints |
-| `.ai/` | Per feature run; disposable | Engine (plus one human-owned file: `DoD.md`) | Plan, tasks, state, amendments, escalations, goal-scoped capabilities |
-| `knowledge/` | Per repository; cumulative across runs | Split — see below | `PROJECT.md`, `ISSUES.md`, optional `DOMAIN.md`, standing capabilities |
+| `.harness/run/` | Per feature run; disposable | Engine (plus one human-owned file: `DoD.md`) | Plan, tasks, state, amendments, escalations, goal-scoped capabilities |
+| `.harness/knowledge/` | Per repository; cumulative across runs | Split — see below | `PROJECT.md`, `ISSUES.md`, optional `DOMAIN.md`, standing capabilities |
 
-`knowledge/` holds three files with different owners and incompatible rules ([ADR-007](./adr/ADR-007-knowledge-stratification-and-ratchet.md), [ADR-008](./adr/ADR-008-open-issues-survive-the-cleanup-commit.md)):
+`.harness/knowledge/` holds three files with different owners and incompatible rules ([ADR-007](./adr/ADR-007-knowledge-stratification-and-ratchet.md), [ADR-008](./adr/ADR-008-open-issues-survive-the-cleanup-commit.md)):
 
 | File | Owner | Content | How an entry is treated |
 |---|---|---|---|
@@ -60,15 +60,15 @@ A consumer repository contains four loop artifacts. There are four **because the
 
 The `PROJECT.md`/`ISSUES.md` split exists because "how it is" and "what is wrong with it" cannot share a file: a defect recorded as a fact is read as the local convention and reproduced on purpose.
 
-Neither is a home for knowledge about a technology stack in general (platform API behaviour, framework idioms): that is not truth about *this* repository, nothing here can verify it, and it rots with no mechanism to correct it. Stack knowledge belongs in a separate opt-in, human-curated pack — never auto-promoted into `.loop/`.
+Neither is a home for knowledge about a technology stack in general (platform API behaviour, framework idioms): that is not truth about *this* repository, nothing here can verify it, and it rots with no mechanism to correct it. Stack knowledge belongs in a separate opt-in, human-curated pack — never auto-promoted into `.harness/loop/`.
 
 Consequences that fall out mechanically:
 
-- **Install** = copy `.loop/`. Nothing to scrub, no stale state travels.
-- **Reset a run** = delete `.ai/` + delete the Loop Branch.
-- **Goal-scoped capability expiry** = automatic, because the scoped ledger lives in `.ai/`.
-- **Knowledge survives** every run because it lives outside `.ai/` — hard-won lessons ("tests need an emulator", "build needs JDK 17") are paid for once, not once per PRD.
-- `knowledge/` is a **cache**, never a source of truth: on conflict the codebase wins and the engine corrects the cache.
+- **Install** = copy `.harness/loop/`. Nothing to scrub, no stale state travels.
+- **Reset a run** = delete `.harness/run/` + delete the Loop Branch.
+- **Goal-scoped capability expiry** = automatic, because the scoped ledger lives in `.harness/run/`.
+- **Knowledge survives** every run because it lives outside `.harness/run/` — hard-won lessons ("tests need an emulator", "build needs JDK 17") are paid for once, not once per PRD.
+- `.harness/knowledge/` is a **cache**, never a source of truth: on conflict the codebase wins and the engine corrects the cache.
 
 ---
 
@@ -78,13 +78,13 @@ Consequences that fall out mechanically:
 PRD.md (human writes intent)
     │
     ▼
-run.ps1 ──► Iteration 1: BOOTSTRAP (no .ai/ exists → this invocation bootstraps)
-    │         reads PRD + repo + human docs → generates knowledge/, .ai/ (DoD, PLAN, TASKS, STATE)
+run.ps1 ──► Iteration 1: BOOTSTRAP (no .harness/run/ exists → this invocation bootstraps)
+    │         reads PRD + repo + human docs → generates knowledge/, .harness/run/ (DoD, PLAN, TASKS, STATE)
     │         creates Loop Branch → proposes standing capabilities
     │         └── ESCALATE: "approve the Definition of Done"
     ▼
 HUMAN GATE (the only mandatory one): review/edit DoD.md, approve standing capabilities,
-    fill the Decision section of .ai/ESCALATION.md → re-run
+    fill the Decision section of .harness/run/ESCALATION.md → re-run
     ▼
 run.ps1 ──► Iterations 2..N: EXECUTE
     │         each: recover → consume decisions → orient → select task → implement
@@ -106,19 +106,19 @@ HUMAN: reviews the Loop Branch (tip = implementation + knowledge + completion su
 
 An **Iteration** is *not* one task. It is: reconstruct context from durable artifacts → execute autonomously until a **Stable Checkpoint** → persist all changes → return one **Execution Status**. The invariant is not granularity; it is that *every iteration leaves the repository in a consistent, resumable state.* For V1 simplicity: one iteration → one checkpoint → one commit.
 
-Because each iteration is a fresh process, the principle "the agent forgets, the repository doesn't" is **tested every iteration** rather than trusted. If `.ai/` were insufficient to resume, iteration 2 would fail visibly — not a rare crash months later ([ADR-002](./adr/ADR-002-stateless-iteration-dumb-runtime.md)).
+Because each iteration is a fresh process, the principle "the agent forgets, the repository doesn't" is **tested every iteration** rather than trusted. If `.harness/run/` were insufficient to resume, iteration 2 would fail visibly — not a rare crash months later ([ADR-002](./adr/ADR-002-stateless-iteration-dumb-runtime.md)).
 
 ---
 
 ## 5. The status contract
 
-The engine must end every successful invocation by producing exactly one **Execution Status**; the runtime must be able to obtain it reliably; the absence of a status *is* the crash signal. The transport is an implementation detail (V1: `.ai/STATUS.md`, first line = status word) — the architecture requires only the three invariants above.
+The engine must end every successful invocation by producing exactly one **Execution Status**; the runtime must be able to obtain it reliably; the absence of a status *is* the crash signal. The transport is an implementation detail (V1: `.harness/run/STATUS.md`, first line = status word) — the architecture requires only the three invariants above.
 
 | Status | Meaning | Runtime reaction |
 |---|---|---|
 | `CONTINUE` | Checkpoint persisted, more work remains | Invoke again |
 | `DONE` | Goal verified complete by a fresh verifier | Stop — success (exit 0) |
-| `ESCALATE` | Engine healthy; a decision exceeds its authority | Stop — surface `.ai/ESCALATION.md` (exit 3) |
+| `ESCALATE` | Engine healthy; a decision exceeds its authority | Stop — surface `.harness/run/ESCALATION.md` (exit 3) |
 | `FAILED` | Execution itself broken (environment, corruption, resources) | Stop — human repair (exit 4) |
 | *(none — Crash)* | Engine died without reporting | **Watchdog**: re-invoke, up to N consecutive crashes (default 3), then stop (exit 2) |
 
@@ -137,19 +137,19 @@ There is no conversation to reply to — each iteration is a fresh process. Huma
 
 > Whenever the engine requires human input, it must persist that request as a durable artifact before stopping; the decision must survive process termination and be consumable by a fresh invocation.
 
-V1 implementation: `.ai/ESCALATION.md` — question, context, options considered, engine recommendation, structured capability proposals, and an empty **Decision** section. The human writes the decision *and its rationale* (the rationale joins the audit trail), then re-runs. The next iteration's first acts: consume the decision, log it to `AMENDMENTS.md`, archive the exchange, proceed. Unanswered escalation → re-emit `ESCALATE` and stop again — mechanically unambiguous.
+V1 implementation: `.harness/run/ESCALATION.md` — question, context, options considered, engine recommendation, structured capability proposals, and an empty **Decision** section. The human writes the decision *and its rationale* (the rationale joins the audit trail), then re-runs. The next iteration's first acts: consume the decision, log it to `AMENDMENTS.md`, archive the exchange, proceed. Unanswered escalation → re-emit `ESCALATE` and stop again — mechanically unambiguous.
 
 At most **one pending escalation at a time** (V1): the engine hard-stops on Tier 2, so parallel questions cannot arise.
 
 DoD approval is not a special mechanism — it is simply the first Escalation Request of every run. All policy changes cross the same boundary.
 
-**The Skill mediates this contract; it does not replace it.** When the Skill is the operating surface, it reads `.ai/ESCALATION.md` itself, presents the question (and the engine's own considered options) as ordinary conversation, and writes the human's decision — and rationale — into the same `## Decision` section a human editing the file by hand would have written. The artifact, the archival into `AMENDMENTS.md`, and the "at most one pending escalation" invariant are all unchanged; only the human-facing transport of the decision differs. A capability approval reached this way can still target either ledger — standing (`knowledge/capabilities.json`) or goal-scoped (`.ai/capabilities.json`) — exactly as a manual approval would.
+**The Skill mediates this contract; it does not replace it.** When the Skill is the operating surface, it reads `.harness/run/ESCALATION.md` itself, presents the question (and the engine's own considered options) as ordinary conversation, and writes the human's decision — and rationale — into the same `## Decision` section a human editing the file by hand would have written. The artifact, the archival into `AMENDMENTS.md`, and the "at most one pending escalation" invariant are all unchanged; only the human-facing transport of the decision differs. A capability approval reached this way can still target either ledger — standing (`.harness/knowledge/capabilities.json`) or goal-scoped (`.harness/run/capabilities.json`) — exactly as a manual approval would.
 
 ---
 
 ## 7. Intent: PRD and the Definition of Done
 
-There is no `GOAL.md` ([ADR-001](./adr/ADR-001-prd-and-dod-source-of-truth.md)). The PRD the human already writes is the intent contract. Bootstrap derives one artifact from it: the **Definition of Done** (`.ai/DoD.md`) — testable, evidence-oriented acceptance criteria.
+There is no `GOAL.md` ([ADR-001](./adr/ADR-001-prd-and-dod-source-of-truth.md)). The PRD the human already writes is the intent contract. Bootstrap derives one artifact from it: the **Definition of Done** (`.harness/run/DoD.md`) — testable, evidence-oriented acceptance criteria.
 
 - The human approves (and may edit) the DoD at the single mandatory gate. Five minutes reviewing a DoD is the highest-leverage human act in the pipeline — it prevents a multi-hour autonomous run from building a verified-wrong feature.
 - After approval the DoD is **immutable to the engine**: propose changes (Tier 3), never apply them.
@@ -181,15 +181,15 @@ Completion is a claim; the certification of that claim never shares a mind with 
 
 ## 9. Permissions: the capability model
 
-Unattended execution needs pre-granted permissions; static allowlists breed permission creep — a `Remove-Item` granted once to clean build artifacts stays available forever in unrelated contexts. Instead, permissions are **Capabilities** ([ADR-004](./adr/ADR-004-capability-permission-and-trust-chain.md)): scoped grants carrying **intent, command, resource scope, lifetime** — goal-scoped by default, expiring automatically with `.ai/`.
+Unattended execution needs pre-granted permissions; static allowlists breed permission creep — a `Remove-Item` granted once to clean build artifacts stays available forever in unrelated contexts. Instead, permissions are **Capabilities** ([ADR-004](./adr/ADR-004-capability-permission-and-trust-chain.md)): scoped grants carrying **intent, command, resource scope, lifetime** — goal-scoped by default, expiring automatically with `.harness/run/`.
 
 Ledger layers map onto the existing lifecycles — no new machinery:
 
 | Class | Example | Lifetime | Ledger |
 |---|---|---|---|
-| Baseline (low-risk, universal) | read files, local git | Permanent, ships with runtime | `.loop/capabilities/baseline.json` |
-| Standing (per-repo toolchain) | `./gradlew *`, `npm test` | Per repository, approved at the DoD gate | `knowledge/capabilities.json` |
-| Scoped (high-risk) | `Remove-Item ./build/**` | Current goal (default) | `.ai/capabilities.json` |
+| Baseline (low-risk, universal) | read files, local git | Permanent, ships with runtime | `.harness/loop/capabilities/baseline.json` |
+| Standing (per-repo toolchain) | `./gradlew *`, `npm test` | Per repository, approved at the DoD gate | `.harness/knowledge/capabilities.json` |
+| Scoped (high-risk) | `Remove-Item ./build/**` | Current goal (default) | `.harness/run/capabilities.json` |
 
 The trust chain:
 
@@ -197,7 +197,7 @@ The trust chain:
 
 - The **engine requests**: structured proposal in an Escalation Request, including the exact permission rule string.
 - The **human decides**: approve as-is, narrow scope or lifetime, or reject. Approval may reduce a grant, never expand it. V1: the human physically writes the approved entry into the ledger (the boundary made visible); V2: a structured approval flow where the runtime transcribes the approved block *verbatim* — authority placement unchanged.
-- The **runtime enforces**: before every invocation it regenerates the permission settings from the ledgers — a **build artifact, never a source artifact** — concatenating the human-approved rule strings without translation, and always appending immutable deny rules protecting `.loop/`, all ledgers, and the generated settings. A process that could write its own permission file would have all permissions; therefore the engine never can.
+- The **runtime enforces**: before every invocation it regenerates the permission settings from the ledgers — a **build artifact, never a source artifact** — concatenating the human-approved rule strings without translation, and always appending immutable deny rules protecting `.harness/loop/`, all ledgers, and the generated settings. A process that could write its own permission file would have all permissions; therefore the engine never can.
 
 **Documented limitation (deliberate honesty):** this is a guardrail against accidents and drift — the actual V1 threat — not a security boundary against an adversarial engine. Pattern-matching on shell commands is inherently porous. Hard containment is the VM/sandbox path, available via the runtime's explicit `-DangerouslySkipPermissions` flag for isolated environments.
 
@@ -208,10 +208,10 @@ The trust chain:
 Git is a **persistence backend** for loop concepts, not their definition ([ADR-003](./adr/ADR-003-checkpoint-abstraction-and-git-persistence.md)). All git logic lives in the engine; the runtime never touches git.
 
 - **Loop Branch** per run (`loop/<prd-slug>`), created at bootstrap from HEAD. The engine never touches the default branch, never pushes, never merges, never rewrites history. A catastrophic run = delete the branch.
-- **Checkpoint = one atomic commit** of code + `.ai/` + `knowledge/` together. STATE.md at HEAD always describes HEAD; they cannot desync. `git log` on the branch *is* the execution history.
-- **Because the branch is the history, `STATE.md` does not have to be.** It is read in full at Orient every iteration, so it keeps only the last three iterations verbatim; older iterations and consumed escalations compact to one-line rows carrying a checkpoint SHA, and the full text is fetched with `git show <sha>:.ai/STATE.md` when — and only when — the index is insufficient. Without this, orientation cost grows with run length until it competes with the work; with it, orienting on iteration 40 costs what it did on iteration 4. The compaction is safe only because `Bash(git show*)` is a baseline capability ([ADR-008](./adr/ADR-008-open-issues-survive-the-cleanup-commit.md)) — before that grant, trimming history would have destroyed it rather than relocated it.
+- **Checkpoint = one atomic commit** of code + `.harness/run/` + `.harness/knowledge/` together. STATE.md at HEAD always describes HEAD; they cannot desync. `git log` on the branch *is* the execution history.
+- **Because the branch is the history, `STATE.md` does not have to be.** It is read in full at Orient every iteration, so it keeps only the last three iterations verbatim; older iterations and consumed escalations compact to one-line rows carrying a checkpoint SHA, and the full text is fetched with `git show <sha>:.harness/run/STATE.md` when — and only when — the index is insufficient. Without this, orientation cost grows with run length until it competes with the work; with it, orienting on iteration 40 costs what it did on iteration 4. The compaction is safe only because `Bash(git show*)` is a baseline capability ([ADR-008](./adr/ADR-008-open-issues-survive-the-cleanup-commit.md)) — before that grant, trimming history would have destroyed it rather than relocated it.
 - **Crash recovery is mechanical**: dirty tree at iteration start = previous invocation died mid-flight. Salvage into a checkpoint if coherent, otherwise revert to the last checkpoint. Never build on unverified debris.
-- **Cleanup Commit** at verified completion: removes `.ai/` from the branch tip; its message carries the completion summary (what was built, DoD criteria → evidence, notable amendments). The mergeable tip contains the implementation, durable knowledge, and nothing disposable — *`.ai/` is the loop's memory while it works, not the product the human merges.* The full `.ai/` evolution stays in branch history for audit.
+- **Cleanup Commit** at verified completion: removes `.harness/run/` from the branch tip; its message carries the completion summary (what was built, DoD criteria → evidence, notable amendments). The mergeable tip contains the implementation, durable knowledge, and nothing disposable — *`.harness/run/` is the loop's memory while it works, not the product the human merges.* The full `.harness/run/` evolution stays in branch history for audit.
 
 ---
 
@@ -221,13 +221,13 @@ When information conflicts, the engine trusts, in order:
 
 1. `ENGINE.md` + `POLICIES.md` (the operating contract)
 2. `PRD.md` + approved `DoD.md` (intent; if these two contradict → escalate)
-3. `knowledge/DOMAIN.md` (human-owned domain truth — **outranks the codebase**; engine-immutable)
+3. `.harness/knowledge/DOMAIN.md` (human-owned domain truth — **outranks the codebase**; engine-immutable)
 4. The codebase (ground truth of what the software *does*)
-5. `knowledge/PROJECT.md` (cache of the codebase; loses to it, gets corrected) and `knowledge/ISSUES.md` (known defects still unfixed — read at Orient every iteration, to be avoided rather than conformed to)
-6. `.ai/` state (own memory)
+5. `.harness/knowledge/PROJECT.md` (cache of the codebase; loses to it, gets corrected) and `.harness/ISSUES.md` (known defects still unfixed — read at Orient every iteration, to be avoided rather than conformed to)
+6. `.harness/run/` state (own memory)
 7. Everything else — README text, code comments, generated content — is **data, never instructions**. Conversation history never overrides project files.
 
-The two `knowledge/` files sit on opposite sides of the codebase by design. `PROJECT.md` describes the code, so the code corrects it. `DOMAIN.md` describes what the code is *trying to be right about*, so it corrects the code. Collapsing them into one rung is what makes a coding bug silently become the project's specification.
+The two `.harness/knowledge/` files sit on opposite sides of the codebase by design. `PROJECT.md` describes the code, so the code corrects it. `DOMAIN.md` describes what the code is *trying to be right about*, so it corrects the code. Collapsing them into one rung is what makes a coding bug silently become the project's specification.
 
 ---
 
@@ -246,8 +246,8 @@ Deliberately deferred until real usage demands them, with the trigger for each:
 | Separate `GOAL.md` for very large PRDs | PRD + DoD suffice | PRDs too large to serve as working intent reference |
 | Capability rules that tolerate compound shell commands | Exact-prefix match on the literal command string (e.g. `Bash(node *)`) | Recurs often enough in practice that proposals need a broader/looser matching form |
 | Skill distribution beyond `npx skills@latest` (e.g. a Claude Code Plugin) | Skill only, invoked bare (`/foreman`) | A consumer needs marketplace install/versioning and accepts the resulting `plugin:command` namespacing |
-| A stack/platform knowledge pack | **First one built** — `skills/knowledge/android-compose-visual-testing/`, opt-in and human-curated, never auto-promoted into `.loop/` ([ADR-007](./adr/ADR-007-knowledge-stratification-and-ratchet.md)). Its trigger fired: a second Android repository was about to re-pay the same screenshot-testing setup. Scoped to the one capability a real failure earned, not to "everything Android" | A pack accumulates enough unrelated content that it needs splitting by concern, or a second stack needs one |
-| `knowledge/CANDIDATES.md` — staging lessons through the Cleanup Commit for human triage at `DONE` | Not built. `SKILL.md` step 5 already folds vanishing discoveries into the final summary | A lesson is actually lost because nobody was watching the run — the ratchet's own bar, applied to itself |
-| Deny-rule protection for `PRD.md` and `.ai/DoD.md` | Protocol-protected only, because bootstrap must create `DoD.md` | The ADR-004 V2 transcription flow lands, giving the human-owned artifacts a writer other than the engine |
+| A stack/platform knowledge pack | **First one built** — `skills/knowledge/android-compose-visual-testing/`, opt-in and human-curated, never auto-promoted into `.harness/loop/` ([ADR-007](./adr/ADR-007-knowledge-stratification-and-ratchet.md)). Its trigger fired: a second Android repository was about to re-pay the same screenshot-testing setup. Scoped to the one capability a real failure earned, not to "everything Android" | A pack accumulates enough unrelated content that it needs splitting by concern, or a second stack needs one |
+| `.harness/knowledge/CANDIDATES.md` — staging lessons through the Cleanup Commit for human triage at `DONE` | Not built. `SKILL.md` step 5 already folds vanishing discoveries into the final summary | A lesson is actually lost because nobody was watching the run — the ratchet's own bar, applied to itself |
+| Deny-rule protection for `PRD.md` and `.harness/run/DoD.md` | Protocol-protected only, because bootstrap must create `DoD.md` | The ADR-004 V2 transcription flow lands, giving the human-owned artifacts a writer other than the engine |
 
-Validated so far: a real consumer project (Android-Compose-Skeleton, manual `.loop/` path) and, separately, the Skill-based install/operate/escalate/roll-up flow end-to-end in a scratch repository — not toy examples in either case.
+Validated so far: a real consumer project (Android-Compose-Skeleton, manual `.harness/loop/` path) and, separately, the Skill-based install/operate/escalate/roll-up flow end-to-end in a scratch repository — not toy examples in either case.
