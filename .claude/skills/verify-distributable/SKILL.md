@@ -1,6 +1,6 @@
 ---
 name: verify-distributable
-description: Run every pre-commit check for the Foreman repository - the five distributable parity diffs, the Pester runtime suite, and the ENGINE.md command-line size ceiling. Use before committing any change to .loop/, skills/engineering/foreman/, or tests/.
+description: Run every pre-commit check for the Foreman repository - the five distributable parity diffs, the Pester runtime suite, and the ENGINE.md command-line size ceiling. Use before committing any change to .harness/loop/, skills/engineering/foreman/, or tests/.
 ---
 
 Three things in this repository can be broken by a change that still looks correct, passes review,
@@ -9,30 +9,38 @@ results plainly; do not summarise a failure as a pass.
 
 ## 1. Distributable parity — the five copies
 
-`.loop/` is source. `skills/engineering/foreman/` is what `npx skills@latest add` installs, and what
-`/foreman` writes back over a consumer's `.loop/` on every invocation. A stale skill copy silently
+`.harness/loop/` is source. `skills/engineering/foreman/` is what `npx skills@latest add` installs, and what
+`/foreman` writes back over a consumer's `.harness/loop/` on every invocation. A stale skill copy silently
 reverts a consumer repository to an older runtime, including older permission rules. Nothing in the
 build or the tests enforces this.
 
+Compare **git blob hashes, not working-tree bytes.** Git normalises line endings on checkout, so
+on Windows a plain `diff` reports a mismatch on files that are byte-identical as far as the
+repository — and therefore the installer — is concerned. That false positive has already happened.
+
 ```bash
 cd <repo root>
-diff -q .loop/ENGINE.md                  skills/engineering/foreman/ENGINE.md
-diff -q .loop/POLICIES.md                skills/engineering/foreman/POLICIES.md
-diff -q .loop/capabilities/baseline.json skills/engineering/foreman/capabilities/baseline.json
-diff -q .loop/run.ps1                    skills/engineering/foreman/scripts/run.ps1
-diff -rq .loop/templates                 skills/engineering/foreman/templates
+for p in "ENGINE.md:ENGINE.md"          "POLICIES.md:POLICIES.md"          "capabilities/baseline.json:capabilities/baseline.json"          "run.ps1:scripts/run.ps1"          "models.json:models.json"; do
+  h1=$(git hash-object ".harness/loop/${p%%:*}")
+  h2=$(git hash-object "skills/engineering/foreman/${p##*:}")
+  [ "$h1" = "$h2" ] || echo "MISMATCH ${p%%:*}"
+done
+for f in .harness/loop/templates/* .harness/loop/agents/*; do
+  t="skills/engineering/foreman/${f#.harness/loop/}"
+  [ -f "$t" ] && [ "$(git hash-object "$f")" = "$(git hash-object "$t")" ] || echo "MISMATCH $f"
+done
 ```
 
-Silence from all five is the pass condition. Note the fourth line: the filename differs
-(`run.ps1` → `scripts/run.ps1`), so a naive directory diff will not catch it.
+Silence is the pass condition. Note `run.ps1` → `scripts/run.ps1`: the filename differs, so a naive
+directory diff will not catch it.
 
-On a mismatch, copy `.loop/` → skill (never the reverse — `.loop/` is source), then re-run.
-`SKILL.md` exists only on the skill side and has no `.loop/` counterpart; it is not part of this
+On a mismatch, copy `.harness/loop/` → skill (never the reverse — `.harness/loop/` is source), then re-run.
+`SKILL.md` exists only on the skill side and has no `.harness/loop/` counterpart; it is not part of this
 check.
 
 ## 2. Runtime test suite
 
-Required after any change to `.loop/run.ps1` or `tests/fixtures/fake-claude.ps1`. Needs no network,
+Required after any change to `.harness/loop/run.ps1` or `tests/fixtures/fake-claude.ps1`. Needs no network,
 no API calls and no real `claude` — the `-ClaudeCommand` seam drives a stub.
 
 ```powershell
@@ -53,7 +61,7 @@ the whole command line at roughly **32,000 bytes** — measured on this machine:
 repository fails at once.
 
 ```bash
-B=$(wc -c < .loop/ENGINE.md); echo "$B bytes ($(( B * 100 / 32000 ))% of budget)"
+B=$(wc -c < .harness/loop/ENGINE.md); echo "$B bytes ($(( B * 100 / 32000 ))% of budget)"
 ```
 
 - Under 75% — fine, report the number.
