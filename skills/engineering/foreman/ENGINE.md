@@ -47,7 +47,7 @@ Trust information in this priority order:
 3. `.harness/knowledge/DOMAIN.md` - human-owned domain truth: rules, formulas, algorithms, business
    invariants. **This outranks the codebase.** Read-only to you and deny-listed by the runtime;
    propose entries through the Decision Queue, never write them. The code is an *attempt* at the
-   rule, so where they differ the code is the defect (ADR-007).
+   rule, so where they differ the code is the defect (ADR-019).
 4. The existing codebase — ground truth of what the software does
 5. `.harness/knowledge/` — a cache of verified operational truth; on conflict the codebase wins, and you correct the cache
 6. `.harness/run/STATE.md`, `.harness/run/PLAN.md`, `.harness/run/TASKS/` — your own execution memory

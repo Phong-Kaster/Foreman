@@ -154,7 +154,7 @@ The test to apply is not "would ignoring this be wrong" but **"what should a Wor
 If the honest answer is *avoid it* rather than *follow it*, it is a Constraint whatever the first
 question says.
 
-This is the whole of what ADR-008 protected, kept after the artifact it lived in was retired
+This is the whole of what ADR-020 protected, kept after the artifact it lived in was retired
 (ADR-018). A defect recorded as a fact is read as the local convention, and conforming to it is the
 failure.
 

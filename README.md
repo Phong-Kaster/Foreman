@@ -261,7 +261,7 @@ Foreman/
 │   └── scripts/run.ps1               the loop script
 │
 ├── skills/knowledge/                 ← OPT-IN STACK PACKS — platform knowledge, human-curated,
-│   └── android-compose-visual-testing/  never auto-promoted into .harness/loop/ (ADR-007)
+│   └── android-compose-visual-testing/  never auto-promoted into .harness/loop/ (ADR-019)
 │
 ├── .harness/loop/                            ← THE SAME THING, standalone — for manual installs
 ├── tests/                            ← Pester tests for run.ps1, driven by a fake `claude` stub

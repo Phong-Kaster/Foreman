@@ -135,7 +135,7 @@ loop(policies): changes requested
 
 The log is read later by someone — or something — searching it. `loop(knowledge): add host-side
 Compose screenshot testing (no emulator)` is findable. `loop(knowledge): wire up testing` is not.
-This is the same rule ADR-011 imposes on engine-written commits, for the same reason.
+This is the same rule ADR-023 imposes on engine-written commits, for the same reason.
 
 ---
 
@@ -194,7 +194,7 @@ open should say so, rather than letting a reader assume the area is finished.
 
 # What earns a commit at all
 
-This repository is governed by the **Ratchet** (`.loop/POLICIES.md`, ADR-007): a line is earned by a
+This repository is governed by the **Ratchet** (`.harness/loop/POLICIES.md`, ADR-019): a line is earned by a
 real failure — a broken build, a failing test, a review finding, a denied command — and removed once
 the model no longer needs it.
 

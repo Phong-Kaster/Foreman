@@ -13,13 +13,13 @@ The exit status of a pipeline belongs to its **last** command. `./gradlew build 
 
 > `./gradlew … 2>&1 | tail -20` exits **0 even when the build failed**, because the exit status belongs to `tail`. This is not theoretical: it is how a `BUILD FAILED` in this repository was first mistaken for a pass.
 
-## Why this ranks above the runtime defects fixed in ADR-009
+## Why this ranks above the runtime defects fixed in ADR-021
 
 The failure direction is the opposite one, and that is the whole argument.
 
 | | Failure mode |
 |---|---|
-| ADR-009 (quota refusal, launch failure) | **Fail-safe.** The run stops. Wasteful, confusing, but nothing false ships. |
+| ADR-021 (quota refusal, launch failure) | **Fail-safe.** The run stops. Wasteful, confusing, but nothing false ships. |
 | This | **Fail-unsafe.** The run *continues* on a false premise. |
 
 Everything Foreman builds around completion — the Fresh-Context Review (ADR-005), the DONE-Candidate rule, the evidence requirements — is scaffolding around the claim that `DONE` means done. A masked build failure walks through all of it, because every one of those checks is downstream of "the build passed" and none of them re-asks the question. It is the one defect class that produces a confidently wrong result rather than a stopped run.
@@ -64,5 +64,5 @@ The capability is the load-bearing half. The policy tells the engine what to do;
 ## Consequences
 
 - The baseline ledger now contains an entry whose justification is *correctness of evidence* rather than *access to a resource*. That is a new category for the ledger and worth noticing: capabilities have until now been about what the engine may reach, not about whether what it observes is true.
-- `knowledge/PROJECT.md` in the Calendar-Note repository holds a now-partially-obsolete version of this lesson, recorded when `pipefail` was unavailable. It is not wrong — reading the verdict line still works — but it names a constraint that no longer holds. Nothing propagates the correction, which is ADR-007's stack-knowledge problem and the `CANDIDATES.md` gap (ADR-007, deferred) meeting in one place: this lesson was portable, was recorded in a per-repo file because that was the only writable home, and is now stale there.
+- `knowledge/PROJECT.md` in the Calendar-Note repository holds a now-partially-obsolete version of this lesson, recorded when `pipefail` was unavailable. It is not wrong — reading the verdict line still works — but it names a constraint that no longer holds. Nothing propagates the correction, which is ADR-019's stack-knowledge problem and the `CANDIDATES.md` gap (ADR-019, deferred) meeting in one place: this lesson was portable, was recorded in a per-repo file because that was the only writable home, and is now stale there.
 - **Not solved:** nothing verifies that recorded evidence was *gathered* correctly. This closes the one mechanism known to produce false evidence; it does not make the evidence chain self-checking. A build command that silently skipped a module, a test task that matched no tests, a lint run scoped to the wrong variant would all still record as green. The general problem — evidence that is true about the wrong thing — remains open.

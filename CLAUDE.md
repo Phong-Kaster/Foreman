@@ -29,7 +29,7 @@ a consumer repository, not here.
 
 `.loop/ENGINE.md` and `.loop/POLICIES.md` are injected into every engine invocation as system prompt.
 A line there is earned by a **real failure** — a broken build, a failing test, a review finding, a
-denied command — and removed once the model no longer needs it (`.loop/POLICIES.md`, ADR-007).
+denied command — and removed once the model no longer needs it (`.harness/loop/POLICIES.md`, ADR-019).
 
 An anticipated problem is not a failure. Before adding doctrine, name the run that broke. If you
 cannot, the lesson is not ready and probably belongs in an ADR or a commit body instead.
@@ -49,7 +49,7 @@ standard it sells:
   `tests/fixtures/fake-claude.ps1` cover the whole runtime.
 - A claim about the permission matcher, the shell, or the CLI is testable in minutes. Test it. The
   engine's own note that `set -o pipefail` was refused turned out to be true *and* to understate the
-  problem, which only a test could show (ADR-010).
+  problem, which only a test could show (ADR-022).
 
 ## Windows is the only supported platform, and it leaks
 

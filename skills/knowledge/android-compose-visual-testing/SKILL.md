@@ -6,7 +6,7 @@ disable-model-invocation: true
 
 # Android Compose visual testing — a Foreman stack pack
 
-A **stack pack** in the sense of [ADR-007](../../../docs/adr/ADR-007-knowledge-stratification-and-ratchet.md): platform knowledge that does not belong in `.loop/` (Foreman never knows the consumer's tech stack) and does not belong in a repo's `knowledge/` (it is not truth about *that* repository). Opt-in, human-curated, versioned separately.
+A **stack pack** in the sense of [ADR-007](../../../docs/adr/ADR-019-knowledge-stratification-and-ratchet.md): platform knowledge that does not belong in `.loop/` (Foreman never knows the consumer's tech stack) and does not belong in a repo's `knowledge/` (it is not truth about *that* repository). Opt-in, human-curated, versioned separately.
 
 Install it in a repo **before** starting a run, not after. Everything below was verified end-to-end on a real repo; nothing here is from documentation alone.
 

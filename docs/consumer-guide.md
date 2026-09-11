@@ -142,7 +142,7 @@ Practically:
 - Start from `.harness/loop/templates/DOMAIN-KNOWLEDGE.template.md`. State each rule precisely enough to be implemented and tested from that text alone, and cite the authority so it can be re-checked later.
 - Be explicit about units, valid ranges and boundary behaviour. That is where implementations silently diverge.
 - Don't create an empty one. No domain rules means no file — a stub is clutter that every iteration reads.
-- Don't put general stack knowledge here ("Android 13 changed notification permissions"). That is not truth about *your* project, nothing in your repo can verify it, and it goes stale with nothing to correct it — see [ADR-007](./adr/ADR-007-knowledge-stratification-and-ratchet.md).
+- Don't put general stack knowledge here ("Android 13 changed notification permissions"). That is not truth about *your* project, nothing in your repo can verify it, and it goes stale with nothing to correct it — see [ADR-019](./adr/ADR-019-knowledge-stratification-and-ratchet.md).
 
 ## 5. While the loop runs
 

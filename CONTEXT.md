@@ -100,7 +100,7 @@ The state recorded when the engine believes the Goal is complete. The iteration 
 _Avoid_: Done, complete (before fresh verification)
 
 **Knowledge**:
-What a consumer repository durably knows, kept in `.harness/knowledge/` at its root and surviving every feature run. Three files with different owners and incompatible rules — Project Knowledge, Open Issues, and Domain Knowledge, below. None holds knowledge about a technology stack in general: that is not truth about this repository, nothing here can verify it, and it goes stale uncorrected (ADR-007).
+What a consumer repository durably knows, kept in `.harness/knowledge/` at its root and surviving every feature run. Three files with different owners and incompatible rules — Project Knowledge, Open Issues, and Domain Knowledge, below. None holds knowledge about a technology stack in general: that is not truth about this repository, nothing here can verify it, and it goes stale uncorrected (ADR-019).
 _Avoid_: Docs, memory, wiki
 
 **Project Knowledge**:
@@ -108,7 +108,7 @@ The engine-maintained cache of verified operational truth about a consumer repos
 _Avoid_: Knowledge (unqualified — now ambiguous)
 
 **Open Issues**:
-A known defect that is **still wrong** and is not being fixed. It is recorded as a **Constraint** in `.harness/knowledge/PROJECT.md` (ADR-016), which carries it verbatim into every Worker Brief, so it reaches the Worker before code is written rather than waiting to be read. It must be phrased as the **instruction** it implies — *"never take a colour from this pattern; source it from the theme"* — never as the observation it came from, because a defect recorded as a fact is read as the local convention and reproduced on purpose (ADR-018, superseding ADR-008's separate file). Cites `file:line` so it can be checked, and is deleted once it stops being true.
+A known defect that is **still wrong** and is not being fixed. It is recorded as a **Constraint** in `.harness/knowledge/PROJECT.md` (ADR-016), which carries it verbatim into every Worker Brief, so it reaches the Worker before code is written rather than waiting to be read. It must be phrased as the **instruction** it implies — *"never take a colour from this pattern; source it from the theme"* — never as the observation it came from, because a defect recorded as a fact is read as the local convention and reproduced on purpose (ADR-018, superseding ADR-020's separate file). Cites `file:line` so it can be checked, and is deleted once it stops being true.
 _Avoid_: `ISSUES.md` (that is the human-facing Issues Report, a different artifact), backlog, technical debt register
 _Avoid_: Backlog, TODO list (those hold work not yet started; this holds work known to be wrong), technical debt register
 

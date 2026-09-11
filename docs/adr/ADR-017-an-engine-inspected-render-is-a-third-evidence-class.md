@@ -203,4 +203,4 @@ All four were re-checked before promotion. What had moved:
 | Next free ADR number | 017 | 017, unchanged - 007-012 still carry merge-duplicated pairs |
 | Taxonomy to extend | `machine` / `human` (ADR-015) | unchanged, and **kept at two** per the decision above |
 | Step 1 target | `Calendar-Note/knowledge/capabilities.json` | done, `a48229b` |
-| ADR-010 `pipefail` question | 0 occurrences - dropped or orphaned? | **orphaned by the merge.** The `.loop` ledger carrying it was deleted and the conflict resolved to feat's `baseline.json`. Restored in the same commit as this ADR. |
+| ADR-022 `pipefail` question | 0 occurrences - dropped or orphaned? | **orphaned by the merge.** The `.loop` ledger carrying it was deleted and the conflict resolved to feat's `baseline.json`. Restored in the same commit as this ADR. |

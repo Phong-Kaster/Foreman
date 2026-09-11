@@ -18,7 +18,7 @@ need one.
 docs/adr/ADR-<NNN>-<kebab-case-title>.md
 ```
 
-Zero-padded to three digits, sequential, never reused. Existing: `ADR-001` … `ADR-010`.
+Zero-padded to three digits, sequential, never reused. Existing: `ADR-001` … `ADR-023`, with 007-016 belonging to the `.harness` lineage and 017+ to the line that merged into it.
 
 ---
 
