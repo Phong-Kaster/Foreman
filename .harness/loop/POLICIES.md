@@ -128,6 +128,36 @@ A Constraint outranks a literal reading of an acceptance criterion. Where they c
 follows the Constraint and says so — complying with the words while producing something broken is
 not compliance.
 
+### A known defect is always a Constraint, written as an instruction
+
+The sorting question above gives the wrong answer for one kind of fact, and it is the kind that has
+already cost a defect. Take something true about the code and **wrong**:
+
+> `CoreLayout.kt` paints a hardcoded black background regardless of `darkTheme`, and no screen
+> sources its text colour from `MaterialTheme.colorScheme` — a pre-existing, app-wide pattern.
+
+Ask the question: if a Worker ignored this, would the result be wrong? **No** — it would take its
+colours from the theme, which is better. So the literal test files it as a Reference, and a Reference
+is a convention to follow. The next Worker reads it and reproduces the defect on purpose. That is not
+hypothetical: it is exactly what happened, and it is why the fact must never be recorded in its
+descriptive form.
+
+So: **a defect you know about and are not fixing is a Constraint**, phrased as the instruction it
+implies, never as the observation it came from.
+
+| Do not write | Write |
+|---|---|
+| "`CoreLayout` hardcodes its background" | "never take a colour from `CoreLayout`'s pattern — source every colour from the theme (`CoreLayout.kt:34`)" |
+| "the repo has no tests for the note mapper" | "do not assume `NoteMapper` is covered — add a test with any change to it" |
+
+The test to apply is not "would ignoring this be wrong" but **"what should a Worker do about it?"**
+If the honest answer is *avoid it* rather than *follow it*, it is a Constraint whatever the first
+question says.
+
+This is the whole of what ADR-008 protected, kept after the artifact it lived in was retired
+(ADR-018). A defect recorded as a fact is read as the local convention, and conforming to it is the
+failure.
+
 ## Worker Standards
 
 - A Worker implements exactly one task, writes only files inside its Declared File Scope, and holds **no git, build, or test capability**.

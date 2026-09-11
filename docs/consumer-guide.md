@@ -182,7 +182,9 @@ git merge loop/<prd-slug>
 
 The three-dot form is deliberate: it diffs the branch against the point it diverged from, so unrelated commits landing on your default branch meanwhile don't pollute the review.
 
-**What the run knew was still wrong** is in `.harness/ISSUES.md` — defects the engine found and did not fix, because they were out of scope, because a review finding was filed rather than resolved, or because you deferred them. That file survives the Cleanup Commit and is read by every future iteration as a list of patterns to *avoid*, so a later run does not reproduce them. Entries cite the commit SHA holding the full record; read it back with `git show <sha>:<path>`. Prune an entry once it is resolved — the file is worth reading only while everything in it is still true.
+**What the run knew was still wrong** is recorded as **Constraints** in `.harness/knowledge/PROJECT.md` — defects the engine found and did not fix, because they were out of scope, because a review finding was filed rather than resolved, or because you deferred them. A Constraint is carried verbatim into every Worker Brief and checked against every diff, so a later run does not reproduce the defect. Each is written as an instruction (*"never do X here, because Y"*) and cites `file:line`. Prune one once it is resolved — a stale Constraint misleads worse than a missing one.
+
+Separately, `.harness/ISSUES.md` is the **Issues Report**: regenerated every iteration for you, not for the engine, listing what is stuck — abandoned tasks, queued decisions, and `human` criteria still unsigned. It survives the Cleanup Commit so a stopped run is legible when you come back to it.
 
 Either way: **merging is your act — the engine never merges, never pushes, never touches your default branch.**
 

@@ -108,7 +108,8 @@ The engine-maintained cache of verified operational truth about a consumer repos
 _Avoid_: Knowledge (unqualified — now ambiguous)
 
 **Open Issues**:
-The engine-maintained list of known defects that are **still wrong**, in `.harness/ISSUES.md`, read at Orient every iteration so a known defect reaches the engine before it writes code rather than after. Its semantics are the inverse of Project Knowledge: entries are patterns to **avoid**, not conventions to conform to — a defect recorded as a fact gets reproduced on purpose (ADR-008). Each entry is actionable on its own and cites the commit SHA holding the full record, because paths into `.harness/run/` stop resolving once the Cleanup Commit removes it. An entry is deleted when resolved, never marked done.
+A known defect that is **still wrong** and is not being fixed. It is recorded as a **Constraint** in `.harness/knowledge/PROJECT.md` (ADR-016), which carries it verbatim into every Worker Brief, so it reaches the Worker before code is written rather than waiting to be read. It must be phrased as the **instruction** it implies — *"never take a colour from this pattern; source it from the theme"* — never as the observation it came from, because a defect recorded as a fact is read as the local convention and reproduced on purpose (ADR-018, superseding ADR-008's separate file). Cites `file:line` so it can be checked, and is deleted once it stops being true.
+_Avoid_: `ISSUES.md` (that is the human-facing Issues Report, a different artifact), backlog, technical debt register
 _Avoid_: Backlog, TODO list (those hold work not yet started; this holds work known to be wrong), technical debt register
 
 **Domain Knowledge**:

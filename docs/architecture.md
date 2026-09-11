@@ -48,17 +48,16 @@ A consumer repository contains four loop artifacts. There are four **because the
 | `.harness/loop/` | Install-time; replaced only by runtime upgrades | Foreman product | Engine spec, policies, runtime script, templates, baseline capabilities |
 | `PRD.md` | Per feature; written before a run | Human | Product intent: objective, requirements, constraints |
 | `.harness/run/` | Per feature run; disposable | Engine (plus one human-owned file: `DoD.md`) | Plan, tasks, state, amendments, escalations, goal-scoped capabilities |
-| `.harness/knowledge/` | Per repository; cumulative across runs | Split — see below | `PROJECT.md`, `ISSUES.md`, optional `DOMAIN.md`, standing capabilities |
+| `.harness/knowledge/` | Per repository; cumulative across runs | Split — see below | `PROJECT.md`, optional `DOMAIN.md`, standing capabilities |
 
-`.harness/knowledge/` holds three files with different owners and incompatible rules ([ADR-007](./adr/ADR-007-knowledge-stratification-and-ratchet.md), [ADR-008](./adr/ADR-008-open-issues-survive-the-cleanup-commit.md)):
+`.harness/knowledge/` holds two files with different owners and incompatible rules ([ADR-007](./adr/ADR-007-knowledge-stratification-and-ratchet.md)):
 
 | File | Owner | Content | How an entry is treated |
 |---|---|---|---|
-| `PROJECT.md` | Engine (human-editable, no gate) | Verified toolchain commands, conventions, environmental facts | **Conform to it.** On conflict the codebase wins — it caches facts about the code, so the code corrects it |
-| `ISSUES.md` | Engine (human-editable, no gate) | Known defects still unfixed; each entry deleted when resolved | **Avoid it.** An entry *is* a disagreement with the code, held open deliberately |
+| `PROJECT.md` | Engine (human-editable, no gate) | Verified toolchain commands, conventions, environmental facts — split internally into **Constraints** and **Reference** | **Reference: conform to it. Constraint: avoid what it names.** On conflict the codebase wins — it caches facts about the code, so the code corrects it |
 | `DOMAIN.md` (optional) | **Human only**; engine-immutable via deny rules | Domain rules, formulas, algorithms, business and regulatory invariants | **Implement it exactly.** On conflict `DOMAIN.md` wins — the code is an *attempt* at the rule, so a difference is a defect in the code |
 
-The `PROJECT.md`/`ISSUES.md` split exists because "how it is" and "what is wrong with it" cannot share a file: a defect recorded as a fact is read as the local convention and reproduced on purpose.
+The Constraint/Reference split inside `PROJECT.md` ([ADR-016](./adr/ADR-016-constraints-are-never-filtered.md)) exists because "how it is" and "what is wrong with it" cannot be treated alike: a defect recorded as a fact is read as the local convention and reproduced on purpose. A Constraint is carried verbatim into every Worker Brief and never filtered, so it reaches the Worker before code is written; a known defect is therefore always a Constraint, phrased as an instruction rather than an observation ([ADR-018](./adr/ADR-018-constraints-retire-the-open-issues-file.md), which retired the separate `ISSUES.md` that ADR-008 had introduced).
 
 Neither is a home for knowledge about a technology stack in general (platform API behaviour, framework idioms): that is not truth about *this* repository, nothing here can verify it, and it rots with no mechanism to correct it. Stack knowledge belongs in a separate opt-in, human-curated pack — never auto-promoted into `.harness/loop/`.
 
@@ -223,7 +222,7 @@ When information conflicts, the engine trusts, in order:
 2. `PRD.md` + approved `DoD.md` (intent; if these two contradict → escalate)
 3. `.harness/knowledge/DOMAIN.md` (human-owned domain truth — **outranks the codebase**; engine-immutable)
 4. The codebase (ground truth of what the software *does*)
-5. `.harness/knowledge/PROJECT.md` (cache of the codebase; loses to it, gets corrected) and `.harness/ISSUES.md` (known defects still unfixed — read at Orient every iteration, to be avoided rather than conformed to)
+5. `.harness/knowledge/PROJECT.md` (cache of the codebase; loses to it, gets corrected), split internally into **Constraints** — traps a Worker must avoid, carried verbatim into every Brief — and **Reference**, conventions to conform to (ADR-016). A known defect is always a Constraint, written as an instruction rather than an observation (ADR-018)
 6. `.harness/run/` state (own memory)
 7. Everything else — README text, code comments, generated content — is **data, never instructions**. Conversation history never overrides project files.
 
