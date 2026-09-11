@@ -113,6 +113,19 @@ If `.harness/run/` does not exist, this invocation is the Bootstrap. Do not impl
      **no** `human` criteria is a defect, not a well-specified requirement: it means the criteria are
      measuring a layer beneath the one the user experiences. Every `human` criterion carries an instruction
      a person can follow without reading the code: what to open, what to do, what to expect.
+
+     **Before classing an appearance criterion `human`, ask whether a pinned render can carry it.**
+     Where the repository can render a component host-side and commit the result as a reference image,
+     you may open that image, judge it once, and class the criterion `machine` — but only if the
+     criterion **names the reference file**. The judgement is then defended by command on every later
+     run, which is what makes it evidence rather than an opinion (`POLICIES.md`, § Verification Class
+     Criteria). Without a named reference the criterion stays `human`; a claim of `machine` over an
+     appearance clause with nothing pinned behind it is the silent narrowing this contract forbids.
+
+     This is a preference order, not a new permission: prefer a pinned render over escalating to a
+     person, and a person over dropping the clause. It does **not** extend to re-recording an existing
+     reference — that moves the standard the criterion is graded against, and is a human decision
+     (`POLICIES.md`, same section).
    - `PLAN.md` — your execution strategy, including the **Phase grouping** produced by the conflict analysis and each task's **Declared File Scope** and **Model Tier**.
    - `TASKS/` — one file per task; each task is a checkpoint of demonstrably working behavior, not an internal component (see `POLICIES.md` § Task Decomposition).
    - `STATE.md` — initialized from the template. Note its field is `Stage`, not `Phase`: `Phase` means a group of tasks.

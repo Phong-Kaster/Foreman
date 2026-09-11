@@ -160,6 +160,46 @@ one the user experiences.
 When uncertain, classify `human`. The costs are asymmetric: over-classifying costs one look,
 under-classifying ships something nobody can see.
 
+### A perceptual criterion may be `machine` only if it cites the reference image behind it
+
+There is a third way to verify appearance, and it is neither a command's output nor a person at a
+screen: **the engine opens the rendered image and judges it.** This is a real act of perception
+performed by the machine, and it happened unprompted - an engine recorded reference images, read
+them, then perturbed a colour and re-ran validation to confirm the harness could actually go red.
+
+It is admissible, under one condition: **the render must be pinned by a committed reference image**,
+so the judgement made once is defended by command every time afterwards.
+
+```
+engine opens the render, judges "the dot is legible on the picked fill"   <- ONCE, unreproducible
+     the render is pinned as a reference image and committed
+validateDebugScreenshotTest                                    <- FOREVER, red on any drift
+```
+
+The perception is the weak step: it is a judgement, not a measurement, two invocations may read the
+same image differently, and nothing reproduces it from the checkpoint - which is what evidence
+requires. Pinning confines that weakness to a single moment and locks a reproducible check in front
+of it.
+
+So the class stays `machine`, and the criterion must **name the reference file**. A criterion that
+claims `machine` for an appearance clause without citing one has not produced evidence; it has
+produced an opinion, and belongs in `human`.
+
+Two limits, neither of which the prose can enforce:
+
+- **Never the sole evidence.** A pinned render proves what it renders. It does not prove the feature
+  works, and a screenshot test passing beside a failing unit test proves only that the wrong thing
+  was drawn consistently.
+- **Never for anything a person's safety or comprehension depends on.** Those stay `human`.
+
+**The baseline must be out of reach.** Where a task exists that re-records the reference images
+(`updateDebugScreenshotTest` and its equivalents), it is **withheld from the standing ledger**. An
+engine holding it, facing a red screenshot test, has a one-command route to re-recording wrong output
+as correct. Recording a *new* reference is the safe half; overwriting a *currently-failing* one is
+not, and a command matcher cannot tell them apart - so a baseline change is an Escalation Request and
+a goal-scoped grant, never a standing rule. This limit is the only part of the contract that is
+mechanically enforceable, and the rest of this section is worth nothing without it.
+
 ## Review Standards
 
 Fresh-Context Review checks, in priority order: correctness, security, edge cases, architecture conformance, duplication, maintainability, testability, performance.
@@ -203,6 +243,18 @@ nothing about what a user sees — this is exactly how hardcoded colours survive
 ## Evidence Requirements
 
 A claim without evidence is not a fact. Task completion requires recorded evidence per ENGINE.md §6.7 and §6.10. "It should work" is never evidence. Evidence must be reproducible from the checkpoint: command + observed output.
+
+**Never take a piped command's exit code as evidence.** `./gradlew build 2>&1 | tail -20` exits **0
+when the build failed**, because the exit status belongs to `tail`. This is not hypothetical: a real
+`BUILD FAILED` was first read as a pass this way, and the failure direction is the dangerous one - it
+does not stop the run, it lets the run continue believing something false, past every reviewer whose
+job assumed the build was green.
+
+Prefix the pipeline - `set -o pipefail; <command> | tail -20` - or run it unpiped and record the
+tool's own verdict line. `Bash(set -o pipefail)` is a baseline capability precisely so the first form
+is always available; it executes nothing and only makes a pipeline report the first non-zero status
+in it. `${PIPESTATUS[0]}` and redirecting to a file are both refused by the permission matcher
+(verified 2026-09-11), so neither is an option.
 
 ## Capability Risk Classes
 

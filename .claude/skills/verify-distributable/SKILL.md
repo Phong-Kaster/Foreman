@@ -51,27 +51,25 @@ Expected: **14 passed, 0 failed**. Two `Write-Error` blocks appear in the output
 prerequisite tests asserting those exact failures, not test failures. Read the `Passed:`/`Failed:`
 counts, not the presence of red text.
 
-## 3. `ENGINE.md` size against the command-line ceiling
+## 3. `ENGINE.md` size, as a context cost
 
-`run.ps1` passes `ENGINE.md` to the CLI as a single `--append-system-prompt` argument. Windows caps
-the whole command line at roughly **32,000 bytes** — measured on this machine: 32,000 accepted,
-33,000 rejected with `The filename or extension is too long`.
+**The command-line ceiling this check was written for no longer applies.** `run.ps1` passes the spec
+as `--append-system-prompt-file $EngineSpecPath` - a path, not the content - so the ~32,000-byte
+Windows limit that once bounded it is irrelevant. Do not report a percentage of that number; it
+measures nothing.
 
-`ENGINE.md` grows every release, because the Ratchet writes to it. When it crosses, every consumer
-repository fails at once.
+What remains is real but soft: the spec is injected as system prompt on **every** invocation, so
+every line is paid for once per iteration, for the life of every run in every consumer repository.
 
 ```bash
-B=$(wc -c < .harness/loop/ENGINE.md); echo "$B bytes ($(( B * 100 / 32000 ))% of budget)"
+wc -c .harness/loop/ENGINE.md .harness/loop/POLICIES.md
 ```
 
-- Under 75% — fine, report the number.
-- 75–90% — say so explicitly in your report; the next few doctrine additions need to be paid for by
-  removing something.
-- Over 90% — stop and escalate to the human. The fix is architectural (pass the spec by file or
-  stdin rather than argv), not a trim.
-
-The Ratchet cuts both ways here: a line is earned by a real failure **and removed once the model no
-longer needs it.** Size pressure is the forcing function for the removal half.
+Report the numbers and the direction of travel. There is no threshold to fail against - the
+judgement is whether the growth was earned. Under the Ratchet a line enters because a real failure
+demanded it and leaves when the model no longer needs it, and the removal half is the one that gets
+skipped. If the spec grew this commit, say what it grew for and whether anything was retired to pay
+for it.
 
 ## Reporting
 
