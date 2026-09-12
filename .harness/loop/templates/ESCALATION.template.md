@@ -4,8 +4,11 @@
 > the engine marks the tasks that entry blocks and keeps working on everything else. The Runtime
 > stops only when no executable task remains.
 >
-> Answer any number of entries - fill each `## Decision` section, then re-run. Unanswered entries
-> stay queued and the tasks they name stay unselectable.
+> This file is the engine's own log. **Answer in `.harness/run/DECISIONS.md`, never here** - copy an
+> entry's id as a heading there and write your decision underneath it, then re-run. The engine is
+> denied write access to `DECISIONS.md`, mechanically, so nothing it does here can ever race what you
+> write there. Answer any number of entries; unanswered ones stay queued and the tasks they name stay
+> unselectable.
 
 ---
 
@@ -58,7 +61,9 @@
 
 ### Decision
 
-<!-- HUMAN WRITES HERE: the decision AND its rationale. The rationale becomes part of the audit trail. -->
+<!-- Answered in `.harness/run/DECISIONS.md`, under a heading `## D-001` - never here. This file is
+     the engine's own log and the engine may still be writing to it; DECISIONS.md is not, and it
+     cannot be. -->
 
 ---
 
@@ -86,6 +91,6 @@ Build and install: `<exact command>`. Then work through the list. Mark each item
 
 ### Decision
 
-<!-- HUMAN WRITES HERE: PASS/FAIL per row above, plus anything you noticed that is not on the list.
-     Anything you report here that no row asked about is itself a finding: it means the DoD had a
-     gap, and the gap should be recorded, not just fixed. -->
+<!-- Answered in `.harness/run/DECISIONS.md`, under this entry's id - never here: PASS/FAIL per row
+     above, plus anything noticed that is not on the list. Anything reported that no row asked about
+     is itself a finding: it means the DoD had a gap, and the gap should be recorded, not just fixed. -->

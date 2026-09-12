@@ -53,8 +53,12 @@ The final commit of a run, created only after fresh verification passes. It remo
 _Avoid_: Squash, final commit (generic)
 
 **Escalation Request**:
-The durable artifact the engine must persist before stopping whenever it requires human input: the question, context, options considered, the engine's recommendation, and space for the human's decision *and rationale*. Consumed and archived by the next fresh invocation. At most one pending at a time (V1). The artifact name (V1: `.harness/run/ESCALATION.md`) is an implementation detail.
+The durable artifact the engine persists whenever it requires human input: the question, context, options considered, and the engine's recommendation. Consumed and archived by the next fresh invocation. At most one pending at a time (V1). The artifact name (V1: `.harness/run/ESCALATION.md`) is an implementation detail — engine-owned, and never where the human answers.
 _Avoid_: Question file, blocker, ticket
+
+**Decision**:
+The human's answer to an Escalation Request, and its rationale (the rationale joins the audit trail). Written to a file the engine can read but never write (V1: `.harness/run/DECISIONS.md`) — a separate writer from the Escalation Request it answers, so nothing the engine does to its own file can race what the human writes to this one ([ADR-025](./docs/adr/ADR-025-the-decision-queue-splits-into-an-engine-owned-and-a-human-owned-file.md)).
+_Avoid_: Answer, response (implies the engine could write it)
 
 **Crash**:
 An engine invocation that ends without producing any Execution Status. Only the Runtime can detect it — an engine cannot supervise its own death.

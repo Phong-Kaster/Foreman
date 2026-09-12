@@ -83,7 +83,7 @@ run.ps1 ──► Iteration 1: BOOTSTRAP (no .harness/run/ exists → this invoc
     │         └── ESCALATE: "approve the Definition of Done"
     ▼
 HUMAN GATE (the only mandatory one): review/edit DoD.md, approve standing capabilities,
-    fill the Decision section of .harness/run/ESCALATION.md → re-run
+    write the decision into .harness/run/DECISIONS.md (never into ESCALATION.md) → re-run
     ▼
 run.ps1 ──► Iterations 2..N: EXECUTE
     │         each: recover → consume decisions → orient → select task → implement
@@ -117,7 +117,7 @@ The engine must end every successful invocation by producing exactly one **Execu
 |---|---|---|
 | `CONTINUE` | Checkpoint persisted, more work remains | Invoke again |
 | `DONE` | Goal verified complete by a fresh verifier | Stop — success (exit 0) |
-| `ESCALATE` | Engine healthy; a decision exceeds its authority | Stop — surface `.harness/run/ESCALATION.md` (exit 3) |
+| `ESCALATE` | Engine healthy; a decision exceeds its authority | Stop — surface `.harness/run/ESCALATION.md` for the question, `.harness/run/DECISIONS.md` for the answer (exit 3) |
 | `FAILED` | Execution itself broken (environment, corruption, resources) | Stop — human repair (exit 4) |
 | *(none — Crash)* | Engine died without reporting | **Watchdog**: re-invoke, up to N consecutive crashes (default 3), then stop (exit 2) |
 
@@ -136,7 +136,7 @@ There is no conversation to reply to — each iteration is a fresh process. Huma
 
 > Whenever the engine requires human input, it must persist that request as a durable artifact before stopping; the decision must survive process termination and be consumable by a fresh invocation.
 
-V1 implementation: `.harness/run/ESCALATION.md` — question, context, options considered, engine recommendation, structured capability proposals, and an empty **Decision** section. The human writes the decision *and its rationale* (the rationale joins the audit trail), then re-runs. The next iteration's first acts: consume the decision, log it to `AMENDMENTS.md`, archive the exchange, proceed. Unanswered escalation → re-emit `ESCALATE` and stop again — mechanically unambiguous.
+V1 implementation, in **two files with one writer each** ([ADR-025](./adr/ADR-025-the-decision-queue-splits-into-an-engine-owned-and-a-human-owned-file.md)): `.harness/run/ESCALATION.md` — question, context, options considered, engine recommendation, structured capability proposals — is the engine's own log. `.harness/run/DECISIONS.md` — where the human writes the decision *and its rationale* (the rationale joins the audit trail) — is deny-listed against the engine, mechanically, the same as a Capability Ledger. A human should wait for the run to actually stop (`Status: ESCALATE`) before answering, never for `ESCALATION.md` merely appearing on disk — queuing a decision does not stop the run, so the engine may still be working, and writing to that file itself, well after it is written. The next iteration's first acts: consume any answered id from `DECISIONS.md`, log it to `AMENDMENTS.md`, archive the exchange, proceed. Unanswered escalation → re-emit `ESCALATE` and stop again — mechanically unambiguous.
 
 At most **one pending escalation at a time** (V1): the engine hard-stops on Tier 2, so parallel questions cannot arise.
 

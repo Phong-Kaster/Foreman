@@ -489,3 +489,60 @@ Describe "run.ps1 iteration budget survives a restart" {
         } finally { Remove-TestRepo -TestRepo $repo }
     }
 }
+
+Describe "run.ps1 protects the human's half of the Decision Queue" {
+
+    # ESCALATION.md (the engine's questions) and DECISIONS.md (the human's answers) used to be one
+    # file with two writers and no signal for when the second one could safely write - an answer
+    # written the moment the file appeared was caught mid-write by the engine and logged as
+    # "recording the partial decision." Splitting the files only holds if the engine truly cannot
+    # write the human's half, and only a permission denial makes that mechanical rather than advisory.
+
+    It "denies the engine Edit and Write on DECISIONS.md" {
+        $repo = New-TestRepo
+        try {
+            $argLog = Join-Path $repo "args.txt"
+            $env:FAKE_CLAUDE_ARGLOG = $argLog
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("DONE|ok")
+            Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "2") | Out-Null
+
+            $recorded = (Get-Content $argLog -Raw)
+            $recorded | Should Match "--settings"
+            $settingsPath = ($recorded -split '--settings\s+')[1].Split(' ')[0].Trim()
+            $settings = Get-Content $settingsPath -Raw | ConvertFrom-Json
+            # `Should Contain` in this Pester version checks a FILE's content, not collection
+            # membership - the plain `-contains` operator is the array-membership check here.
+            ($settings.permissions.deny -contains "Edit(.harness/run/DECISIONS.md)") | Should Be $true
+            ($settings.permissions.deny -contains "Write(.harness/run/DECISIONS.md)") | Should Be $true
+        } finally {
+            Remove-Item Env:\FAKE_CLAUDE_ARGLOG -ErrorAction SilentlyContinue
+            Remove-TestRepo -TestRepo $repo
+        }
+    }
+
+    It "provisions DECISIONS.md itself, since the engine that needs it cannot create what it cannot write" {
+        $repo = New-TestRepo
+        try {
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("DONE|ok")
+            Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "2") | Out-Null
+
+            $decisionsFile = Join-Path $repo ".harness/run/DECISIONS.md"
+            (Test-Path $decisionsFile) | Should Be $true
+            (Get-Content $decisionsFile -Raw) | Should Match "DECISIONS"
+        } finally { Remove-TestRepo -TestRepo $repo }
+    }
+
+    It "does not touch an existing DECISIONS.md" {
+        # A human may already have written an answer before this invocation - provisioning must
+        # never overwrite it.
+        $repo = New-TestRepo
+        try {
+            New-Item -ItemType Directory -Path (Join-Path $repo ".harness/run") -Force | Out-Null
+            Set-Content -Path (Join-Path $repo ".harness/run/DECISIONS.md") -Value "## D-001`n`nApproved - ship it."
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("DONE|ok")
+            Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "2") | Out-Null
+
+            (Get-Content (Join-Path $repo ".harness/run/DECISIONS.md") -Raw) | Should Match "Approved - ship it."
+        } finally { Remove-TestRepo -TestRepo $repo }
+    }
+}

@@ -170,6 +170,14 @@ function Compile-PermissionSettings {
         # and the Fresh-Context Review would then validate all future code against the corruption.
         "Edit(.harness/knowledge/DOMAIN.md)",
         "Write(.harness/knowledge/DOMAIN.md)",
+        # The human's half of the Decision Queue. ESCALATION.md (the engine's questions) and
+        # DECISIONS.md (the human's answers) used to be one file with two writers and no signal for
+        # when it was safe for the second one to write - a human's answer, written the moment the
+        # file appeared, was caught mid-write by the engine and logged as "recording the partial
+        # decision." Denying the engine this file, mechanically, is what makes "the engine never
+        # writes it" true instead of merely documented (ADR-025).
+        "Edit(.harness/run/DECISIONS.md)",
+        "Write(.harness/run/DECISIONS.md)",
         # Pushing is capability-gated (ADR-011) and scoped to the Loop Branch. These deny the
         # operations that would make the engine an author on shared history rather than a
         # contributor on its own branch - regardless of what any allow rule grants.
@@ -391,6 +399,22 @@ function Publish-AgentDefinitions {
     } catch {
         # Never let this stop a run: without the definitions the engine simply has no Workers.
         Write-Warning "Could not publish agent definitions ($_). Continuing without Workers."
+    }
+}
+
+# The human's half of the Decision Queue (ADR-025). The engine is deny-listed from writing this
+# file above, which means it can also never CREATE it - so the Runtime provisions it, once,
+# mechanically, the same way it provisions the compiled permission settings. Skipped before
+# bootstrap (no .harness/run/ yet): there is nothing to answer until the engine has asked something.
+function Ensure-DecisionsFile {
+    if (-not (Test-Path $RunDir)) { return }
+    $decisionsFile = Join-Path $RunDir "DECISIONS.md"
+    if (Test-Path $decisionsFile) { return }
+    $templatePath = Join-Path $LoopDir "templates/DECISIONS.template.md"
+    if (Test-Path $templatePath) {
+        Copy-Item -Path $templatePath -Destination $decisionsFile
+    } else {
+        Set-Content -Path $decisionsFile -Value "# DECISIONS`n"
     }
 }
 
@@ -643,6 +667,7 @@ for ($iteration = $priorIterations + 1; $iteration -le $MaxIterations; $iteratio
     # engine could reason around. Omitting Bash from its tools is what makes "no git, no build,
     # no test" real rather than advisory.
     Publish-AgentDefinitions
+    Ensure-DecisionsFile
     # Keep per-machine, per-iteration sections (cwd, env, git status) out of the system prompt so
     # the cacheable prefix stays byte-identical across iterations. Git status changes every
     # checkpoint, so leaving it in the prefix would break the cache for the spec that follows it.
@@ -722,6 +747,12 @@ for ($iteration = $priorIterations + 1; $iteration -le $MaxIterations; $iteratio
     Write-RunLog "=== Status: $($status.Word) === $(Get-Date -Format o)"
     Write-Host ("Status: {0} (iteration took {1}, total elapsed {2})" -f $status.Word, (Format-Elapsed $IterStart), (Format-Elapsed $RunStart)) -ForegroundColor Yellow
     if ($status.Reason -ne "") { Write-Host $status.Reason }
+
+    # Provisioned here too, not only before invoking: bootstrap is the Iteration that FIRST creates
+    # .harness/run/, and ESCALATE can fire on that very Iteration (the DoD approval gate always
+    # does). Provisioning only before invocation would leave a human staring at an ESCALATION.md
+    # with no DECISIONS.md to answer into until they ran the Runtime a second time for no reason.
+    Ensure-DecisionsFile
 
     switch ($status.Word) {
         "DONE"     { Write-Host "Goal verified complete. Review and merge the Loop Branch." -ForegroundColor Green; exit 0 }

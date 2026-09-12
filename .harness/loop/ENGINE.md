@@ -140,6 +140,7 @@ If `.harness/run/` does not exist, this invocation is the Bootstrap. Do not impl
    - `STATE.md` — initialized from the template. Note its field is `Stage`, not `Phase`: `Phase` means a group of tasks.
    - `RESUME.md` — the Resume Block (§9).
    - `AMENDMENTS.md`, `HISTORY.md`, `ESCALATION.md` — empty logs.
+   - `DECISIONS.md` is **not yours to create.** The Runtime provisions it, mechanically, before your first invocation — because it is also where the deny rules protecting it start applying, and a file you could create is a file you could still be the only writer of at the moment it is born.
    - `.harness/ISSUES.md` — the Issues Report (§10). A sibling of `run/`, not inside it, which is why it survives the Cleanup Commit.
    - `SUGGESTIONS.html` at the repository root — the Suggestion Box: lessons this run learned that are true **beyond** this repository, and so belong in a tier you cannot write to. Proposals only; you never act on one. Criteria and the two bounding rules are in `POLICIES.md`.
 7. Propose standing Capabilities for this repository's toolchain (build/test/lint commands) as part of the decision below.
@@ -160,7 +161,9 @@ Check the working tree. A dirty tree means the previous invocation crashed or wa
 
 ## 6.2 Consume decisions
 
-Read `.harness/run/ESCALATION.md`. For every queued decision whose `## Decision` section is now filled: apply it, log it (with the human's rationale) to `AMENDMENTS.md`, archive the exchange into `HISTORY.md`, and unblock the tasks that entry named. Entries still unanswered stay queued — and the tasks they name stay unselectable.
+Read `.harness/run/DECISIONS.md` — a file you can read but never write; the Runtime denies you that capability mechanically, the same as `.harness/knowledge/DOMAIN.md`. For every id present there (`D-00N`) that matches a queued entry in `.harness/run/ESCALATION.md`: apply the decision, log it (with the human's rationale) to `AMENDMENTS.md`, mark the `ESCALATION.md` entry `answered`, archive the exchange into `HISTORY.md`, and unblock the tasks that entry named. An id with no matching queued entry, or a body that is empty or plainly cut off mid-sentence, is not a decision — leave it and the tasks it would unblock queued rather than guess at intent. Entries with no id in `DECISIONS.md` yet stay queued too.
+
+This file is read exactly once, right here, at the start of the Iteration — never re-opened before the next one begins. A decision written to it while this Iteration is still running is not lost and does not race anything (you never write to it, so there is nothing to collide with), it simply waits for the Iteration after this one.
 
 ## 6.3 Orient
 
@@ -267,7 +270,9 @@ If the push capability is granted, push the Loop Branch. Never the default branc
 
 # 7. The Decision Queue
 
-When you need human input, append an entry to `.harness/run/ESCALATION.md` from the template: the question, context, options considered, your recommendation, structured capability proposals if any, **the tasks this decision blocks**, and an empty `## Decision` section.
+When you need human input, append an entry to `.harness/run/ESCALATION.md` from the template: an id (`D-00N`, sequential), the question, context, options considered, your recommendation, structured capability proposals if any, and **the tasks this decision blocks**.
+
+The human answers in `.harness/run/DECISIONS.md`, under a heading naming this entry's id — never in `.harness/run/ESCALATION.md` itself. You cannot write `DECISIONS.md`; the Runtime denies it, the same as the Capability Ledgers. Never treat `ESCALATION.md` existing, or a human's activity, as a signal that an answer is ready — you may still be working on other tasks for a while after writing this entry, and the only reliable signal that it is safe to answer is the run actually stopping (`Status: ESCALATE`), which you do not control from here.
 
 Then **mark those tasks deferred and keep working on something else.** Do not stop. Do not guess. Do not report `ESCALATE` merely because you asked a question.
 
