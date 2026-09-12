@@ -126,7 +126,7 @@ The engine must end every successful invocation by producing exactly one **Execu
 The runtime owns exactly two safety bounds, both mechanical and judgment-free:
 
 - **Watchdog** — an engine cannot supervise its own death; the crash counter resets on any reported status.
-- **Iteration budget** (default 50/run) — stops an engine looping `CONTINUE` forever on an impossible goal. Budget exhaustion produces a deterministic report (exit 5), never an interpretation of task failure.
+- **Iteration budget** (default 50/run) — stops an engine looping `CONTINUE` forever on an impossible goal. Budget exhaustion produces a deterministic report (exit 5), never an interpretation of task failure. Counted from commits already on the Loop Branch, not a process-local variable, so it survives a restart across `ESCALATE`, a Crash-limit, or a quota wait ([ADR-024](./adr/ADR-024-the-iteration-budget-is-counted-from-commits-not-a-process-variable.md)).
 
 ---
 

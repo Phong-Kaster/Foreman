@@ -440,3 +440,52 @@ Describe "run.ps1 classifies a launch failure" {
         } finally { Remove-TestRepo -TestRepo $repo }
     }
 }
+
+Describe "run.ps1 iteration budget survives a restart" {
+
+    # $iteration was a `for`-loop variable, local to one process. ESCALATE, a Crash-limit and a
+    # FAILED all exit the process expecting to be re-run, so the counter reset to 1 every time -
+    # a run that escalated five times got 250 iterations, not 50. The fix counts commits already
+    # on the branch instead, because ENGINE.md 6 requires every Iteration to end in exactly one.
+    #
+    # fake-claude never commits (it only writes STATUS.md), so three real commits are made here to
+    # stand in for three iterations a PRIOR process already completed before exiting and being
+    # re-run - exactly what a restart after ESCALATE or a Crash-limit looks like on disk.
+
+    It "counts prior commits on the branch instead of restarting the budget at 1" {
+        $repo = New-TestRepo
+        try {
+            Push-Location $repo
+            try {
+                # New-TestRepo's `git init` may name the initial branch "main" or "master"
+                # depending on the machine's config - pin it to "main" so the base this run
+                # branched from is known, the way run.ps1 itself resolves it.
+                $initialBranch = (& git rev-parse --abbrev-ref HEAD).Trim()
+                if ($initialBranch -ne "main") { & git branch -m $initialBranch main | Out-Null }
+                & git checkout -b loop/restart-budget --quiet | Out-Null
+                1..3 | ForEach-Object {
+                    Set-Content -Path (Join-Path $repo "checkpoint-$_.txt") -Value "iteration $_"
+                    & git add -A | Out-Null
+                    & git -c user.email=test@local -c user.name=LoopTest commit --quiet -m "checkpoint $_" | Out-Null
+                }
+            } finally { Pop-Location }
+
+            # Three iterations are already checkpointed. A fresh process with MaxIterations 4 must
+            # resume at iteration 4, not iteration 1 - so exactly one more CONTINUE exhausts the
+            # budget. Unfixed, this queue underruns instead (iteration 2 finds an empty queue,
+            # which fake-claude treats as a Crash) and the run stops at exit 2, not exit 5.
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("CONTINUE|d")
+            $exit = Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "4")
+            $exit | Should Be 5
+        } finally { Remove-TestRepo -TestRepo $repo }
+    }
+
+    It "starts a fresh branch at iteration 1, same as today" {
+        $repo = New-TestRepo
+        try {
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("CONTINUE|a", "DONE|b")
+            $exit = Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "2")
+            $exit | Should Be 0
+        } finally { Remove-TestRepo -TestRepo $repo }
+    }
+}

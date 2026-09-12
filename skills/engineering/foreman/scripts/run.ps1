@@ -578,12 +578,47 @@ function Format-Elapsed([datetime]$since) {
     return "{0:00}:{1:00}:{2:00}" -f [int]$span.TotalHours, $span.Minutes, $span.Seconds
 }
 
+# ---------- Iteration budget: counted from commits, not from this process's memory ----------
+# $iteration was a `for`-loop variable, so it reset to 1 every time this script was re-invoked -
+# and ESCALATE, a Crash-limit, FAILED and a quota wait ALL exit the process (see the `exit` calls
+# below), expecting the human or the Skill to run.ps1 again. MaxIterations therefore never bounded
+# a run; it bounded one continuous process, and a run that escalates or crashes its way through
+# restarts gets the budget again, free, every time. Observed in the field: six restarts in one run,
+# each handed a fresh 50.
+#
+# ENGINE.md 6 requires every non-crashed Iteration to end at "exactly one Stable Checkpoint...
+# persisted as one atomic git commit" - so commits already on the branch ARE the count of
+# iterations already spent, and that count survives a process exit because git does. No new file:
+# the default branch is resolved the same way a human would (origin's HEAD, then a local main or
+# master), and if none can be found the count is 0 - identical to today's behavior, never worse.
+function Resolve-DefaultBranchRef {
+    $ref = & git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>$null
+    if ($LASTEXITCODE -eq 0 -and $ref) { return $ref }
+    foreach ($name in @("main", "master")) {
+        & git show-ref --verify --quiet "refs/heads/$name" 2>$null
+        if ($LASTEXITCODE -eq 0) { return $name }
+    }
+    return $null
+}
+function Get-PriorIterationCount {
+    $base = Resolve-DefaultBranchRef
+    if (-not $base) { return 0 }
+    $countText = & git rev-list --count "$base..HEAD" 2>$null
+    if ($LASTEXITCODE -ne 0 -or -not $countText) { return 0 }
+    return [int]$countText.Trim()
+}
+
 # ---------- The loop ----------
 $consecutiveCrashes = 0
 $quotaWaits = 0
+$priorIterations = Get-PriorIterationCount
+if ($priorIterations -gt 0) {
+    Write-Host "Resuming: $priorIterations iteration(s) already checkpointed on this branch." -ForegroundColor DarkGray
+    Write-RunLog "resuming at iteration $($priorIterations + 1) - $priorIterations already checkpointed"
+}
 
 try {
-for ($iteration = 1; $iteration -le $MaxIterations; $iteration++) {
+for ($iteration = $priorIterations + 1; $iteration -le $MaxIterations; $iteration++) {
     $IterStart = Get-Date
     Write-Host ""
     Write-Host "=== Iteration $iteration / $MaxIterations === started $(Get-Date -Format 'HH:mm:ss') | total elapsed $(Format-Elapsed $RunStart)" -ForegroundColor Cyan
