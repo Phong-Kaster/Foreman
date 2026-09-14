@@ -24,6 +24,8 @@ param(
     # Mechanical safety bounds - the only "policy" the Runtime owns (ADR-012).
     [int]$MaxIterations = 50,
     [int]$MaxConsecutiveCrashes = 3,
+    # Seconds to wait before re-invoking after a Crash, multiplied by the consecutive crash count.
+    [int]$CrashBackoffSeconds = 15,
     # Idle timeout: no stream event for this long means a hung invocation. Must exceed the longest
     # legitimate single tool call, because one Bash call emits no events while it runs.
     [int]$MaxIdleMinutes = 20,
@@ -168,6 +170,14 @@ function Compile-PermissionSettings {
         # and the Fresh-Context Review would then validate all future code against the corruption.
         "Edit(.harness/knowledge/DOMAIN.md)",
         "Write(.harness/knowledge/DOMAIN.md)",
+        # The human's half of the Decision Queue. ESCALATION.md (the engine's questions) and
+        # DECISIONS.md (the human's answers) used to be one file with two writers and no signal for
+        # when it was safe for the second one to write - a human's answer, written the moment the
+        # file appeared, was caught mid-write by the engine and logged as "recording the partial
+        # decision." Denying the engine this file, mechanically, is what makes "the engine never
+        # writes it" true instead of merely documented (ADR-025).
+        "Edit(.harness/run/DECISIONS.md)",
+        "Write(.harness/run/DECISIONS.md)",
         # Pushing is capability-gated (ADR-011) and scoped to the Loop Branch. These deny the
         # operations that would make the engine an author on shared history rather than a
         # contributor on its own branch - regardless of what any allow rule grants.
@@ -392,6 +402,22 @@ function Publish-AgentDefinitions {
     }
 }
 
+# The human's half of the Decision Queue (ADR-025). The engine is deny-listed from writing this
+# file above, which means it can also never CREATE it - so the Runtime provisions it, once,
+# mechanically, the same way it provisions the compiled permission settings. Skipped before
+# bootstrap (no .harness/run/ yet): there is nothing to answer until the engine has asked something.
+function Ensure-DecisionsFile {
+    if (-not (Test-Path $RunDir)) { return }
+    $decisionsFile = Join-Path $RunDir "DECISIONS.md"
+    if (Test-Path $decisionsFile) { return }
+    $templatePath = Join-Path $LoopDir "templates/DECISIONS.template.md"
+    if (Test-Path $templatePath) {
+        Copy-Item -Path $templatePath -Destination $decisionsFile
+    } else {
+        Set-Content -Path $decisionsFile -Value "# DECISIONS`n"
+    }
+}
+
 # ---------- Engine invocation with idle + hard timeout (ADR-012) ----------
 # Run as a tracked child process rather than a pipeline, so a hung invocation can actually be
 # killed. An engine doing work emits tool_use events continuously; silence is the hang signal -
@@ -403,6 +429,9 @@ function Invoke-EngineOnce {
     $stdoutFile = Join-Path $env:TEMP ("loop-engine-" + [System.Guid]::NewGuid().ToString("N") + ".out")
     $stderrFile = "$stdoutFile.err"
     $timeoutKind = ""
+    # Cleared per invocation. Set only when the process could not be STARTED, which is a different
+    # condition from one that started and died - see the classification at the crash block.
+    $script:LaunchError = $null
 
     $launch = Resolve-EngineLaunch -EngineArgs $EngineArgs
 
@@ -420,11 +449,19 @@ function Invoke-EngineOnce {
     # -WorkingDirectory is explicit and load-bearing: Start-Process launches in .NET's current
     # directory, which is NOT PowerShell's location. Without it the engine runs somewhere else
     # entirely and writes its status file outside the consumer repository.
-    $proc = Start-Process -FilePath $launch.Exe -ArgumentList $launch.ArgString `
-                          -WorkingDirectory $RepoRoot `
-                          -RedirectStandardInput $stdinFile `
-                          -RedirectStandardOutput $stdoutFile -RedirectStandardError $stderrFile `
-                          -NoNewWindow -PassThru
+    # Start-Process sits outside the streaming try/catch below, so a failure to launch was
+    # previously an unhandled terminating error: the run died with exit 1 and no explanation.
+    # Catch it here and record it, so the caller can tell "never started" from "started and died".
+    try {
+        $proc = Start-Process -FilePath $launch.Exe -ArgumentList $launch.ArgString `
+                              -WorkingDirectory $RepoRoot `
+                              -RedirectStandardInput $stdinFile `
+                              -RedirectStandardOutput $stdoutFile -RedirectStandardError $stderrFile `
+                              -NoNewWindow -PassThru
+    } catch {
+        $script:LaunchError = "$_"
+        return ""
+    }
 
     $idleLimit   = New-TimeSpan -Minutes $MaxIdleMinutes
     $hardLimit   = New-TimeSpan -Minutes $MaxIterationMinutes
@@ -483,6 +520,7 @@ function Invoke-EngineOnce {
             Write-RunLog "=== Timeout ($timeoutKind) killed the engine process tree === $(Get-Date -Format o)"
         }
     } catch {
+        $script:LaunchError = "$_"
         Write-Warning "Engine process error: $_"
     } finally {
         if ($null -ne $reader) { try { $reader.Dispose() } catch {} }
@@ -564,12 +602,47 @@ function Format-Elapsed([datetime]$since) {
     return "{0:00}:{1:00}:{2:00}" -f [int]$span.TotalHours, $span.Minutes, $span.Seconds
 }
 
+# ---------- Iteration budget: counted from commits, not from this process's memory ----------
+# $iteration was a `for`-loop variable, so it reset to 1 every time this script was re-invoked -
+# and ESCALATE, a Crash-limit, FAILED and a quota wait ALL exit the process (see the `exit` calls
+# below), expecting the human or the Skill to run.ps1 again. MaxIterations therefore never bounded
+# a run; it bounded one continuous process, and a run that escalates or crashes its way through
+# restarts gets the budget again, free, every time. Observed in the field: six restarts in one run,
+# each handed a fresh 50.
+#
+# ENGINE.md 6 requires every non-crashed Iteration to end at "exactly one Stable Checkpoint...
+# persisted as one atomic git commit" - so commits already on the branch ARE the count of
+# iterations already spent, and that count survives a process exit because git does. No new file:
+# the default branch is resolved the same way a human would (origin's HEAD, then a local main or
+# master), and if none can be found the count is 0 - identical to today's behavior, never worse.
+function Resolve-DefaultBranchRef {
+    $ref = & git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>$null
+    if ($LASTEXITCODE -eq 0 -and $ref) { return $ref }
+    foreach ($name in @("main", "master")) {
+        & git show-ref --verify --quiet "refs/heads/$name" 2>$null
+        if ($LASTEXITCODE -eq 0) { return $name }
+    }
+    return $null
+}
+function Get-PriorIterationCount {
+    $base = Resolve-DefaultBranchRef
+    if (-not $base) { return 0 }
+    $countText = & git rev-list --count "$base..HEAD" 2>$null
+    if ($LASTEXITCODE -ne 0 -or -not $countText) { return 0 }
+    return [int]$countText.Trim()
+}
+
 # ---------- The loop ----------
 $consecutiveCrashes = 0
 $quotaWaits = 0
+$priorIterations = Get-PriorIterationCount
+if ($priorIterations -gt 0) {
+    Write-Host "Resuming: $priorIterations iteration(s) already checkpointed on this branch." -ForegroundColor DarkGray
+    Write-RunLog "resuming at iteration $($priorIterations + 1) - $priorIterations already checkpointed"
+}
 
 try {
-for ($iteration = 1; $iteration -le $MaxIterations; $iteration++) {
+for ($iteration = $priorIterations + 1; $iteration -le $MaxIterations; $iteration++) {
     $IterStart = Get-Date
     Write-Host ""
     Write-Host "=== Iteration $iteration / $MaxIterations === started $(Get-Date -Format 'HH:mm:ss') | total elapsed $(Format-Elapsed $RunStart)" -ForegroundColor Cyan
@@ -594,6 +667,7 @@ for ($iteration = 1; $iteration -le $MaxIterations; $iteration++) {
     # engine could reason around. Omitting Bash from its tools is what makes "no git, no build,
     # no test" real rather than advisory.
     Publish-AgentDefinitions
+    Ensure-DecisionsFile
     # Keep per-machine, per-iteration sections (cwd, env, git status) out of the system prompt so
     # the cacheable prefix stays byte-identical across iterations. Git status changes every
     # checkpoint, so leaving it in the prefix would break the cache for the spec that follows it.
@@ -629,6 +703,22 @@ for ($iteration = 1; $iteration -le $MaxIterations; $iteration++) {
         continue
     }
 
+    # ---- A process that never STARTED is not a Crash either ----
+    # Same reasoning as the quota branch above: the Watchdog's budget exists for faults that a retry
+    # can clear. A missing CLI or an over-long argument list clears only when a human acts, so three
+    # retries burn the budget and then report the failure as "probably transient, start it again".
+    # The distinguishing fact - the exception fired before the process ran - is already in hand.
+    if ($null -eq $status -and $null -ne $script:LaunchError) {
+        Write-Host ""
+        Write-Host "The engine could not be started." -ForegroundColor Red
+        Write-Host "  $script:LaunchError"
+        Write-Host "This is not a crash, so it is not retried: another invocation would fail the same way."
+        Write-Host "Repair the environment, then start the run again. It resumes from the last Stable Checkpoint."
+        Write-RunLog "=== Status: FAILED (launch) === $(Get-Date -Format o)"
+        Write-RunLog "FAILED: engine could not be started: $script:LaunchError"
+        exit 4
+    }
+
     if ($null -eq $status) {
         # Crash: the engine died without reporting. Only the Runtime can detect this (Watchdog).
         # A timeout kill lands here deliberately - it IS a crash, and existing recovery applies:
@@ -641,6 +731,14 @@ for ($iteration = 1; $iteration -le $MaxIterations; $iteration++) {
             Write-Host "Watchdog limit reached. Stopping. The next run's engine will recover from the last Stable Checkpoint." -ForegroundColor Red
             exit 2
         }
+        # Give a transient fault room to clear. Retrying three times inside a few seconds spends the
+        # budget before the condition it protects against has had any chance to pass.
+        $wait = $CrashBackoffSeconds * $consecutiveCrashes
+        if ($wait -gt 0) {
+            Write-Host "Waiting $wait s before re-invoking (backoff)." -ForegroundColor DarkGray
+            Write-RunLog "backoff $wait s after crash $consecutiveCrashes"
+            Start-Sleep -Seconds $wait
+        }
         continue
     }
 
@@ -649,6 +747,12 @@ for ($iteration = 1; $iteration -le $MaxIterations; $iteration++) {
     Write-RunLog "=== Status: $($status.Word) === $(Get-Date -Format o)"
     Write-Host ("Status: {0} (iteration took {1}, total elapsed {2})" -f $status.Word, (Format-Elapsed $IterStart), (Format-Elapsed $RunStart)) -ForegroundColor Yellow
     if ($status.Reason -ne "") { Write-Host $status.Reason }
+
+    # Provisioned here too, not only before invoking: bootstrap is the Iteration that FIRST creates
+    # .harness/run/, and ESCALATE can fire on that very Iteration (the DoD approval gate always
+    # does). Provisioning only before invocation would leave a human staring at an ESCALATION.md
+    # with no DECISIONS.md to answer into until they ran the Runtime a second time for no reason.
+    Ensure-DecisionsFile
 
     switch ($status.Word) {
         "DONE"     { Write-Host "Goal verified complete. Review and merge the Loop Branch." -ForegroundColor Green; exit 0 }

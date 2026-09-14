@@ -53,8 +53,12 @@ The final commit of a run, created only after fresh verification passes. It remo
 _Avoid_: Squash, final commit (generic)
 
 **Escalation Request**:
-The durable artifact the engine must persist before stopping whenever it requires human input: the question, context, options considered, the engine's recommendation, and space for the human's decision *and rationale*. Consumed and archived by the next fresh invocation. At most one pending at a time (V1). The artifact name (V1: `.harness/run/ESCALATION.md`) is an implementation detail.
+The durable artifact the engine persists whenever it requires human input: the question, context, options considered, and the engine's recommendation. Consumed and archived by the next fresh invocation. At most one pending at a time (V1). The artifact name (V1: `.harness/run/ESCALATION.md`) is an implementation detail — engine-owned, and never where the human answers.
 _Avoid_: Question file, blocker, ticket
+
+**Decision**:
+The human's answer to an Escalation Request, and its rationale (the rationale joins the audit trail). Written to a file the engine can read but never write (V1: `.harness/run/DECISIONS.md`) — a separate writer from the Escalation Request it answers, so nothing the engine does to its own file can race what the human writes to this one ([ADR-025](./docs/adr/ADR-025-the-decision-queue-splits-into-an-engine-owned-and-a-human-owned-file.md)).
+_Avoid_: Answer, response (implies the engine could write it)
 
 **Crash**:
 An engine invocation that ends without producing any Execution Status. Only the Runtime can detect it — an engine cannot supervise its own death.
@@ -100,7 +104,7 @@ The state recorded when the engine believes the Goal is complete. The iteration 
 _Avoid_: Done, complete (before fresh verification)
 
 **Knowledge**:
-What a consumer repository durably knows, kept in `.harness/knowledge/` at its root and surviving every feature run. Three files with different owners and incompatible rules — Project Knowledge, Open Issues, and Domain Knowledge, below. None holds knowledge about a technology stack in general: that is not truth about this repository, nothing here can verify it, and it goes stale uncorrected (ADR-007).
+What a consumer repository durably knows, kept in `.harness/knowledge/` at its root and surviving every feature run. Three files with different owners and incompatible rules — Project Knowledge, Open Issues, and Domain Knowledge, below. None holds knowledge about a technology stack in general: that is not truth about this repository, nothing here can verify it, and it goes stale uncorrected (ADR-019).
 _Avoid_: Docs, memory, wiki
 
 **Project Knowledge**:
@@ -108,7 +112,8 @@ The engine-maintained cache of verified operational truth about a consumer repos
 _Avoid_: Knowledge (unqualified — now ambiguous)
 
 **Open Issues**:
-The engine-maintained list of known defects that are **still wrong**, in `.harness/ISSUES.md`, read at Orient every iteration so a known defect reaches the engine before it writes code rather than after. Its semantics are the inverse of Project Knowledge: entries are patterns to **avoid**, not conventions to conform to — a defect recorded as a fact gets reproduced on purpose (ADR-008). Each entry is actionable on its own and cites the commit SHA holding the full record, because paths into `.harness/run/` stop resolving once the Cleanup Commit removes it. An entry is deleted when resolved, never marked done.
+A known defect that is **still wrong** and is not being fixed. It is recorded as a **Constraint** in `.harness/knowledge/PROJECT.md` (ADR-016), which carries it verbatim into every Worker Brief, so it reaches the Worker before code is written rather than waiting to be read. It must be phrased as the **instruction** it implies — *"never take a colour from this pattern; source it from the theme"* — never as the observation it came from, because a defect recorded as a fact is read as the local convention and reproduced on purpose (ADR-018, superseding ADR-020's separate file). Cites `file:line` so it can be checked, and is deleted once it stops being true.
+_Avoid_: `ISSUES.md` (that is the human-facing Issues Report, a different artifact), backlog, technical debt register
 _Avoid_: Backlog, TODO list (those hold work not yet started; this holds work known to be wrong), technical debt register
 
 **Domain Knowledge**:

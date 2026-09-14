@@ -1,0 +1,984 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Foreman — a portable autonomous execution engine for Claude Code</title>
+<meta name="description" content="You say what you want. A robot builds it while you go do something else. You check the result at the end.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%A4%96%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#FAFAFC; --bg-elev:#FFFFFF; --bg-sunken:#F1F2F6;
+    --text:#12141C; --text-2:#4B5163; --text-3:#8A90A2;
+    --border:#E5E7EF; --border-soft:#EEEFF5;
+    --accent:#5B4FE0; --accent-2:#12C7B4; --accent-ink:#4038B8;
+    --accent-soft:#EFEDFF; --accent-2-soft:#E4FBF7;
+    --code-bg:#F3F4FA; --code-ink:#2B2F3C;
+    --shadow:0 1px 2px rgba(20,20,40,.04), 0 8px 24px rgba(20,20,40,.06);
+    --shadow-lg:0 4px 12px rgba(20,20,40,.06), 0 24px 48px rgba(20,20,40,.10);
+    --radius:14px;
+    --f-sans:"Inter","Helvetica Neue",Arial,sans-serif;
+    --f-mono:"JetBrains Mono",ui-monospace,"SF Mono",Consolas,monospace;
+    --maxw:1180px;
+    --sidebar-w:280px;
+    color-scheme:light;
+  }
+  @media (prefers-color-scheme:dark){
+    :root:not([data-theme="light"]){
+      --bg:#0B0C12; --bg-elev:#12131C; --bg-sunken:#0E0F17;
+      --text:#EDEEF5; --text-2:#B4B8C9; --text-3:#767C90;
+      --border:#232532; --border-soft:#1C1E29;
+      --accent:#8B80FF; --accent-2:#3FE0CB; --accent-ink:#ADA4FF;
+      --accent-soft:#1B1A2E; --accent-2-soft:#10231F;
+      --code-bg:#161821; --code-ink:#D7DAE6;
+      --shadow:0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.35);
+      --shadow-lg:0 4px 16px rgba(0,0,0,.4), 0 32px 64px rgba(0,0,0,.5);
+      color-scheme:dark;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#0B0C12; --bg-elev:#12131C; --bg-sunken:#0E0F17;
+    --text:#EDEEF5; --text-2:#B4B8C9; --text-3:#767C90;
+    --border:#232532; --border-soft:#1C1E29;
+    --accent:#8B80FF; --accent-2:#3FE0CB; --accent-ink:#ADA4FF;
+    --accent-soft:#1B1A2E; --accent-2-soft:#10231F;
+    --code-bg:#161821; --code-ink:#D7DAE6;
+    --shadow:0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.35);
+    --shadow-lg:0 4px 16px rgba(0,0,0,.4), 0 32px 64px rgba(0,0,0,.5);
+    color-scheme:dark;
+  }
+
+  [data-lang="en"]{display:none}
+  :root[data-ui-lang="en"] [data-lang="en"]{display:revert}
+  :root[data-ui-lang="en"] [data-lang="vi"]{display:none}
+
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:var(--f-sans);font-size:16px;line-height:1.6;-webkit-font-smoothing:antialiased}
+  a{color:var(--accent-ink)}
+  code,.mono{font-family:var(--f-mono)}
+  code{background:var(--code-bg);color:var(--code-ink);padding:.12em .4em;border-radius:5px;font-size:.88em}
+  pre{background:var(--code-bg);color:var(--code-ink);border:1px solid var(--border-soft);border-radius:10px;padding:16px 18px;overflow-x:auto;font-family:var(--f-mono);font-size:13.2px;line-height:1.65;position:relative}
+  pre code{background:none;padding:0;font-size:1em;color:inherit}
+  h1,h2,h3,h4{font-family:var(--f-sans);font-weight:700;letter-spacing:-.01em;text-wrap:balance}
+  p{margin:0 0 14px}
+  .container{max-width:var(--maxw);margin:0 auto;padding:0 28px}
+
+  /* ---------- top bar ---------- */
+  .topbar{position:sticky;top:0;z-index:100;background:color-mix(in srgb, var(--bg) 88%, transparent);backdrop-filter:blur(10px);border-bottom:1px solid var(--border-soft)}
+  .topbar-inner{max-width:var(--maxw);margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:16px}
+  .brand{display:flex;align-items:center;gap:9px;font-weight:800;font-size:1.05rem;text-decoration:none;color:var(--text);margin-right:auto}
+  .brand .dot{width:9px;height:9px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent-2));box-shadow:0 0 0 4px var(--accent-soft)}
+  .topbar-actions{display:flex;align-items:center;gap:8px}
+  .iconbtn{width:34px;height:34px;display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--border);border-radius:9px;background:var(--bg-elev);color:var(--text-2);cursor:pointer}
+  .iconbtn:hover{color:var(--text);border-color:var(--text-3)}
+  .iconbtn svg{width:16px;height:16px}
+  .gh-link{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--border);border-radius:9px;padding:7px 13px;font-size:13px;font-weight:600;color:var(--text);text-decoration:none;background:var(--bg-elev)}
+  .gh-link:hover{border-color:var(--text-3)}
+  select#lang-select{font-family:var(--f-sans);font-size:12.5px;font-weight:600;padding:6px 26px 6px 11px;color:var(--text);background-color:var(--bg-elev);border:1px solid var(--border);border-radius:9px;-webkit-appearance:none;appearance:none;cursor:pointer;
+    background-image:linear-gradient(45deg,transparent 50%,currentColor 50%),linear-gradient(135deg,currentColor 50%,transparent 50%);
+    background-position:calc(100% - 13px) 52%,calc(100% - 8px) 52%;background-size:4.5px 4.5px,4.5px 4.5px;background-repeat:no-repeat;color:var(--text-2)}
+  select#lang-select option{background:var(--bg-elev);color:var(--text)}
+  .menu-toggle{display:none}
+
+  /* ---------- layout: sidebar + content ---------- */
+  .layout{max-width:var(--maxw);margin:0 auto;padding:0 28px;display:grid;grid-template-columns:var(--sidebar-w) 1fr;gap:48px;align-items:start}
+  aside.sidebar{position:sticky;top:65px;max-height:calc(100vh - 85px);overflow-y:auto;padding:28px 0 40px;scrollbar-width:thin}
+  aside.sidebar::-webkit-scrollbar{width:6px}
+  aside.sidebar::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+  .navgroup{margin-bottom:22px}
+  .navgroup-title{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text-3);margin:0 0 8px;padding:0 12px}
+  .navgroup ul{list-style:none;margin:0;padding:0}
+  .navgroup li a{display:block;padding:7px 12px;border-radius:8px;color:var(--text-2);text-decoration:none;font-size:13.6px;line-height:1.4;border-left:2px solid transparent;transition:background .12s,color .12s}
+  .navgroup li a:hover{background:var(--bg-sunken);color:var(--text)}
+  .navgroup li a.active{color:var(--accent-ink);background:var(--accent-soft);font-weight:600;border-left-color:var(--accent)}
+  .navgroup.sub ul{padding-left:10px;margin-top:2px}
+  .navgroup.sub li a{font-size:12.8px}
+
+  main.content{min-width:0;padding:36px 0 100px}
+
+  /* ---------- hero ---------- */
+  .hero{padding:56px 0 40px;position:relative;overflow:hidden;border-radius:20px}
+  .hero-glow{position:absolute;inset:-40% -20% auto -20%;height:420px;z-index:0;pointer-events:none;
+    background:radial-gradient(480px 280px at 18% 20%, color-mix(in srgb, var(--accent) 30%, transparent), transparent 70%),
+               radial-gradient(420px 260px at 82% 10%, color-mix(in srgb, var(--accent-2) 26%, transparent), transparent 70%);
+    filter:blur(10px);animation:drift 18s ease-in-out infinite alternate}
+  @keyframes drift{0%{transform:translate(0,0) scale(1)}100%{transform:translate(2%,3%) scale(1.05)}}
+  @media (prefers-reduced-motion:reduce){.hero-glow{animation:none}}
+  .hero-inner{position:relative;z-index:1}
+  .eyebrow{display:inline-flex;align-items:center;gap:7px;font-family:var(--f-mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent-ink);background:var(--accent-soft);border:1px solid color-mix(in srgb, var(--accent) 30%, transparent);padding:5px 12px;border-radius:100px;margin-bottom:20px}
+  h1.hero-title{font-size:clamp(2.3rem,5vw,3.6rem);line-height:1.05;margin:0 0 18px;letter-spacing:-.03em}
+  .hero-lede{font-size:1.22rem;color:var(--text-2);max-width:62ch;margin:0 0 26px}
+  .hero-lede strong{color:var(--text)}
+  .quoteblock{border-left:3px solid var(--accent);background:var(--bg-elev);border-radius:0 10px 10px 0;padding:16px 20px;margin:0 0 30px;box-shadow:var(--shadow)}
+  .quoteblock p{font-family:var(--f-mono);font-size:13.3px;color:var(--text-2);margin:0 0 6px;line-height:1.7}
+  .quoteblock p:last-child{margin:0}
+  .hero-ctas{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
+  .btn{display:inline-flex;align-items:center;gap:8px;padding:12px 20px;border-radius:11px;font-weight:700;font-size:14.5px;text-decoration:none;border:1px solid transparent;cursor:pointer;transition:transform .12s,box-shadow .12s}
+  .btn:hover{transform:translateY(-1px)}
+  .btn-primary{background:linear-gradient(135deg,var(--accent),var(--accent-ink));color:#fff;box-shadow:var(--shadow)}
+  .btn-primary:hover{box-shadow:var(--shadow-lg)}
+  .btn-ghost{background:var(--bg-elev);color:var(--text);border-color:var(--border)}
+  .btn-ghost:hover{border-color:var(--text-3)}
+  .install-snippet{display:inline-flex;align-items:center;gap:10px;background:var(--code-bg);border:1px solid var(--border-soft);border-radius:11px;padding:12px 12px 12px 18px;font-family:var(--f-mono);font-size:13.5px;color:var(--code-ink)}
+  .install-snippet button{border:none;background:var(--bg-elev);border:1px solid var(--border);color:var(--text-2);width:30px;height:30px;border-radius:7px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer}
+  .install-snippet button:hover{color:var(--text)}
+  .install-snippet svg{width:14px;height:14px}
+
+  /* ---------- sections ---------- */
+  section.sec{padding-top:64px;scroll-margin-top:80px}
+  section.sec:first-of-type{padding-top:44px}
+  .sec-kicker{font-family:var(--f-mono);font-size:12px;letter-spacing:.09em;text-transform:uppercase;color:var(--text-3);margin:0 0 8px}
+  h2{font-size:clamp(1.55rem,3vw,2.05rem);margin:0 0 8px}
+  h2 + .sec-sub{color:var(--text-2);font-size:1.02rem;max-width:66ch;margin:0 0 30px}
+  h3{font-size:1.24rem;margin:40px 0 12px;scroll-margin-top:80px}
+  h3:first-of-type{margin-top:0}
+  h4{font-size:1.02rem;margin:22px 0 8px}
+
+  .reveal{opacity:0;transform:translateY(14px);transition:opacity .55s ease,transform .55s ease}
+  .reveal.in{opacity:1;transform:translateY(0)}
+  @media (prefers-reduced-motion:reduce){.reveal{opacity:1;transform:none;transition:none}}
+
+  .card{background:var(--bg-elev);border:1px solid var(--border);border-radius:var(--radius);padding:22px 24px;box-shadow:var(--shadow)}
+  .card + .card{margin-top:14px}
+  .rulegrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px;margin:22px 0}
+  .rulecard{background:var(--bg-elev);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px;transition:transform .15s,box-shadow .15s,border-color .15s}
+  .rulecard:hover{transform:translateY(-3px);box-shadow:var(--shadow-lg);border-color:color-mix(in srgb, var(--accent) 35%, var(--border))}
+  .rulecard .num{font-family:var(--f-mono);font-size:12px;font-weight:700;color:var(--accent-ink);background:var(--accent-soft);display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:7px;margin-bottom:10px}
+  .rulecard h4{margin:0 0 6px;font-size:.98rem}
+  .rulecard p{margin:0;font-size:.92rem;color:var(--text-2)}
+
+  table{width:100%;border-collapse:collapse;font-size:.94rem;margin:18px 0}
+  caption{caption-side:top;text-align:left;font-weight:700;margin-bottom:10px}
+  th,td{text-align:left;padding:11px 14px;border-bottom:1px solid var(--border-soft);vertical-align:top}
+  th{font-family:var(--f-mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-3);font-weight:600;border-bottom:1px solid var(--border)}
+  tbody tr:hover{background:var(--bg-sunken)}
+  .tablewrap{overflow-x:auto;border:1px solid var(--border-soft);border-radius:var(--radius);background:var(--bg-elev)}
+  .tablewrap table{margin:0}
+  .tablewrap th:first-child, .tablewrap td:first-child{padding-left:18px}
+
+  .codewrap{position:relative;margin:16px 0}
+  .copybtn{position:absolute;top:9px;right:9px;background:var(--bg-elev);border:1px solid var(--border);color:var(--text-2);border-radius:7px;width:30px;height:30px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer}
+  .copybtn:hover{color:var(--text)}
+  .copybtn svg{width:14px;height:14px}
+
+  .stepline{display:flex;gap:16px;margin:0 0 22px;align-items:flex-start}
+  .stepline .num{flex:none;width:30px;height:30px;border-radius:9px;background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#fff;font-family:var(--f-mono);font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center;margin-top:2px}
+  .stepline .body p{margin:0 0 4px}
+  .stepline .body p:last-child{margin:0}
+
+  .callout{border:1px solid var(--border);border-left:3px solid var(--accent-2);background:var(--accent-2-soft);border-radius:0 10px 10px 0;padding:14px 18px;margin:18px 0;font-size:.95rem}
+  .callout strong{color:var(--text)}
+
+  .treeblock{font-size:12.6px;line-height:1.7}
+
+  .status-item{display:flex;gap:12px;padding:14px 0;border-top:1px solid var(--border-soft)}
+  .status-item:first-child{border-top:none}
+  .status-badge{flex:none;font-family:var(--f-mono);font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:3px 9px;border-radius:100px;height:fit-content;margin-top:3px}
+  .status-badge.done{color:#0F7D53;background:#E4F8EE}
+  .status-badge.wip{color:#9C6206;background:#FFF3E0}
+  @media (prefers-color-scheme:dark){
+    :root:not([data-theme="light"]) .status-badge.done{color:#5FE3A6;background:#0F2A1F}
+    :root:not([data-theme="light"]) .status-badge.wip{color:#F0B655;background:#2B2110}
+  }
+  :root[data-theme="dark"] .status-badge.done{color:#5FE3A6;background:#0F2A1F}
+  :root[data-theme="dark"] .status-badge.wip{color:#F0B655;background:#2B2110}
+
+  footer.pagefoot{border-top:1px solid var(--border-soft);margin-top:60px;padding:32px 0 60px;color:var(--text-3);font-size:12.8px;line-height:1.9}
+  footer.pagefoot a{color:var(--text-2)}
+  footer.pagefoot .sync{font-family:var(--f-mono);font-size:12px}
+
+  /* mobile */
+  .backdrop{display:none}
+  @media (max-width:960px){
+    .menu-toggle{display:inline-flex}
+    .layout{grid-template-columns:1fr;gap:0}
+    aside.sidebar{position:fixed;top:0;left:0;bottom:0;width:min(300px,84vw);max-height:none;background:var(--bg-elev);border-right:1px solid var(--border);z-index:200;transform:translateX(-100%);transition:transform .22s ease;padding:78px 16px 30px 20px}
+    aside.sidebar.open{transform:translateX(0);box-shadow:var(--shadow-lg)}
+    .backdrop.open{display:block;position:fixed;inset:0;background:rgba(10,10,20,.4);z-index:150}
+    main.content{padding-top:20px}
+    .container{padding:0 20px}
+    .topbar-inner{padding:12px 20px}
+  }
+  @media (max-width:640px){
+    .hero-ctas{flex-direction:column;align-items:stretch}
+    .install-snippet{overflow-x:auto}
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-inner">
+    <a href="#hero" class="brand"><span class="dot"></span>Foreman</a>
+    <div class="topbar-actions">
+      <select id="lang-select" aria-label="Ngôn ngữ / Language">
+        <option value="vi">Tiếng Việt</option>
+        <option value="en">English</option>
+      </select>
+      <button class="iconbtn" id="theme-toggle" aria-label="Toggle theme" title="Sáng / tối">
+        <svg id="theme-icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+      </button>
+      <a class="gh-link" href="https://github.com/Phong-Kaster/Foreman" target="_blank" rel="noopener">
+        <svg viewBox="0 0 16 16" width="15" height="15" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8a8 8 0 0 0 5.47 7.59c.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.5 7.5 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8 8 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+        GitHub
+      </a>
+      <button class="iconbtn menu-toggle" id="menu-toggle" aria-label="Menu">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+    </div>
+  </div>
+</div>
+
+<div class="backdrop" id="backdrop"></div>
+
+<div class="layout">
+  <aside class="sidebar" id="sidebar">
+    <nav>
+      <div class="navgroup">
+        <ul>
+          <li><a href="#hero" data-lang="vi">Tổng quan</a><a href="#hero" data-lang="en">Overview</a></li>
+        </ul>
+      </div>
+      <div class="navgroup">
+        <p class="navgroup-title" data-lang="vi">1. Nó là gì?</p>
+        <p class="navgroup-title" data-lang="en">1. What is it?</p>
+        <ul>
+          <li><a href="#eli5" data-lang="vi">Giải thích như cho trẻ 5 tuổi</a><a href="#eli5" data-lang="en">Explain it like I'm five</a></li>
+          <li><a href="#grownup" data-lang="vi">Phiên bản người lớn</a><a href="#grownup" data-lang="en">The grown-up version</a></li>
+        </ul>
+      </div>
+      <div class="navgroup">
+        <p class="navgroup-title" data-lang="vi">2. Cách dùng</p>
+        <p class="navgroup-title" data-lang="en">2. How to use it</p>
+        <ul>
+          <li><a href="#before-you-start" data-lang="vi">Trước khi bắt đầu</a><a href="#before-you-start" data-lang="en">Before you start</a></li>
+          <li><a href="#install" data-lang="vi">Cài đặt một lần</a><a href="#install" data-lang="en">Install once per repo</a></li>
+          <li><a href="#start-a-run" data-lang="vi">Bắt đầu một lần chạy</a><a href="#start-a-run" data-lang="en">Then start a run</a></li>
+          <li><a href="#what-happens-next" data-lang="vi">Điều gì xảy ra tiếp theo</a><a href="#what-happens-next" data-lang="en">What happens next</a></li>
+          <li><a href="#watching" data-lang="vi">Theo dõi khi nó chạy</a><a href="#watching" data-lang="en">Watching it work</a></li>
+          <li><a href="#when-it-stops" data-lang="vi">Khi nó dừng lại</a><a href="#when-it-stops" data-lang="en">When it stops</a></li>
+          <li><a href="#reviewing" data-lang="vi">Review và merge</a><a href="#reviewing" data-lang="en">Reviewing and merging</a></li>
+          <li><a href="#real-run" data-lang="vi">Một lần chạy thật</a><a href="#real-run" data-lang="en">A real run</a></li>
+          <li><a href="#when-not" data-lang="vi">Khi nào KHÔNG nên dùng</a><a href="#when-not" data-lang="en">When not to use it</a></li>
+        </ul>
+      </div>
+      <div class="navgroup">
+        <p class="navgroup-title" data-lang="vi">3. Loop Engineering</p>
+        <p class="navgroup-title" data-lang="en">3. Loop Engineering</p>
+        <ul>
+          <li><a href="#forgetful-builder" data-lang="vi">Người thợ hay quên</a><a href="#forgetful-builder" data-lang="en">The forgetful builder</a></li>
+          <li><a href="#four-words" data-lang="vi">Chiếc đồng hồ biết 4 từ</a><a href="#four-words" data-lang="en">A timer that knows four words</a></li>
+          <li><a href="#the-exam" data-lang="vi">Bài thi bạn tự viết</a><a href="#the-exam" data-lang="en">The exam you write</a></li>
+          <li><a href="#three-minds" data-lang="vi">Ba bộ óc khác nhau</a><a href="#three-minds" data-lang="en">Three different minds</a></li>
+          <li><a href="#keyring" data-lang="vi">Chùm chìa khoá có ghi chú</a><a href="#keyring" data-lang="en">A keyring with notes</a></li>
+          <li><a href="#paper-trail" data-lang="vi">Dấu vết trên giấy</a><a href="#paper-trail" data-lang="en">Paper trail</a></li>
+          <li><a href="#word-swaps" data-lang="vi">Đổi từ</a><a href="#word-swaps" data-lang="en">Word swaps</a></li>
+        </ul>
+      </div>
+      <div class="navgroup">
+        <p class="navgroup-title" data-lang="vi">Nội dung repo</p>
+        <p class="navgroup-title" data-lang="en">What's in this repo</p>
+        <ul>
+          <li><a href="#repo-structure" data-lang="vi">Cấu trúc repo Foreman</a><a href="#repo-structure" data-lang="en">Foreman's own structure</a></li>
+          <li><a href="#your-repo" data-lang="vi">Trong repo của bạn</a><a href="#your-repo" data-lang="en">In your repo</a></li>
+        </ul>
+      </div>
+      <div class="navgroup">
+        <ul>
+          <li><a href="#status" data-lang="vi">Trạng thái</a><a href="#status" data-lang="en">Status</a></li>
+        </ul>
+      </div>
+    </nav>
+  </aside>
+
+  <main class="content">
+
+    <section class="sec hero" id="hero">
+      <div class="hero-glow"></div>
+      <div class="hero-inner">
+        <span class="eyebrow reveal">⚙ <span data-lang="vi">Autonomous execution engine cho Claude Code</span><span data-lang="en">Autonomous execution engine for Claude Code</span></span>
+        <h1 class="hero-title reveal">Foreman</h1>
+        <p class="hero-lede reveal" data-lang="vi"><strong>Bạn nói điều bạn muốn.</strong> Một con robot xây nó trong khi bạn đi làm việc khác. Bạn kiểm tra kết quả ở cuối.</p>
+        <p class="hero-lede reveal" data-lang="en"><strong>You say what you want.</strong> A robot builds it while you go do something else. You check the result at the end.</p>
+
+        <div class="quoteblock reveal">
+          <p data-lang="vi">Con người sở hữu ý định. Vòng lặp sở hữu việc thực thi.</p>
+          <p data-lang="vi">Agent quên. Repository thì không.</p>
+          <p data-lang="vi">Engine đề nghị. Con người quyết định. Runtime cưỡng chế.</p>
+          <p data-lang="en">Human owns intent. The loop owns execution.</p>
+          <p data-lang="en">The agent forgets. The repository doesn't.</p>
+          <p data-lang="en">The engine requests. The human decides. The runtime enforces.</p>
+        </div>
+
+        <div class="hero-ctas reveal">
+          <div class="install-snippet">
+            <code id="install-cmd">npx skills@latest add Phong-Kaster/Foreman</code>
+            <button id="copy-install" aria-label="Copy" title="Copy">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
+            </button>
+          </div>
+          <a class="btn btn-ghost" href="https://github.com/Phong-Kaster/Foreman" target="_blank" rel="noopener" data-lang="vi">Xem trên GitHub →</a>
+          <a class="btn btn-ghost" href="https://github.com/Phong-Kaster/Foreman" target="_blank" rel="noopener" data-lang="en">View on GitHub →</a>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================= 1. WHAT IS IT ============================================================= -->
+    <section class="sec" id="eli5">
+      <p class="sec-kicker" data-lang="vi">1 · Nó là gì</p>
+      <p class="sec-kicker" data-lang="en">1 · What is it</p>
+      <h2 class="reveal" data-lang="vi">Giải thích như cho một đứa trẻ 5 tuổi</h2>
+      <h2 class="reveal" data-lang="en">Explain it like I'm five</h2>
+
+      <div data-lang="vi">
+        <p class="reveal">Hãy tưởng tượng bạn thuê một người thợ xây có một tật rất lạ: <strong>mỗi sáng, họ quên sạch mọi thứ.</strong></p>
+        <p class="reveal">Không nhớ gì về hôm qua. Không một chút nào. Hầu hết mọi người sẽ nói người thợ đó vô dụng. Dự án này khiến họ thực sự trở nên giỏi, bằng ba quy tắc.</p>
+      </div>
+      <div data-lang="en">
+        <p class="reveal">Imagine you hire a builder with one very strange problem: <strong>every morning, they forget everything.</strong></p>
+        <p class="reveal">No memory of yesterday. None. Most people would say that builder is useless. This project makes them genuinely good, using three rules.</p>
+      </div>
+
+      <div class="rulegrid">
+        <div class="rulecard reveal">
+          <span class="num">1</span>
+          <h4 data-lang="vi">Ghi lại mọi thứ</h4>
+          <h4 data-lang="en">Write everything down</h4>
+          <p data-lang="vi">Trước khi được phép dừng, người thợ phải ghi vào một cuốn sổ để lại trên bàn: đã làm gì, học được gì, tiếp theo là gì. Sáng hôm sau, một người thợ hoàn toàn mới đọc cuốn sổ và tiếp tục. Cuốn sổ chính là repository. Đó là lý do việc quên không còn là vấn đề.</p>
+          <p data-lang="en">Before the builder is allowed to stop, they must write in a notebook that stays on the desk: what I did, what I learned, what's next. Next morning a brand-new builder reads the notebook and carries on. The notebook is the repository. That's why forgetting stops being a problem.</p>
+        </div>
+        <div class="rulecard reveal">
+          <span class="num">2</span>
+          <h4 data-lang="vi"><em>Bạn</em> quyết định "xong" nghĩa là gì</h4>
+          <h4 data-lang="en"><em>You</em> decide what "finished" means</h4>
+          <p data-lang="vi">Ngày đầu tiên, người thợ viết một checklist: "khi xong, app sẽ làm được X, Y và Z — đây là cách kiểm tra từng cái." <strong>Bạn đọc checklist đó và phê duyệt.</strong> Sau đó người thợ không bao giờ được sửa nó nữa. Đó là bài thi của họ, và không ai được tự sửa đề thi của chính mình.</p>
+          <p data-lang="en">On day one the builder writes a checklist: "when this is done, the app will do X, Y and Z — and here is how you can check each one." <strong>You read that checklist and approve it.</strong> After that the builder may never change it. It's their exam, and nobody gets to rewrite their own exam.</p>
+        </div>
+        <div class="rulecard reveal">
+          <span class="num">3</span>
+          <h4 data-lang="vi">Người thợ không được tự nói "tôi xong rồi"</h4>
+          <h4 data-lang="en">The builder is not allowed to say "I'm done"</h4>
+          <p data-lang="vi">Khi công việc có vẻ đã hoàn tất, một người thợ <em>khác</em> — người không viết một dòng nào trong đó — bước vào, kiểm tra lại từng mục trong checklist từ đầu, và chỉ <em>người đó</em> mới được nói "xong".</p>
+          <p data-lang="en">When the work looks finished, a <em>different</em> builder — one who wrote none of it — walks in, re-tests every item on your checklist from scratch, and only <em>that</em> builder may say "done."</p>
+        </div>
+        <div class="rulecard reveal">
+          <span class="num">4</span>
+          <h4 data-lang="vi">Chìa khoá là mượn, không phải sở hữu</h4>
+          <h4 data-lang="en">Keys are borrowed, not owned</h4>
+          <p data-lang="vi">Người thợ bắt đầu chỉ với chìa khoá cho những việc an toàn (đọc file, lưu công việc cục bộ). Nếu cần chìa khoá cho việc rủi ro hơn — xoá thứ gì đó, ra internet, chạy công cụ build của bạn — họ phải <strong>hỏi bạn</strong>, nói rõ vì sao, cho việc gì, và trong bao lâu. Hầu hết chìa khoá tự hết hạn khi việc xong. Người thợ không bao giờ tự cắt cho mình một chìa khoá mới.</p>
+          <p data-lang="en">The builder starts with keys to the safe stuff only (read files, save work locally). If they need a key to something riskier — deleting things, reaching the internet, running your build tools — they must <strong>ask you</strong>, and say why, for what, and for how long. Most keys expire on their own when the job ends. The builder can never cut themselves a new key.</p>
+        </div>
+      </div>
+
+      <div data-lang="vi">
+        <p class="reveal">Đó là Foreman. Quy tắc 1 là lý do nó chạy được hàng giờ mà không cần ai theo dõi. Quy tắc 2 là lý do nó xây <em>đúng</em> thứ cần xây. Quy tắc 3 là lý do "xong" thực sự có nghĩa là xong. Quy tắc 4 là lý do bạn có thể yên tâm rời đi.</p>
+      </div>
+      <div data-lang="en">
+        <p class="reveal">That's Foreman. Rule 1 is why it can run for hours with nobody watching. Rule 2 is why it builds the <em>right</em> thing. Rule 3 is why "done" actually means done. Rule 4 is why you can walk away without worrying.</p>
+      </div>
+    </section>
+
+    <section class="sec" id="grownup">
+      <h3 class="reveal" data-lang="vi">Phiên bản dành cho người lớn</h3>
+      <h3 class="reveal" data-lang="en">Now the grown-up version</h3>
+
+      <div data-lang="vi">
+        <p class="reveal">Foreman là một <strong>autonomous execution engine di động cho Claude Code</strong>. Bạn đưa cho nó một yêu cầu; nó lên kế hoạch, triển khai, build, test, review và verify cho tới khi tính năng được chứng minh là hoàn thành, chỉ dừng lại ở những điểm quyết định thật sự. Nó gồm hai phần:</p>
+      </div>
+      <div data-lang="en">
+        <p class="reveal">Foreman is a <strong>portable autonomous execution engine for Claude Code</strong>. You hand it a requirement; it plans, implements, builds, tests, reviews and verifies until the feature is provably finished, stopping only at genuine decision points. It's two pieces:</p>
+      </div>
+
+      <div class="tablewrap reveal">
+        <table>
+          <thead><tr data-lang="vi"><th>Phần</th><th>Là gì</th><th>Ở đâu</th></tr><tr data-lang="en"><th>Piece</th><th>What it is</th><th>Where</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><strong>Skill</strong> (<code>/foreman</code>)</td>
+              <td data-lang="vi">Cửa ngõ vào. Cài runtime, lưu yêu cầu của bạn thành <code>PRD.md</code>, khởi chạy engine ở nền, stream công việc vào chat, và biến mỗi điểm quyết định thành một câu hỏi bình thường.</td>
+              <td data-lang="en">Your on-ramp. Installs the runtime, saves your requirement as <code>PRD.md</code>, launches the engine in the background, streams its work into your chat, and turns every decision point into a normal question.</td>
+              <td><code>skills/engineering/foreman/</code></td>
+            </tr>
+            <tr>
+              <td data-lang="vi"><strong>Engine + runtime</strong></td>
+              <td data-lang="en"><strong>The engine + runtime</strong></td>
+              <td data-lang="vi">Vòng lặp thực sự. Một script PowerShell cố tình "ngu" (<code>run.ps1</code>) chạy Claude Code lặp đi lặp lại, đọc lại <strong>một từ</strong> mỗi lần (<code>CONTINUE</code> / <code>DONE</code> / <code>ESCALATE</code> / <code>FAILED</code>), và phản ứng máy móc. Toàn bộ "suy nghĩ" nằm trong <code>ENGINE.md</code>, một spec được tiêm vào làm system prompt của AI — không bao giờ nằm trong script.</td>
+              <td data-lang="en">The actual loop. A deliberately dumb PowerShell script (<code>run.ps1</code>) that re-runs Claude Code over and over, reads back <strong>one word</strong> each time (<code>CONTINUE</code> / <code>DONE</code> / <code>ESCALATE</code> / <code>FAILED</code>), and reacts mechanically. All the thinking lives in <code>ENGINE.md</code>, a spec injected as the AI's system prompt — never in the script.</td>
+              <td><code>.harness/loop/</code></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p class="reveal" data-lang="vi">Ngày qua ngày bạn chỉ chạm vào skill. Nó tồn tại chính xác để bạn không bao giờ phải tự mở <code>.harness/loop/</code>.</p>
+      <p class="reveal" data-lang="en">Day to day you only touch the skill. It exists precisely so you never have to open <code>.harness/loop/</code> yourself.</p>
+
+      <div class="callout reveal">
+        <p data-lang="vi"><strong>Bạn nhận được gì cuối cùng:</strong> một nhánh git local (<code>loop/&lt;feature-của-bạn&gt;</code>) chứa code, test, và một commit cuối liệt kê từng mục checklist kèm bằng chứng chứng minh nó. Không có gì được push. Không có gì được merge. Bước cuối luôn là của bạn.</p>
+        <p data-lang="en"><strong>What you get at the end:</strong> one local git branch (<code>loop/&lt;your-feature&gt;</code>) holding the code, the tests, and a final commit message listing every checklist item with the evidence that proves it. Nothing pushed. Nothing merged. That last step is always yours.</p>
+      </div>
+    </section>
+
+    <!-- ============================================================= 2. HOW TO USE IT ============================================================= -->
+    <section class="sec" id="before-you-start">
+      <p class="sec-kicker" data-lang="vi">2 · Cách dùng</p>
+      <p class="sec-kicker" data-lang="en">2 · How to use it</p>
+      <h2 class="reveal" data-lang="vi">Trước khi bắt đầu</h2>
+      <h2 class="reveal" data-lang="en">Before you start</h2>
+      <p class="reveal" data-lang="vi">Bốn điều cần đúng, nếu không lần chạy đầu tiên sẽ hỏng ngay từ cửa:</p>
+      <p class="reveal" data-lang="en">Four things need to be true, or the first run fails on the doorstep:</p>
+
+      <div class="tablewrap reveal">
+        <table>
+          <thead><tr data-lang="vi"><th>Bạn cần</th><th>Vì sao</th></tr><tr data-lang="en"><th>You need</th><th>Why</th></tr></thead>
+          <tbody>
+            <tr><td data-lang="vi"><strong>Một git repository</strong></td><td data-lang="en"><strong>A git repository</strong></td>
+              <td data-lang="vi">Mỗi điểm lưu là một commit. Bắt đầu từ working tree sạch — engine coi các thay đổi chưa commit còn sót lại là mảnh vỡ từ một lần crash.</td>
+              <td data-lang="en">Every save point is a commit. Start from a clean working tree — the engine treats leftover uncommitted changes as debris from a crash.</td></tr>
+            <tr><td data-lang="vi"><strong>Claude Code CLI, đã đăng nhập</strong></td><td data-lang="en"><strong>Claude Code CLI, logged in</strong></td>
+              <td data-lang="vi">Loop gọi <code>claude</code> một lần mỗi chu kỳ. Nếu <code>claude</code> không nằm trong <code>PATH</code>, sẽ không có gì xảy ra.</td>
+              <td data-lang="en">The loop calls <code>claude</code> once per cycle. If <code>claude</code> isn't on your <code>PATH</code>, nothing happens.</td></tr>
+            <tr><td data-lang="vi"><strong>Windows PowerShell</strong></td><td data-lang="en"><strong>Windows PowerShell</strong></td>
+              <td data-lang="vi">V1 chỉ ship <code>run.ps1</code>. Một <code>run.sh</code> đang chờ người dùng non-Windows đầu tiên.</td>
+              <td data-lang="en">V1 ships <code>run.ps1</code> only. A <code>run.sh</code> waits for the first non-Windows user.</td></tr>
+            <tr><td data-lang="vi"><strong>Node.js</strong></td><td data-lang="en"><strong>Node.js</strong></td>
+              <td data-lang="vi">Chỉ dùng cho installer (<code>npx</code>). Bản thân loop không cần nó — trừ khi <em>dự án của bạn</em> cần.</td>
+              <td data-lang="en">Only for the installer (<code>npx</code>). The loop itself doesn't need it — unless <em>your</em> project does.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="sec" id="install">
+      <h3 class="reveal" data-lang="vi">Cài đặt một lần cho mỗi repo</h3>
+      <h3 class="reveal" data-lang="en">Install once per repository</h3>
+
+      <div class="codewrap reveal">
+        <pre><code id="code-install">npx skills@latest add Phong-Kaster/Foreman</code></pre>
+        <button class="copybtn" data-copy-target="code-install" aria-label="Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button>
+      </div>
+
+      <div data-lang="vi"><p class="reveal">Lệnh đó thả skill <code>foreman</code> vào <code>.claude/skills/foreman/</code> (và <code>.agents/skills/foreman/</code>) và ghi lại trong <code>skills-lock.json</code> — giống hệt cách bạn cài bất kỳ skill Claude Code chia sẻ nào. Không cần copy gì thêm bằng tay.</p></div>
+      <div data-lang="en"><p class="reveal">That drops the <code>foreman</code> skill into <code>.claude/skills/foreman/</code> (and <code>.agents/skills/foreman/</code>) and records it in <code>skills-lock.json</code> — the same way you'd install any shared Claude Code skill. Nothing else to copy by hand.</p></div>
+
+      <div class="callout reveal">
+        <p data-lang="vi"><strong>Không muốn dùng installer?</strong> <code>.harness/loop/</code> là một thư mục độc lập. Copy nó vào root của bất kỳ repo nào và chạy <code>powershell .harness/loop/run.ps1</code> từ terminal. Hướng dẫn đầy đủ: <a href="https://github.com/Phong-Kaster/Foreman/blob/main/docs/consumer-guide.md" target="_blank" rel="noopener">docs/consumer-guide.md</a>.</p>
+        <p data-lang="en"><strong>Don't want the installer?</strong> <code>.harness/loop/</code> is a self-contained folder. Copy it into any repo's root and run <code>powershell .harness/loop/run.ps1</code> from a terminal. Full instructions: <a href="https://github.com/Phong-Kaster/Foreman/blob/main/docs/consumer-guide.md" target="_blank" rel="noopener">docs/consumer-guide.md</a>.</p>
+      </div>
+    </section>
+
+    <section class="sec" id="start-a-run">
+      <h3 class="reveal" data-lang="vi">Rồi bắt đầu một lần chạy</h3>
+      <h3 class="reveal" data-lang="en">Then start a run</h3>
+
+      <div class="codewrap reveal">
+        <pre><code id="code-run">/foreman &lt;describe what you want, in plain text&gt;
+/foreman &lt;path to a requirements document&gt;
+/foreman</code></pre>
+        <button class="copybtn" data-copy-target="code-run" aria-label="Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button>
+      </div>
+
+      <div data-lang="vi">
+        <ul>
+          <li class="reveal"><strong>Văn bản thuần</strong> — <code>/foreman add a dark mode toggle to Settings that persists via DataStore</code>. Câu chữ của bạn được lưu vào <code>PRD.md</code> <strong>y hệt như bạn gõ</strong>. Không viết lại, không tóm tắt.</li>
+          <li class="reveal"><strong>Đường dẫn file</strong> — <code>/foreman C:\reqs\dark-mode.md</code>. Tài liệu đó trở thành yêu cầu thay thế.</li>
+          <li class="reveal"><strong>Không có gì cả</strong> — tiếp tục với <code>PRD.md</code> đang có sẵn. (Lần chạy đầu trong repo mới? Nó sẽ hỏi bạn.)</li>
+        </ul>
+      </div>
+      <div data-lang="en">
+        <ul>
+          <li class="reveal"><strong>Plain text</strong> — <code>/foreman add a dark mode toggle to Settings that persists via DataStore</code>. Your words are saved into <code>PRD.md</code> <strong>exactly as you typed them</strong>. Nothing rewritten, nothing summarized.</li>
+          <li class="reveal"><strong>A file path</strong> — <code>/foreman C:\reqs\dark-mode.md</code>. That document becomes the requirement instead.</li>
+          <li class="reveal"><strong>Nothing at all</strong> — continues with whatever <code>PRD.md</code> is already there. (First run in a fresh repo? It'll ask you for one.)</li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="sec" id="what-happens-next">
+      <h3 class="reveal" data-lang="vi">Điều gì xảy ra tiếp theo</h3>
+      <h3 class="reveal" data-lang="en">What happens next</h3>
+
+      <div data-lang="vi">
+        <div class="stepline reveal"><span class="num">1</span><div class="body"><p><strong>Nó nhìn xung quanh.</strong> Đọc yêu cầu của bạn, khảo sát repo (ngôn ngữ, build tool, quy ước), tạo nhánh, và ghi lại những gì nó tìm ra.</p></div></div>
+        <div class="stepline reveal"><span class="num">2</span><div class="body"><p><strong>Nó hỏi bạn câu hỏi quan trọng duy nhất.</strong> <em>"Đây là checklist của tôi về 'xong' nghĩa là gì — phê duyệt chứ? Và tôi có thể xin quyền chạy lệnh build/test của bạn không?"</em> Đây là điểm dừng <strong>duy nhất</strong> luôn xảy ra. Hãy đọc checklist cho kỹ. Năm phút ở đây là năm phút giá trị nhất của cả lần chạy — nó là thứ ngăn con robot tự tin xây sai thứ suốt ba tiếng đồng hồ.</p></div></div>
+        <div class="stepline reveal"><span class="num">3</span><div class="body"><p><strong>Nó làm việc, còn bạn xem — hoặc không.</strong> Mọi dòng engine viết ra đều stream vào chat của bạn: file nào đang đụng tới, lệnh nào đang chạy, test có pass không. Đi pha cà phê đi. Nó không bao giờ chiếm terminal của bạn.</p></div></div>
+        <div class="stepline reveal"><span class="num">4</span><div class="body"><p><strong>Nó chỉ làm phiền bạn vì lý do thật sự.</strong> Bất cứ điều gì vượt quá thẩm quyền của nó — đổi kiến trúc? yêu cầu mơ hồ? cần một chìa khoá rủi ro? — đến dưới dạng một câu hỏi chat bình thường, kèm các lựa chọn engine tự đề xuất. Bạn trả lời trong chat; nó ghi lại câu trả lời và tiếp tục. Bạn không bao giờ phải mở file để trả lời.</p></div></div>
+        <div class="stepline reveal"><span class="num">5</span><div class="body"><p><strong>Nó chứng minh đã xong.</strong> Một lần chạy mới, không viết dòng code nào, kiểm tra lại từng mục checklist, xoá sạch ghi chú nháp khỏi đầu nhánh, và báo cáo <code>DONE</code>.</p></div></div>
+        <div class="stepline reveal"><span class="num">6</span><div class="body"><p><strong>Bạn nhận được tóm tắt của mọi nhánh</strong> — không chỉ nhánh này. Cái nào merge được, cái nào vẫn đang chạy, cái nào đang kẹt chờ bạn.</p></div></div>
+        <div class="stepline reveal"><span class="num">7</span><div class="body"><p><strong>Bạn merge.</strong> Luôn là bạn. Engine không bao giờ push, không bao giờ merge, không bao giờ chạm vào nhánh mặc định của bạn.</p></div></div>
+      </div>
+      <div data-lang="en">
+        <div class="stepline reveal"><span class="num">1</span><div class="body"><p><strong>It looks around.</strong> Reads your requirement, inspects the repo (language, build tool, conventions), creates a branch, and writes down what it worked out.</p></div></div>
+        <div class="stepline reveal"><span class="num">2</span><div class="body"><p><strong>It asks you the one important question.</strong> <em>"Here's my checklist of what 'done' means — approve it? And may I have permission to run your build and test commands?"</em> This is the <strong>only</strong> stop that always happens. Read the checklist properly. Five minutes here is the highest-value five minutes of the whole run — it's what stops the robot from confidently building the wrong thing for three hours.</p></div></div>
+        <div class="stepline reveal"><span class="num">3</span><div class="body"><p><strong>It works, and you watch — or don't.</strong> Every line the engine writes streams into your chat: which files it's touching, which commands it's running, whether tests passed. Go make coffee. It never ties up your terminal.</p></div></div>
+        <div class="stepline reveal"><span class="num">4</span><div class="body"><p><strong>It interrupts you only for real reasons.</strong> Anything above its pay grade — change the architecture? the requirement is ambiguous? needs a risky key? — arrives as a normal chat question, with the engine's own suggested options as your choices. You answer in chat; it records your answer and carries on. You never open a file to reply.</p></div></div>
+        <div class="stepline reveal"><span class="num">5</span><div class="body"><p><strong>It proves it's finished.</strong> A fresh run that wrote none of the code re-tests every checklist item, wipes its scratch notes off the branch tip, and reports <code>DONE</code>.</p></div></div>
+        <div class="stepline reveal"><span class="num">6</span><div class="body"><p><strong>You get a summary of every branch</strong> — not just this one. What's mergeable, what's still going, what's stuck waiting on you.</p></div></div>
+        <div class="stepline reveal"><span class="num">7</span><div class="body"><p><strong>You merge.</strong> Always you. The engine never pushes, never merges, never touches your default branch.</p></div></div>
+      </div>
+    </section>
+
+    <section class="sec" id="watching">
+      <h3 class="reveal" data-lang="vi">Theo dõi khi nó chạy</h3>
+      <h3 class="reveal" data-lang="en">Watching it work</h3>
+
+      <div data-lang="vi"><p class="reveal">Chat là màn hình theo dõi trực tiếp, nhưng mọi thứ cũng đổ vào một file log trên đĩa. <code>run.ps1</code> in ra đúng đường dẫn khi khởi động — nó là <code>%TEMP%\loop-run-&lt;tên-thư-mục-repo&gt;.log</code>. Theo dõi nó từ một terminal khác:</p></div>
+      <div data-lang="en"><p class="reveal">The chat is the live view, but everything also lands in a log file on disk. <code>run.ps1</code> prints the exact path when it starts — it's <code>%TEMP%\loop-run-&lt;your-repo-folder-name&gt;.log</code>. Follow it from any other terminal:</p></div>
+
+      <div class="codewrap reveal">
+        <pre><code id="code-watch">Get-Content "$env:TEMP\loop-run-&lt;your-repo-folder-name&gt;.log" -Wait -Tail 20</code></pre>
+        <button class="copybtn" data-copy-target="code-watch" aria-label="Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button>
+      </div>
+
+      <p class="reveal" data-lang="vi">Những gì bạn sẽ thấy — mỗi dòng một hành động, kèm đồng hồ bấm giờ cho biết đã đi sâu bao lâu vào chu kỳ hiện tại:</p>
+      <p class="reveal" data-lang="en">What you'll see — one line per action, each stamped with a stopwatch showing how deep into the current cycle it is:</p>
+
+      <pre class="reveal"><code>=== Iteration 2 / 50 === 2026-09-09T20:35:30.4821637+07:00
+[20:35:41 +00:00:10] engine&gt; Read .ai\STATE.md
+[20:36:02 +00:00:31] engine&gt; Bash ./gradlew.bat assembleDebug
+[20:39:14 +00:03:43] engine: Build succeeded. Running the test suite next.
+[20:44:58 +00:09:27] engine invocation finished (success)
+=== Status: CONTINUE === 2026-09-09T20:44:58.9930412+07:00</code></pre>
+
+      <div data-lang="vi"><p class="reveal">Có dòng mới xuất hiện = nó còn sống. Terminal khởi chạy nó hiện cùng luồng dữ liệu với tiêu đề thân thiện hơn — <code>started 20:35:30 | total elapsed 00:04:44</code> thay vì timestamp thô — và có một file <code>.raw.jsonl</code> bên cạnh log chứa luồng sự kiện chưa lọc, cho lúc có gì đó thực sự lạ.</p>
+      <p class="reveal"><strong>Bạn có thể tắt nó bất cứ lúc nào.</strong> Đóng terminal, dừng skill, khởi động lại máy — đều an toàn. Mỗi chu kỳ kết thúc bằng một commit, nên lần chạy sau tiếp tục từ lần trước. Nếu nó chết <em>giữa</em> chu kỳ, lần chạy sau sẽ phát hiện working tree bẩn và hoặc cứu lại công việc hoặc vứt bỏ nó — nó không bao giờ xây tiếp trên mảnh vỡ chưa được verify.</p>
+      <p class="reveal"><strong>Chỉ một loop cho mỗi repo.</strong> Loop thứ hai sẽ từ chối khởi động khi loop đầu tiên còn giữ khoá. Hai engine cùng commit vào một nhánh sẽ làm hỏng lần chạy.</p></div>
+      <div data-lang="en"><p class="reveal">New lines appearing = it's alive. The console it was launched from shows the same feed with friendlier headers — <code>started 20:35:30 | total elapsed 00:04:44</code> in place of the raw timestamps — and there's a <code>.raw.jsonl</code> beside the log holding the unfiltered event stream, for when something is genuinely weird.</p>
+      <p class="reveal"><strong>You can kill it at any time.</strong> Close the terminal, stop the skill, reboot — it's safe. Every cycle ends at a commit, so the next run picks up from the last one. If it died <em>mid</em>-cycle, the next run notices the dirty working tree and either salvages the work or throws it away — it never builds on top of unverified debris.</p>
+      <p class="reveal"><strong>Only one loop per repository.</strong> A second one refuses to start while the first holds the lock. Two engines committing to the same branch would corrupt the run.</p></div>
+    </section>
+
+    <section class="sec" id="when-it-stops">
+      <h3 class="reveal" data-lang="vi">Khi nó dừng lại — và bạn nên làm gì</h3>
+      <h3 class="reveal" data-lang="en">When it stops — and what to do</h3>
+      <p class="reveal" data-lang="vi">Năm cách một lần chạy kết thúc. Chỉ hai cái đầu cần bạn làm gì đó:</p>
+      <p class="reveal" data-lang="en">Five ways a run ends. Only the first two need anything from you:</p>
+
+      <div class="tablewrap reveal">
+        <table>
+          <thead><tr data-lang="vi"><th>Dừng với</th><th>Nghĩa là</th><th>Bạn làm gì</th></tr><tr data-lang="en"><th>It stopped with</th><th>Meaning</th><th>What you do</th></tr></thead>
+          <tbody>
+            <tr><td><code>ESCALATE</code> (3)</td>
+              <td data-lang="vi">Một quyết định vượt thẩm quyền của nó: phê duyệt checklist, gỡ rối yêu cầu mơ hồ, cấp quyền, hoặc duyệt thay đổi kiến trúc.</td>
+              <td data-lang="en">A decision above its authority: approve the checklist, resolve an ambiguous requirement, grant a permission, or approve an architecture change.</td>
+              <td data-lang="vi">Trả lời câu hỏi. Vậy thôi — skill ghi lại câu trả lời và khởi động lại nó.</td>
+              <td data-lang="en">Answer the question. That's it — the skill records your answer and restarts it.</td></tr>
+            <tr><td><code>FAILED</code> (4)</td>
+              <td data-lang="vi">Bản thân việc thực thi bị hỏng: thiếu công cụ build, hết đĩa, repo bị hỏng. Không phải "việc này khó".</td>
+              <td data-lang="en">Execution itself is broken: build tool missing, disk full, repo corrupted. Not "the task was hard".</td>
+              <td data-lang="vi">Sửa môi trường, rồi chạy lại. Nó tiếp tục từ commit cuối cùng.</td>
+              <td data-lang="en">Fix the environment, then start it again. It resumes from the last commit.</td></tr>
+            <tr><td><code>DONE</code> (0)</td>
+              <td data-lang="vi">Một verifier hoàn toàn mới đã chứng minh lại từng mục checklist.</td>
+              <td data-lang="en">A fresh verifier re-proved every checklist item.</td>
+              <td data-lang="vi">Review và merge (xem bên dưới).</td>
+              <td data-lang="en">Review and merge (below).</td></tr>
+            <tr><td data-lang="vi">Watchdog (2)</td><td data-lang="en">Watchdog (2)</td>
+              <td data-lang="vi">AI chết mà không báo cáo, 3 lần liên tiếp.</td>
+              <td data-lang="en">The AI died without reporting, 3 times in a row.</td>
+              <td data-lang="vi">Thường là sự cố CLI hoặc mạng tạm thời. Chạy lại.</td>
+              <td data-lang="en">Usually a transient CLI or network problem. Start it again.</td></tr>
+            <tr><td data-lang="vi">Ngân sách (5)</td><td data-lang="en">Budget (5)</td>
+              <td data-lang="vi">Chạm trần 50 chu kỳ.</td>
+              <td data-lang="en">Hit the 50-cycle ceiling.</td>
+              <td data-lang="vi">Không phải phán quyết về chất lượng công việc — chỉ là điểm dừng xác định trước. Xem <code>.harness/run/STATE.md</code> để biết nó đang ở đâu, rồi tiếp tục.</td>
+              <td data-lang="en">Not a verdict on the work — a deterministic stop. Check <code>.harness/run/STATE.md</code> to see where it got to, then continue.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout reveal">
+        <p data-lang="vi"><strong>Điều gì tạo nên một câu trả lời tốt khi nó hỏi:</strong> bạn luôn có thể <strong>thu hẹp</strong> một yêu cầu — siết chặt một mục checklist mơ hồ, cắt quyền xuống còn một lệnh duy nhất, nói "in ra console, không phải desktop notification". Bạn không thể vô tình mở rộng bất cứ điều gì; engine chỉ có thể nhận được ít hơn những gì nó xin. Và hãy nói rõ <em>vì sao</em> — lý do của bạn được ghi lại trong audit trail cùng quyết định, đó là thứ khiến nhánh này đọc được sau ba tháng.</p>
+        <p data-lang="en"><strong>What makes a good answer when it asks:</strong> you may always <strong>narrow</strong> a request — tighten a vague checklist item, cut the permission down to a single command, say "console output, not a desktop notification". You can't accidentally widen anything; the engine can only ever get less than it asked for. And say <em>why</em> — your reason gets recorded in the audit trail alongside the decision, which is what makes the branch readable in three months.</p>
+      </div>
+    </section>
+
+    <section class="sec" id="reviewing">
+      <h3 class="reveal" data-lang="vi">Review và merge</h3>
+      <h3 class="reveal" data-lang="en">Reviewing and merging</h3>
+
+      <div data-lang="vi"><p class="reveal">Khi nó báo cáo <code>DONE</code>, đầu nhánh chứa code, test, <code>.harness/knowledge/</code> đã cập nhật, và <strong>không có ghi chú nháp nào</strong> — chúng đã bị loại bỏ trong commit cuối, có message chính là bản tóm tắt hoàn thành.</p></div>
+      <div data-lang="en"><p class="reveal">When it reports <code>DONE</code>, the branch tip holds the code, the tests, updated <code>.harness/knowledge/</code>, and <strong>no scratch notes</strong> — those were stripped in the final commit, whose message is the completion summary.</p></div>
+
+      <div class="codewrap reveal">
+        <pre><code id="code-review">git branch --list 'loop/*'              # every run this repo has ever done
+git log --oneline loop/&lt;prd-slug&gt;       # the execution history, cycle by cycle
+git log -1 loop/&lt;prd-slug&gt;              # the completion summary: criteria -&gt; evidence
+git diff main...harness/loop/&lt;prd-slug&gt;         # everything it changed, as one review
+git merge loop/&lt;prd-slug&gt;               # your call, your hands</code></pre>
+        <button class="copybtn" data-copy-target="code-review" aria-label="Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button>
+      </div>
+
+      <div data-lang="vi">
+        <ul>
+          <li class="reveal"><strong>Tính năng tiếp theo:</strong> <code>/foreman &lt;yêu cầu tiếp theo&gt;</code> trong cùng repo. Một nhánh mới và ghi chú nháp mới được tạo, nhưng <code>.harness/knowledge/</code> vẫn giữ lại — các lệnh build và những điều kỳ quặc của môi trường mà nó học được một cách khó khăn chỉ phải trả giá một lần, không phải mỗi tính năng.</li>
+          <li class="reveal"><strong>Bỏ một lần chạy:</strong> xoá <code>.harness/run/</code> và xoá nhánh. Không cần dọn gì thêm, và nhánh mặc định của bạn chưa từng bị đụng tới.</li>
+        </ul>
+      </div>
+      <div data-lang="en">
+        <ul>
+          <li class="reveal"><strong>Next feature:</strong> <code>/foreman &lt;the next requirement&gt;</code> in the same repo. A new branch and new scratch notes get created, but <code>.harness/knowledge/</code> carries over — the build commands and environment quirks it learned the hard way are paid for once, not once per feature.</li>
+          <li class="reveal"><strong>Abandoning a run:</strong> delete <code>.harness/run/</code> and delete the branch. Nothing else to clean up, and your default branch was never touched.</li>
+        </ul>
+      </div>
+
+      <p class="reveal" data-lang="vi">Sổ tay vận hành đầy đủ — mọi tham số của <code>run.ps1</code>, cách chạy thủ công (không qua skill), và giới hạn cứng của engine: <a href="https://github.com/Phong-Kaster/Foreman/blob/main/docs/consumer-guide.md" target="_blank" rel="noopener">docs/consumer-guide.md</a>.</p>
+      <p class="reveal" data-lang="en">Full operating manual — every <code>run.ps1</code> parameter, the manual (non-skill) path, and the engine's hard limits: <a href="https://github.com/Phong-Kaster/Foreman/blob/main/docs/consumer-guide.md" target="_blank" rel="noopener">docs/consumer-guide.md</a>.</p>
+    </section>
+
+    <section class="sec" id="real-run">
+      <h3 class="reveal" data-lang="vi">Một lần chạy thật (không phải giả định)</h3>
+      <h3 class="reveal" data-lang="en">A real run (not a hypothetical)</h3>
+      <p class="reveal" data-lang="vi"><code>/foreman write a hello world notification</code>, trong một repo scratch trống:</p>
+      <p class="reveal" data-lang="en"><code>/foreman write a hello world notification</code>, in an empty scratch repo:</p>
+
+      <div class="card reveal" data-lang="vi">
+        <p><strong>Nó thiết lập:</strong> xác nhận đã cài Node, tạo nhánh <code>loop/hello-world-notification</code>, viết kế hoạch và checklist.</p>
+        <p><strong>Nó hỏi hai câu.</strong> Đầu tiên: <em>"phê duyệt checklist này — và ý bạn 'notification' là in ra console (đề xuất của tôi, không cần dependency) hay một pop-up desktop thật (cần quyền mới)? Ngoài ra, tôi có thể chạy <code>node</code> không?"</em> Trả lời trong chat. Sau đó: <em>"các kiểm tra cuối đã pass. Tôi có thể xin quyền một lần để xoá thư mục nháp cho commit dọn dẹp không?"</em> Được cấp — và hết hạn ngay khi vừa dùng xong.</p>
+        <p><strong>Nó xây:</strong> <code>src/notify.js</code>, <code>test/notify.test.js</code>, cập nhật README. Build và test xanh. Một sub-agent reviewer riêng — chỉ được xem diff, task và checklist, <em>không bao giờ</em> thấy lý do đằng sau code — nêu hai ghi chú nhỏ, không có gì nghiêm trọng.</p>
+        <p><strong>Kết quả:</strong> một nhánh sẵn sàng merge, 6 commit, hai câu hỏi được hỏi, không file nào bị mở bằng tay.</p>
+      </div>
+      <div class="card reveal" data-lang="en">
+        <p><strong>It set up:</strong> confirmed Node was installed, created the branch <code>loop/hello-world-notification</code>, wrote its plan and its checklist.</p>
+        <p><strong>It asked two questions.</strong> First: <em>"approve this checklist — and by 'notification' did you mean printing to the console (my recommendation, no dependencies) or a real desktop pop-up (needs a new permission)? Also, may I run <code>node</code>?"</em> Answered in chat. Later: <em>"final checks passed. May I have a one-time permission to delete my scratch folder for the cleanup commit?"</em> Granted — and it expired the moment it was used.</p>
+        <p><strong>It built:</strong> <code>src/notify.js</code>, <code>test/notify.test.js</code>, updated README. Build and tests green. A separate reviewer sub-agent — given only the diff, the task and the checklist, <em>never</em> the reasoning behind the code — raised two minor notes and nothing serious.</p>
+        <p><strong>Result:</strong> one merge-ready branch, 6 commits, two questions asked, zero files opened by hand.</p>
+      </div>
+    </section>
+
+    <section class="sec" id="when-not">
+      <h3 class="reveal" data-lang="vi">Khi nào KHÔNG nên dùng nó</h3>
+      <h3 class="reveal" data-lang="en">When *not* to use it</h3>
+      <p class="reveal" data-lang="vi">Chi phí mỗi chu kỳ gần như cố định; lợi ích tăng theo quy mô công việc. Vậy nên:</p>
+      <p class="reveal" data-lang="en">The cost per cycle is roughly fixed; the benefit grows with the size of the job. So:</p>
+
+      <div class="tablewrap reveal">
+        <table>
+          <thead><tr data-lang="vi"><th>Việc của bạn</th><th>Nên dùng</th></tr><tr data-lang="en"><th>Your task</th><th>Use</th></tr></thead>
+          <tbody>
+            <tr><td data-lang="vi">Một sửa nhỏ, một file, việc xong trong một buổi ngồi</td><td data-lang="en">A small fix, one file, something you'd finish in one sitting</td>
+              <td data-lang="vi">Một phiên chat bình thường — overhead của loop sẽ chỉ khiến nó chậm hơn</td><td data-lang="en">A normal chat session — the loop's overhead will just feel slow</td></tr>
+            <tr><td data-lang="vi">Một tính năng thật mà bạn sẽ phải ngồi canh từng prompt trong hàng giờ</td><td data-lang="en">A real feature you'd otherwise babysit prompt-by-prompt for hours</td>
+              <td data-lang="vi"><strong>Loop</strong> — overhead tan biến trong quy mô công việc</td><td data-lang="en"><strong>The loop</strong> — the overhead disappears into the size of the job</td></tr>
+            <tr><td data-lang="vi">Bất cứ điều gì bạn muốn chạy qua đêm, hoặc trong lúc làm việc khác</td><td data-lang="en">Anything you want running overnight, or while you do other work</td>
+              <td data-lang="vi"><strong>Loop</strong> — đúng là để làm việc đó</td><td data-lang="en"><strong>The loop</strong> — that's exactly what it's for</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="reveal" data-lang="vi">Đừng đánh giá nó qua một hello-world. Hãy đánh giá qua việc nó có làm đúng một tính năng thật khi bạn không nhìn hay không.</p>
+      <p class="reveal" data-lang="en">Don't judge it by a hello-world. Judge it by whether it got a real feature right while you weren't looking.</p>
+    </section>
+
+    <!-- ============================================================= 3. LOOP ENGINEERING ============================================================= -->
+    <section class="sec" id="forgetful-builder">
+      <p class="sec-kicker" data-lang="vi">3 · Cách repo này áp dụng loop engineering</p>
+      <p class="sec-kicker" data-lang="en">3 · How this repo applies loop engineering</p>
+      <h2 class="reveal" data-lang="vi">Loop Engineering</h2>
+      <h2 class="reveal" data-lang="en">Loop Engineering</h2>
+
+      <div data-lang="vi">
+        <p class="reveal"><strong>Loop engineering</strong> (khái niệm từ Addy Osmani) là một thay đổi trong công việc của <em>bạn</em>. Thông thường bạn ngồi cạnh AI và chọc nó: "giờ làm cái này… không, không phải vậy… được rồi giờ chạy test." Trong loop engineering, bạn ngừng là người chọc. Bạn viết ra điều bạn muốn một lần, rồi thiết kế <em>vòng lặp</em> điều khiển AI. Bạn sở hữu <strong>ý định</strong>; loop sở hữu <strong>thực thi</strong>.</p>
+        <p class="reveal">Repo này xây dựng ý tưởng đó từ năm mảnh ghép. Từ đơn giản trước, tên gọi thật sau.</p>
+      </div>
+      <div data-lang="en">
+        <p class="reveal"><strong>Loop engineering</strong> (a concept from Addy Osmani) is a change in <em>your</em> job. Normally you sit beside the AI and poke it: "now do this… no, not like that… okay now run the tests." In loop engineering you stop being the poker. You write down what you want once, and you design the <em>loop</em> that drives the AI. You own <strong>intent</strong>; the loop owns <strong>execution</strong>.</p>
+        <p class="reveal">This repo builds that idea out of five moving parts. Small words first, real name second.</p>
+      </div>
+
+      <h3 class="reveal" data-lang="vi">a) Người thợ hay quên với cuốn sổ</h3>
+      <h3 class="reveal" data-lang="en">a) The forgetful builder with a notebook</h3>
+      <div data-lang="vi"><p class="reveal"><em>Mỗi chu kỳ là một tiến trình AI hoàn toàn mới, không có ký ức. Nó học mọi thứ từ các file trong repo, và phải ghi lại mọi thứ nó học được vào chính những file đó.</em></p>
+      <p class="reveal">Điểm hay ở đây: vì <em>mọi</em> chu kỳ đều bắt đầu từ số 0, câu hỏi "liệu điều này có sống sót qua một crash rồi tiếp tục được không?" được <strong>kiểm tra mỗi vài phút</strong> thay vì chỉ hy vọng. Nếu cuốn sổ thiếu điều gì, chu kỳ 2 sẽ hỏng ngay và ồn ào — không phải nhiều tháng sau vào lúc tệ nhất.</p>
+      <p class="reveal">→ <em>stateless iterations</em> (<a href="https://github.com/Phong-Kaster/Foreman/blob/main/docs/adr/ADR-002-stateless-iteration-dumb-runtime.md" target="_blank" rel="noopener">ADR-002</a>)</p></div>
+      <div data-lang="en"><p class="reveal"><em>Every cycle is a brand-new AI process with zero memory. It learns everything from files in the repo, and must write everything it learns back into them.</em></p>
+      <p class="reveal">Here's the clever bit: because <em>every</em> cycle starts from scratch, the question "could this survive a crash and resume?" gets <strong>tested every few minutes</strong> instead of merely hoped for. If the notebook were missing something, cycle 2 breaks loudly and immediately — not months later at the worst possible moment.</p>
+      <p class="reveal">→ <em>stateless iterations</em> (<a href="https://github.com/Phong-Kaster/Foreman/blob/main/docs/adr/ADR-002-stateless-iteration-dumb-runtime.md" target="_blank" rel="noopener">ADR-002</a>)</p></div>
+
+      <h3 class="reveal" id="four-words-h" data-lang="vi">b) Chiếc đồng hồ chỉ biết bốn từ</h3>
+      <h3 class="reveal" data-lang="en">b) A timer that knows four words</h3>
+      <div data-lang="vi"><p class="reveal"><em>Script chạy loop cố tình rất ngu. Nó không hiểu code, kế hoạch, hay tiến độ. Nó chạy AI một lần, đọc lại một từ, và phản ứng:</em></p></div>
+      <div data-lang="en"><p class="reveal"><em>The script running the loop is deliberately stupid. It doesn't understand code, plans, or progress. It runs the AI once, reads back one word, and reacts:</em></p></div>
+
+      <div class="tablewrap reveal">
+        <table>
+          <thead><tr data-lang="vi"><th>Từ</th><th>Nghĩa là</th><th>Script làm gì</th></tr><tr data-lang="en"><th>Word</th><th>Meaning</th><th>What the script does</th></tr></thead>
+          <tbody>
+            <tr><td><code>CONTINUE</code></td><td data-lang="vi">tiến độ đã lưu, còn việc phải làm</td><td data-lang="en">progress saved, more to do</td><td data-lang="vi">chạy lại</td><td data-lang="en">run it again</td></tr>
+            <tr><td><code>DONE</code></td><td data-lang="vi">đã verify xong</td><td data-lang="en">verified finished</td><td data-lang="vi">dừng — thành công</td><td data-lang="en">stop — success</td></tr>
+            <tr><td><code>ESCALATE</code></td><td data-lang="vi">cần một quyết định của con người</td><td data-lang="en">I need a human decision</td><td data-lang="vi">dừng — hỏi bạn</td><td data-lang="en">stop — ask you</td></tr>
+            <tr><td><code>FAILED</code></td><td data-lang="vi">có gì đó thực sự hỏng</td><td data-lang="en">something is genuinely broken</td><td data-lang="vi">dừng — nhờ bạn sửa</td><td data-lang="en">stop — ask you to repair it</td></tr>
+            <tr><td data-lang="vi"><em>(im lặng)</em></td><td data-lang="en"><em>(silence)</em></td><td data-lang="vi">AI chết giữa chừng</td><td data-lang="en">the AI died mid-sentence</td><td data-lang="vi">thử lại, tối đa 3 lần, rồi dừng</td><td data-lang="en">try again, up to 3 times, then stop</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div data-lang="vi"><p class="reveal">Vì sao giữ nó ngu? Vì một luật được cưỡng chế bởi script <strong>là</strong> một luật, còn một luật chỉ sống trong prompt là một <em>điều ước</em>. "Dừng lại và hỏi trước khi đổi kiến trúc" được cưỡng chế ở đây bằng việc tiến trình thực sự thoát ra — không phải bằng việc AI nhớ để cư xử đúng.</p>
+      <p class="reveal">→ <em>the dumb runtime and the status contract</em></p></div>
+      <div data-lang="en"><p class="reveal">Why keep it stupid? Because a rule enforced by a script <strong>is</strong> a rule, while a rule living only inside a prompt is a <em>wish</em>. "Stop and ask before changing the architecture" is enforced here by the process genuinely exiting — not by the AI remembering to behave.</p>
+      <p class="reveal">→ <em>the dumb runtime and the status contract</em></p></div>
+
+      <h3 class="reveal" id="the-exam" data-lang="vi">c) Bài thi bạn viết, và họ không được đụng vào</h3>
+      <h3 class="reveal" data-lang="en">c) The exam you write, and they can't touch</h3>
+      <div data-lang="vi"><p class="reveal"><em>Yêu cầu của bạn (<code>PRD.md</code>) mãi mãi là của bạn — AI có thể đề xuất thay đổi nhưng không bao giờ tự sửa. Từ đó, AI soạn ra một checklist các tiêu chí có thể kiểm chứng, và bạn phê duyệt nó. Sau đó nó cũng bị khoá.</em></p>
+      <p class="reveal">Chú ý điều bạn <em>không</em> phê duyệt: kế hoạch. Cách để đi tới đích là việc của máy. "Xong" nghĩa là gì là của bạn.</p>
+      <p class="reveal">→ <em>PRD + Definition of Done, và tiered mutability</em> (<a href="https://github.com/Phong-Kaster/Foreman/blob/main/docs/adr/ADR-001-prd-and-dod-source-of-truth.md" target="_blank" rel="noopener">ADR-001</a>)</p></div>
+      <div data-lang="en"><p class="reveal"><em>Your requirement (<code>PRD.md</code>) is yours forever — the AI may propose changes but never make them. From it, the AI drafts a checklist of testable criteria, and you approve it. Then that's locked too.</em></p>
+      <p class="reveal">Notice what you <em>don't</em> approve: the plan. How to get there is the machine's business. What "done" means is yours.</p>
+      <p class="reveal">→ <em>PRD + Definition of Done, and tiered mutability</em> (<a href="https://github.com/Phong-Kaster/Foreman/blob/main/docs/adr/ADR-001-prd-and-dod-source-of-truth.md" target="_blank" rel="noopener">ADR-001</a>)</p></div>
+
+      <h3 class="reveal" data-lang="vi">d) Ba bộ óc khác nhau</h3>
+      <h3 class="reveal" data-lang="en">d) Three different minds</h3>
+      <div data-lang="vi"><p class="reveal"><em>Một AI xây nó. Một AI thứ hai kiểm tra nó — và chỉ được xem diff, task và checklist, <strong>không bao giờ</strong> thấy lý luận của AI đầu tiên. Một AI thứ ba, không viết gì cả, quyết định toàn bộ đã xong hay chưa.</em></p>
+      <p class="reveal">Vì sao giấu lý luận? Vì cách self-review thường thất bại không phải do cẩu thả — mà do một <strong>giả định sai được chia sẻ</strong>. Bộ óc đã tạo ra lỗi là bộ óc tệ nhất để bắt lỗi đó. Nên người kiểm tra không bao giờ được đọc câu chuyện chứa lỗi.</p>
+      <p class="reveal">→ <em>fresh-context review + quy tắc DONE-candidate</em> (<a href="https://github.com/Phong-Kaster/Foreman/blob/main/docs/adr/ADR-005-fresh-context-review-done-candidate.md" target="_blank" rel="noopener">ADR-005</a>)</p></div>
+      <div data-lang="en"><p class="reveal"><em>One AI builds it. A second AI checks it — and is shown only the diff, the task and the checklist, <strong>never</strong> the first one's reasoning. A third AI, which wrote nothing at all, decides whether the whole thing is finished.</em></p>
+      <p class="reveal">Why hide the reasoning? Because the usual way self-review fails isn't sloppiness — it's a <strong>shared wrong assumption</strong>. The mind that made the mistake is the worst possible mind to catch it. So the checker never gets to read the story that contained the mistake.</p>
+      <p class="reveal">→ <em>fresh-context review + the DONE-candidate rule</em> (<a href="https://github.com/Phong-Kaster/Foreman/blob/main/docs/adr/ADR-005-fresh-context-review-done-candidate.md" target="_blank" rel="noopener">ADR-005</a>)</p></div>
+
+      <h3 class="reveal" data-lang="vi">e) Một chùm chìa khoá mà mỗi chiếc đều có ghi chú</h3>
+      <h3 class="reveal" data-lang="en">e) A keyring where every key has a note on it</h3>
+      <div data-lang="vi"><p class="reveal"><em>Mỗi quyền hạn mang theo bốn thứ: vì sao, lệnh nào, ở đâu, và trong bao lâu. Hầu hết tự hết hạn khi việc xong. Bạn luôn có thể thu hẹp một yêu cầu — AI không bao giờ mở rộng được.</em></p>
+      <p class="reveal">Chuỗi chỉ chạy một chiều: <strong>bạn → file chùm chìa khoá → script biên dịch nó → AI.</strong> AI không thể sửa chùm chìa khoá, không thể sửa script, và không thể tự viết file quyền hạn của mình. Nếu có thể, việc xin phép chỉ là màn kịch.</p>
+      <p class="reveal">Nói thẳng: đây là rào chắn chống lại <strong>tai nạn và trôi dạt</strong>, không phải bức tường chống lại một AI thực sự thù địch. Việc khớp trên văn bản lệnh sẽ luôn có kẽ hở nhỏ. Nếu cần cách ly thật sự, hãy chạy toàn bộ trong một VM.</p>
+      <p class="reveal">→ <em>capability-based permissions và trust chain</em> (<a href="https://github.com/Phong-Kaster/Foreman/blob/main/docs/adr/ADR-004-capability-permission-and-trust-chain.md" target="_blank" rel="noopener">ADR-004</a>)</p></div>
+      <div data-lang="en"><p class="reveal"><em>Every permission carries four things: why, which command, where, and for how long. Most expire by themselves when the job ends. You can always narrow a request — the AI can never widen one.</em></p>
+      <p class="reveal">The chain only runs one way: <strong>you → the keyring file → the script that compiles it → the AI.</strong> The AI cannot edit the keyring, cannot edit the script, and cannot write its own permissions file. If it could, asking permission would be theater.</p>
+      <p class="reveal">Stated honestly: this is a guardrail against <strong>accidents and drift</strong>, not a wall against a genuinely hostile AI. Matching on command text will always be a little leaky. If you need real containment, run the whole thing in a VM.</p>
+      <p class="reveal">→ <em>capability-based permissions and the trust chain</em> (<a href="https://github.com/Phong-Kaster/Foreman/blob/main/docs/adr/ADR-004-capability-permission-and-trust-chain.md" target="_blank" rel="noopener">ADR-004</a>)</p></div>
+    </section>
+
+    <section class="sec" id="paper-trail">
+      <h3 class="reveal" data-lang="vi">Và mọi thứ đều để lại dấu vết trên giấy</h3>
+      <h3 class="reveal" data-lang="en">And everything leaves a paper trail</h3>
+      <p class="reveal" data-lang="vi">Mỗi chu kỳ là một commit git chứa cả code <em>lẫn</em> ghi chú cùng nhau, nên hai thứ không bao giờ mâu thuẫn. Mọi thay đổi kế hoạch được ghi lại kèm lý do. Mọi quyết định của bạn được lưu kèm lý lẽ của bạn. <code>git log</code> trên nhánh <strong>chính là</strong> câu chuyện tính năng được xây dựng ra sao.</p>
+      <p class="reveal" data-lang="en">Each cycle is one git commit holding the code <em>and</em> the notes together, so the two can never disagree. Every plan change is logged with its reason. Every decision you make is stored with your rationale. <code>git log</code> on the branch <strong>is</strong> the story of how the feature got built.</p>
+    </section>
+
+    <section class="sec" id="word-swaps">
+      <h3 class="reveal" data-lang="vi">Đổi từ</h3>
+      <h3 class="reveal" data-lang="en">Word swaps</h3>
+      <div class="tablewrap reveal">
+        <table>
+          <thead><tr data-lang="vi"><th>Tớ nói</th><th>Docs gọi là</th></tr><tr data-lang="en"><th>I said</th><th>The docs say</th></tr></thead>
+          <tbody>
+            <tr><td data-lang="vi">điều bạn muốn</td><td data-lang="en">what you want</td><td>PRD</td></tr>
+            <tr><td data-lang="vi">checklist</td><td data-lang="en">the checklist</td><td data-lang="vi">Definition of Done (DoD)</td><td data-lang="en">Definition of Done (DoD)</td></tr>
+            <tr><td data-lang="vi">cuốn sổ</td><td data-lang="en">the notebook</td><td><code>.harness/run/</code> <span data-lang="vi">(lần chạy này)</span><span data-lang="en">(this run)</span> <span data-lang="vi">và</span><span data-lang="en">and</span> <code>.harness/knowledge/</code> <span data-lang="vi">(đáng giữ mãi mãi)</span><span data-lang="en">(worth keeping forever)</span></td></tr>
+            <tr><td data-lang="vi">luật nhà mà chỉ bạn được đổi</td><td data-lang="en">the house rules only you can change</td><td><code>.harness/knowledge/DOMAIN.md</code> — <span data-lang="vi">Domain Knowledge</span><span data-lang="en">Domain Knowledge</span></td></tr>
+            <tr><td data-lang="vi">"một luật phải được kiếm bằng một lỗi thật"</td><td data-lang="en">"a rule has to be earned by a real mistake"</td><td data-lang="vi">the Ratchet</td><td data-lang="en">the Ratchet</td></tr>
+            <tr><td data-lang="vi">một chu kỳ</td><td data-lang="en">one cycle</td><td data-lang="vi">một Iteration</td><td data-lang="en">an Iteration</td></tr>
+            <tr><td data-lang="vi">một điểm lưu</td><td data-lang="en">a save point</td><td data-lang="vi">một Stable Checkpoint (một commit git)</td><td data-lang="en">a Stable Checkpoint (one git commit)</td></tr>
+            <tr><td data-lang="vi">"tôi cần hỏi bạn điều gì đó"</td><td data-lang="en">"I need to ask you something"</td><td data-lang="vi">một Escalation Request → <code>ESCALATE</code></td><td data-lang="en">an Escalation Request → <code>ESCALATE</code></td></tr>
+            <tr><td data-lang="vi">một chìa khoá có ghi chú</td><td data-lang="en">a key with a note on it</td><td data-lang="vi">một Capability</td><td data-lang="en">a Capability</td></tr>
+            <tr><td data-lang="vi">chiếc đồng hồ ngu</td><td data-lang="en">the stupid timer script</td><td data-lang="vi">the Runtime (<code>run.ps1</code>)</td><td data-lang="en">the Runtime (<code>run.ps1</code>)</td></tr>
+            <tr><td data-lang="vi">AI đang làm việc</td><td data-lang="en">the AI doing the work</td><td data-lang="vi">the Execution Engine (<code>ENGINE.md</code>)</td><td data-lang="en">the Execution Engine (<code>ENGINE.md</code>)</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="reveal" data-lang="vi">Glossary đầy đủ: <a href="https://github.com/Phong-Kaster/Foreman/blob/main/CONTEXT.md" target="_blank" rel="noopener">CONTEXT.md</a>. Thiết kế đầy đủ: <a href="https://github.com/Phong-Kaster/Foreman/blob/main/docs/architecture.md" target="_blank" rel="noopener">docs/architecture.md</a>. Lý do đằng sau mỗi quyết định khó đảo ngược: <a href="https://github.com/Phong-Kaster/Foreman/tree/main/docs/adr" target="_blank" rel="noopener">docs/adr/</a>.</p>
+      <p class="reveal" data-lang="en">Full glossary: <a href="https://github.com/Phong-Kaster/Foreman/blob/main/CONTEXT.md" target="_blank" rel="noopener">CONTEXT.md</a>. Full design: <a href="https://github.com/Phong-Kaster/Foreman/blob/main/docs/architecture.md" target="_blank" rel="noopener">docs/architecture.md</a>. The reasoning behind each hard-to-undo choice: <a href="https://github.com/Phong-Kaster/Foreman/tree/main/docs/adr" target="_blank" rel="noopener">docs/adr/</a>.</p>
+    </section>
+
+    <!-- ============================================================= WHAT'S IN THIS REPO ============================================================= -->
+    <section class="sec" id="repo-structure">
+      <p class="sec-kicker" data-lang="vi">Cấu trúc</p>
+      <p class="sec-kicker" data-lang="en">Structure</p>
+      <h2 class="reveal" data-lang="vi">Nội dung repo này</h2>
+      <h2 class="reveal" data-lang="en">What's in this repo</h2>
+
+      <pre class="reveal treeblock"><code>Foreman/
+├── skills/engineering/foreman/       ← <span data-lang="vi">SKILL — thứ installer cài vào</span><span data-lang="en">THE SKILL — what the installer installs</span>
+│   ├── SKILL.md                      <span data-lang="vi">chỉ dẫn riêng của skill</span><span data-lang="en">the skill's own instructions</span>
+│   ├── ENGINE.md                     <span data-lang="vi">hợp đồng vận hành của AI</span><span data-lang="en">the AI's operating contract</span>
+│   ├── POLICIES.md                   <span data-lang="vi">chính sách kỹ thuật (retry, review, bằng chứng)</span><span data-lang="en">engineering policy (retries, reviews, evidence)</span>
+│   ├── capabilities/baseline.json    <span data-lang="vi">chùm chìa khoá khởi điểm — chỉ những thứ an toàn</span><span data-lang="en">the starter keyring — safe stuff only</span>
+│   ├── templates/                    <span data-lang="vi">bản thiết kế cho .harness/run/ và knowledge/</span><span data-lang="en">blueprints for .harness/run/ and knowledge/</span>
+│   └── scripts/run.ps1               <span data-lang="vi">script chạy loop</span><span data-lang="en">the loop script</span>
+│
+├── skills/knowledge/                 ← <span data-lang="vi">STACK PACK TUỲ CHỌN — kiến thức nền tảng, do người curate,</span><span data-lang="en">OPT-IN STACK PACKS — platform knowledge, human-curated,</span>
+│   └── android/compose-visual-testing/  <span data-lang="vi">không bao giờ tự động promote vào .harness/loop/ (ADR-019)</span><span data-lang="en">never auto-promoted into .harness/loop/ (ADR-019)</span>
+│       <span data-lang="vi">(một thư mục con cho mỗi nền tảng: android/, backend/, frontend/, devops/, ...)</span><span data-lang="en">(one subfolder per platform: android/, backend/, frontend/, devops/, ...)</span>
+│
+├── .harness/loop/                    ← <span data-lang="vi">Y HỆT, độc lập — cho cài đặt thủ công</span><span data-lang="en">THE SAME THING, standalone — for manual installs</span>
+├── tests/                            ← <span data-lang="vi">Pester test cho run.ps1, chạy bằng một `claude` giả</span><span data-lang="en">Pester tests for run.ps1, driven by a fake `claude` stub</span>
+├── docs/
+│   ├── architecture.md               <span data-lang="vi">thiết kế đầy đủ</span><span data-lang="en">the complete design</span>
+│   ├── consumer-guide.md             <span data-lang="vi">sổ tay vận hành cài đặt thủ công</span><span data-lang="en">manual-install operating manual</span>
+│   └── adr/                          <span data-lang="vi">vì sao mỗi quyết định lớn được đưa ra</span><span data-lang="en">why each big decision was made</span>
+├── CONTEXT.md                        <span data-lang="vi">glossary</span><span data-lang="en">the glossary</span>
+└── README.md                         <span data-lang="vi">chính file này</span><span data-lang="en">this file</span></code></pre>
+    </section>
+
+    <section class="sec" id="your-repo">
+      <h3 class="reveal" data-lang="vi">Những gì xuất hiện trong repo <em>của bạn</em> khi dùng nó</h3>
+      <h3 class="reveal" data-lang="en">What appears in <em>your</em> repo when you use it</h3>
+
+      <pre class="reveal treeblock"><code>your-repo/
+├── .claude/skills/foreman/   ← <span data-lang="vi">skill đã cài</span><span data-lang="en">the installed skill</span>
+├── .harness/loop/            ← <span data-lang="vi">runtime, làm mới mỗi lần /foreman</span><span data-lang="en">the runtime, refreshed on every /foreman</span>
+├── PRD.md                    ← <span data-lang="vi">của bạn. điều bạn muốn.</span><span data-lang="en">yours. what you want.</span>
+├── .harness/run/             ← <span data-lang="vi">ghi chú làm việc của robot cho lần chạy này. Dùng một lần —</span><span data-lang="en">the robot's working notes for this run. Disposable —</span>
+│                               <span data-lang="vi">bị xoá khỏi đầu nhánh khi xong.</span><span data-lang="en">removed from the branch tip when it finishes.</span>
+└── knowledge/                ← <span data-lang="vi">sống sót qua mọi lần chạy. Ba file, ba quy tắc:</span><span data-lang="en">survives every run. Three files, three rules:</span>
+    ├── PROJECT.md            ← <span data-lang="vi">những gì nó học về repo của bạn (lệnh build,</span><span data-lang="en">what it learned about your repo (build commands,</span>
+    │                           <span data-lang="vi">điều kỳ quặc, quy ước). TUÂN THEO nó; code thắng.</span><span data-lang="en">quirks, conventions). CONFORM to it; code wins.</span>
+    ├── ISSUES.md             ← <span data-lang="vi">những gì nó biết vẫn còn hỏng và chưa sửa.</span><span data-lang="en">what it knows is still broken and didn't fix.</span>
+    │                           <span data-lang="vi">TRÁNH nó. Bị xoá theo từng mục khi đã sửa.</span><span data-lang="en">AVOID it. Deleted per entry once fixed.</span>
+    └── DOMAIN.md             ← <span data-lang="vi">quy tắc và công thức của domain bạn. Tuỳ chọn. Chỉ BẠN</span><span data-lang="en">your domain rules and formulas. Optional. Only YOU</span>
+                                <span data-lang="vi">được ghi nó. THỰC THI nó; nó thắng code.</span><span data-lang="en">write it. IMPLEMENT it; it beats the code.</span></code></pre>
+    </section>
+
+    <!-- ============================================================= STATUS ============================================================= -->
+    <section class="sec" id="status">
+      <p class="sec-kicker" data-lang="vi">Hiện trạng</p>
+      <p class="sec-kicker" data-lang="en">Current state</p>
+      <h2 class="reveal" data-lang="vi">Trạng thái</h2>
+      <h2 class="reveal" data-lang="en">Status</h2>
+
+      <p class="reveal" data-lang="vi"><strong>V1 hoạt động trên dự án thật, đã kiểm chứng hai lần:</strong></p>
+      <p class="reveal" data-lang="en"><strong>V1 works on real projects, validated twice:</strong></p>
+
+      <div class="card reveal">
+        <div class="status-item">
+          <span class="status-badge done" data-lang="vi">Đã xác nhận</span><span class="status-badge done" data-lang="en">Validated</span>
+          <div>
+            <p data-lang="vi"><strong>Một dự án tiêu thụ thật</strong> (Android Jetpack Compose, 2026-07-08, cài thủ công). Mọi hợp đồng đều kích hoạt đúng — kể cả việc engine từ chối tự tuyên bố công việc của chính nó đã xong và nhường lại cho một verifier sạch, không cần nhắc.</p>
+            <p data-lang="en"><strong>A real consumer project</strong> (Android Jetpack Compose, 2026-07-08, manual install). Every contract fired correctly — including the engine refusing to declare its own work finished and deferring to a clean verifier, unprompted.</p>
+          </div>
+        </div>
+        <div class="status-item">
+          <span class="status-badge done" data-lang="vi">Đã xác nhận</span><span class="status-badge done" data-lang="en">Validated</span>
+          <div>
+            <p data-lang="vi"><strong>Đóng gói skill, đầu tới cuối</strong> (repo scratch, 2026-07-15). Cài → chạy → stream trực tiếp → hai câu hỏi thật được trả lời trong chat → <code>DONE</code> → tóm tắt, không cần mở một file nào bằng tay. Tìm và sửa một lỗi thật trên đường đi: skill cần <code>disable-model-invocation: true</code>, nếu không một engine lồng bên trong cùng repo có thể tự kích hoạt launcher của chính nó.</p>
+            <p data-lang="en"><strong>Skill packaging, end to end</strong> (scratch repo, 2026-07-15). Install → run → live streaming → two real questions answered in chat → <code>DONE</code> → summary, without opening a single file by hand. Found and fixed one real bug on the way: the skill needed <code>disable-model-invocation: true</code>, or a nested engine run in the same repo could trigger the launcher on itself.</p>
+          </div>
+        </div>
+      </div>
+
+      <p class="reveal" data-lang="vi" style="margin-top:26px"><strong>Những góc cạnh thô đã biết, đang được xử lý:</strong></p>
+      <p class="reveal" data-lang="en" style="margin-top:26px"><strong>Known rough edges, being worked on:</strong></p>
+
+      <div class="card reveal">
+        <div class="status-item">
+          <span class="status-badge wip" data-lang="vi">Đang xử lý</span><span class="status-badge wip" data-lang="en">In progress</span>
+          <p data-lang="vi">Lệnh shell hợp thành (compound) có thể bị từ chối dù lệnh gốc đã được duyệt (ví dụ <code>cd X && node …</code>). Engine đã lách qua cả hai lần gặp phải, nhưng tốn một lượt retry — định dạng quyền cần được siết chặt lại.</p>
+          <p data-lang="en">Compound shell commands can be denied even when the base command is approved (e.g. <code>cd X && node …</code>). The engine worked around it both times it happened, but it costs a retry — the permission format needs tightening.</p>
+        </div>
+        <div class="status-item">
+          <span class="status-badge wip" data-lang="vi">Đang xử lý</span><span class="status-badge wip" data-lang="en">In progress</span>
+          <p data-lang="vi">Độ chi tiết của kế hoạch chưa co giãn tốt cho yêu cầu nhỏ: một tính năng 2-task bị chia thành 5, trả overhead đầy đủ năm lần.</p>
+          <p data-lang="en">Plan granularity doesn't scale down for small requirements yet: a 2-task feature got split into 5, paying full overhead five times.</p>
+        </div>
+        <div class="status-item">
+          <span class="status-badge done" data-lang="vi">Đã sửa</span><span class="status-badge done" data-lang="en">Fixed</span>
+          <p data-lang="vi">Một log file-lock từng giết chết cả một lần chạy. Ghi log giờ ở chế độ shared và fail-silent, và chỉ một loop được chạy mỗi repo. Observability không bao giờ được phép giết execution.</p>
+          <p data-lang="en">A log file-lock once killed an entire run. Log writes are now shared-mode and fail-silent, and only one loop may run per repository. Observability must never be able to kill execution.</p>
+        </div>
+        <div class="status-item">
+          <span class="status-badge wip" data-lang="vi">Thẩm mỹ</span><span class="status-badge wip" data-lang="en">Cosmetic</span>
+          <p data-lang="vi">Bộ đếm chu kỳ của engine và của script không khớp nhau; dấu câu UTF-8 hiện thành mojibake trên code page mặc định của Windows.</p>
+          <p data-lang="en">The engine's and the script's cycle counters disagree; UTF-8 punctuation shows as mojibake on default Windows code pages.</p>
+        </div>
+        <div class="status-item">
+          <span class="status-badge wip" data-lang="vi">Phạm vi</span><span class="status-badge wip" data-lang="en">Scope</span>
+          <p data-lang="vi">Khả năng chuyển sang các AI CLI khác (Codex, Gemini) được gói gọn trong một bề mặt adapter duy nhất bên trong <code>run.ps1</code> — xem <a href="https://github.com/Phong-Kaster/Foreman/blob/main/docs/adr/ADR-006-engine-adapter-boundary.md" target="_blank" rel="noopener">ADR-006</a>.</p>
+          <p data-lang="en">Portability to other AI CLIs (Codex, Gemini) is confined to a single adapter surface inside <code>run.ps1</code> — see <a href="https://github.com/Phong-Kaster/Foreman/blob/main/docs/adr/ADR-006-engine-adapter-boundary.md" target="_blank" rel="noopener">ADR-006</a>.</p>
+        </div>
+      </div>
+
+      <p class="reveal" style="margin-top:22px" data-lang="vi">Repo này cố tình giữ nhỏ. Cấu trúc mới phải kiếm được chỗ đứng của nó qua việc dùng thật, không phải sự phức tạp dự đoán trước. Mọi thứ cố tình bị hoãn lại — và điều gì sẽ khiến phải xem lại — được liệt kê trong <a href="https://github.com/Phong-Kaster/Foreman/blob/main/docs/architecture.md" target="_blank" rel="noopener">docs/architecture.md §12</a>.</p>
+      <p class="reveal" style="margin-top:22px" data-lang="en">This repo stays deliberately small. New structure has to earn its place through real use, not anticipated complexity. Everything deliberately postponed — and what would make us revisit it — is listed in <a href="https://github.com/Phong-Kaster/Foreman/blob/main/docs/architecture.md" target="_blank" rel="noopener">docs/architecture.md §12</a>.</p>
+    </section>
+
+    <footer class="pagefoot">
+      <p data-lang="vi">Trang này là một bản trình bày song song của <a href="https://github.com/Phong-Kaster/Foreman/blob/main/README.md" target="_blank" rel="noopener">README.md</a> — README vẫn là file được GitHub render ở trang chủ repo và không đổi vai trò. Theo quy ước, mỗi khi README.md đổi, trang này cũng được cập nhật theo trong cùng một lần thay đổi.</p>
+      <p data-lang="en">This page is a parallel presentation of <a href="https://github.com/Phong-Kaster/Foreman/blob/main/README.md" target="_blank" rel="noopener">README.md</a> — README stays the file GitHub renders on the repo's home page and does not change role. By convention, whenever README.md changes, this page is updated alongside it in the same change.</p>
+      <p class="sync">Foreman © 2026 — <span data-lang="vi">port lần đầu từ README, 14-09-2026.</span><span data-lang="en">first ported from README, 2026-09-14.</span></p>
+    </footer>
+
+  </main>
+</div>
+
+<script>
+  (function(){
+    var root=document.documentElement, sel=document.getElementById('lang-select'), KEY='foreman-guide-lang';
+    function apply(l){root.setAttribute('data-ui-lang',l);root.setAttribute('lang',l);sel.value=l;try{localStorage.setItem(KEY,l)}catch(e){}}
+    var init='vi';
+    try{var s=localStorage.getItem(KEY); if(s==='vi'||s==='en') init=s;
+        else if((navigator.language||'').toLowerCase().indexOf('vi')!==0) init='en';}catch(e){}
+    apply(init);
+    sel.addEventListener('change',function(){apply(sel.value)});
+  })();
+
+  (function(){
+    var root=document.documentElement, btn=document.getElementById('theme-toggle'), KEY='foreman-guide-theme';
+    function apply(t){ if(t){root.setAttribute('data-theme',t)} else {root.removeAttribute('data-theme')} try{ t? localStorage.setItem(KEY,t) : localStorage.removeItem(KEY) }catch(e){} }
+    var stored=null; try{stored=localStorage.getItem(KEY)}catch(e){}
+    if(stored==='dark'||stored==='light') apply(stored);
+    btn.addEventListener('click',function(){
+      var current = root.getAttribute('data-theme');
+      var sysDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+      var effectiveDark = current ? current==='dark' : sysDark;
+      apply(effectiveDark ? 'light' : 'dark');
+    });
+  })();
+
+  (function(){
+    var toggle=document.getElementById('menu-toggle'), sidebar=document.getElementById('sidebar'), backdrop=document.getElementById('backdrop');
+    function close(){sidebar.classList.remove('open'); backdrop.classList.remove('open')}
+    toggle.addEventListener('click',function(){sidebar.classList.toggle('open'); backdrop.classList.toggle('open')});
+    backdrop.addEventListener('click',close);
+    sidebar.addEventListener('click',function(e){ if(e.target.tagName==='A') close() });
+  })();
+
+  (function(){
+    var buttons=document.querySelectorAll('[data-copy-target]');
+    function copy(text, btn){
+      var done=function(){ var svg=btn.innerHTML; btn.setAttribute('data-copied','1'); setTimeout(function(){btn.removeAttribute('data-copied')},1400) };
+      if(navigator.clipboard){ navigator.clipboard.writeText(text).then(done, done) } else { done() }
+    }
+    buttons.forEach(function(b){
+      b.addEventListener('click',function(){
+        var target=document.getElementById(b.dataset.copyTarget);
+        if(target) copy(target.textContent, b);
+      });
+    });
+    var installBtn=document.getElementById('copy-install');
+    if(installBtn){ installBtn.addEventListener('click',function(){ copy(document.getElementById('install-cmd').textContent, installBtn) }) }
+  })();
+
+  (function(){
+    if(!('IntersectionObserver' in window)) return;
+    var els=document.querySelectorAll('.reveal');
+    var io=new IntersectionObserver(function(entries){
+      entries.forEach(function(en){ if(en.isIntersecting){ en.target.classList.add('in'); io.unobserve(en.target) } });
+    },{rootMargin:'0px 0px -8% 0px', threshold:0.05});
+    els.forEach(function(el){ io.observe(el) });
+  })();
+
+  (function(){
+    if(!('IntersectionObserver' in window)) return;
+    var links=Array.prototype.slice.call(document.querySelectorAll('aside.sidebar a[href^="#"]'));
+    var map={};
+    links.forEach(function(a){ var id=a.getAttribute('href').slice(1); if(!map[id]) map[id]=[]; map[id].push(a) });
+    var targets=Object.keys(map).map(function(id){return document.getElementById(id)}).filter(Boolean);
+    var current=null;
+    var io=new IntersectionObserver(function(entries){
+      entries.forEach(function(en){
+        if(en.isIntersecting){
+          if(current) (map[current]||[]).forEach(function(a){a.classList.remove('active')});
+          current=en.target.id;
+          (map[current]||[]).forEach(function(a){a.classList.add('active')});
+        }
+      });
+    },{rootMargin:'-15% 0px -70% 0px', threshold:0});
+    targets.forEach(function(t){ io.observe(t) });
+  })();
+</script>
+</body>
+</html>

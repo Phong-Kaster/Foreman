@@ -119,7 +119,7 @@ Describe "run.ps1 status reactions" {
         $repo = New-TestRepo
         try {
             Set-FakeClaudeQueue -TestRepo $repo -Directives @("CRASH", "CRASH")
-            $exit = Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "5", "-MaxConsecutiveCrashes", "2")
+            $exit = Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "5", "-MaxConsecutiveCrashes", "2", "-CrashBackoffSeconds", "0")
             $exit | Should Be 2
         } finally { Remove-TestRepo -TestRepo $repo }
     }
@@ -408,6 +408,141 @@ Describe "run.ps1 -PrdPath staging" {
 
             $exit | Should Be 0
             (Get-Content (Join-Path $repo "PRD.md") -Raw).Trim() | Should Be "original requirement text"
+        } finally { Remove-TestRepo -TestRepo $repo }
+    }
+}
+
+Describe "run.ps1 classifies a launch failure" {
+
+    # feat/proactive-loop already separates a quota rejection from a Crash, and covers it above with
+    # a real rate_limit_event rather than by matching text. What it does not separate is an
+    # invocation that never STARTED: the exception is caught, downgraded to a warning, and then
+    # counted as a Crash because no status file appeared. Three retries against a missing binary.
+
+    It "exits 4 (FAILED) when the engine binary cannot be started, without burning the watchdog" {
+        $repo = New-TestRepo
+        try {
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("DONE|must not be reached")
+            Push-Location $repo
+            try {
+                $args = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $RunPs1,
+                          "-ClaudeCommand", "claude-does-not-exist-on-this-machine",
+                          "-QuietEngine", "-MaxIterations", "5", "-CrashBackoffSeconds", "0")
+                & powershell @args | Out-Null
+                $exit = $LASTEXITCODE
+            } finally { Pop-Location }
+
+            # 4, not 2: a missing binary cannot appear between attempts. And the queued DONE must be
+            # untouched, which is what proves it stopped on the first attempt rather than retrying.
+            $exit | Should Be 4
+            $remaining = @(Get-Content (Join-Path $repo "queue.txt") | Where-Object { $_.Trim() -ne "" })
+            $remaining.Count | Should Be 1
+        } finally { Remove-TestRepo -TestRepo $repo }
+    }
+}
+
+Describe "run.ps1 iteration budget survives a restart" {
+
+    # $iteration was a `for`-loop variable, local to one process. ESCALATE, a Crash-limit and a
+    # FAILED all exit the process expecting to be re-run, so the counter reset to 1 every time -
+    # a run that escalated five times got 250 iterations, not 50. The fix counts commits already
+    # on the branch instead, because ENGINE.md 6 requires every Iteration to end in exactly one.
+    #
+    # fake-claude never commits (it only writes STATUS.md), so three real commits are made here to
+    # stand in for three iterations a PRIOR process already completed before exiting and being
+    # re-run - exactly what a restart after ESCALATE or a Crash-limit looks like on disk.
+
+    It "counts prior commits on the branch instead of restarting the budget at 1" {
+        $repo = New-TestRepo
+        try {
+            Push-Location $repo
+            try {
+                # New-TestRepo's `git init` may name the initial branch "main" or "master"
+                # depending on the machine's config - pin it to "main" so the base this run
+                # branched from is known, the way run.ps1 itself resolves it.
+                $initialBranch = (& git rev-parse --abbrev-ref HEAD).Trim()
+                if ($initialBranch -ne "main") { & git branch -m $initialBranch main | Out-Null }
+                & git checkout -b loop/restart-budget --quiet | Out-Null
+                1..3 | ForEach-Object {
+                    Set-Content -Path (Join-Path $repo "checkpoint-$_.txt") -Value "iteration $_"
+                    & git add -A | Out-Null
+                    & git -c user.email=test@local -c user.name=LoopTest commit --quiet -m "checkpoint $_" | Out-Null
+                }
+            } finally { Pop-Location }
+
+            # Three iterations are already checkpointed. A fresh process with MaxIterations 4 must
+            # resume at iteration 4, not iteration 1 - so exactly one more CONTINUE exhausts the
+            # budget. Unfixed, this queue underruns instead (iteration 2 finds an empty queue,
+            # which fake-claude treats as a Crash) and the run stops at exit 2, not exit 5.
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("CONTINUE|d")
+            $exit = Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "4")
+            $exit | Should Be 5
+        } finally { Remove-TestRepo -TestRepo $repo }
+    }
+
+    It "starts a fresh branch at iteration 1, same as today" {
+        $repo = New-TestRepo
+        try {
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("CONTINUE|a", "DONE|b")
+            $exit = Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "2")
+            $exit | Should Be 0
+        } finally { Remove-TestRepo -TestRepo $repo }
+    }
+}
+
+Describe "run.ps1 protects the human's half of the Decision Queue" {
+
+    # ESCALATION.md (the engine's questions) and DECISIONS.md (the human's answers) used to be one
+    # file with two writers and no signal for when the second one could safely write - an answer
+    # written the moment the file appeared was caught mid-write by the engine and logged as
+    # "recording the partial decision." Splitting the files only holds if the engine truly cannot
+    # write the human's half, and only a permission denial makes that mechanical rather than advisory.
+
+    It "denies the engine Edit and Write on DECISIONS.md" {
+        $repo = New-TestRepo
+        try {
+            $argLog = Join-Path $repo "args.txt"
+            $env:FAKE_CLAUDE_ARGLOG = $argLog
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("DONE|ok")
+            Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "2") | Out-Null
+
+            $recorded = (Get-Content $argLog -Raw)
+            $recorded | Should Match "--settings"
+            $settingsPath = ($recorded -split '--settings\s+')[1].Split(' ')[0].Trim()
+            $settings = Get-Content $settingsPath -Raw | ConvertFrom-Json
+            # `Should Contain` in this Pester version checks a FILE's content, not collection
+            # membership - the plain `-contains` operator is the array-membership check here.
+            ($settings.permissions.deny -contains "Edit(.harness/run/DECISIONS.md)") | Should Be $true
+            ($settings.permissions.deny -contains "Write(.harness/run/DECISIONS.md)") | Should Be $true
+        } finally {
+            Remove-Item Env:\FAKE_CLAUDE_ARGLOG -ErrorAction SilentlyContinue
+            Remove-TestRepo -TestRepo $repo
+        }
+    }
+
+    It "provisions DECISIONS.md itself, since the engine that needs it cannot create what it cannot write" {
+        $repo = New-TestRepo
+        try {
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("DONE|ok")
+            Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "2") | Out-Null
+
+            $decisionsFile = Join-Path $repo ".harness/run/DECISIONS.md"
+            (Test-Path $decisionsFile) | Should Be $true
+            (Get-Content $decisionsFile -Raw) | Should Match "DECISIONS"
+        } finally { Remove-TestRepo -TestRepo $repo }
+    }
+
+    It "does not touch an existing DECISIONS.md" {
+        # A human may already have written an answer before this invocation - provisioning must
+        # never overwrite it.
+        $repo = New-TestRepo
+        try {
+            New-Item -ItemType Directory -Path (Join-Path $repo ".harness/run") -Force | Out-Null
+            Set-Content -Path (Join-Path $repo ".harness/run/DECISIONS.md") -Value "## D-001`n`nApproved - ship it."
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("DONE|ok")
+            Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "2") | Out-Null
+
+            (Get-Content (Join-Path $repo ".harness/run/DECISIONS.md") -Raw) | Should Match "Approved - ship it."
         } finally { Remove-TestRepo -TestRepo $repo }
     }
 }

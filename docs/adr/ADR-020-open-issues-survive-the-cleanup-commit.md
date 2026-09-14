@@ -1,5 +1,12 @@
 # Known defects live in `knowledge/ISSUES.md`, addressed by commit SHA, and the engine may read history
 
+> **SUPERSEDED by [ADR-018](./ADR-018-constraints-retire-the-open-issues-file.md), 2026-09-11.**
+> `knowledge/ISSUES.md` is retired. Constraints (ADR-016) carry known defects into every Worker
+> Brief instead of waiting to be read at Orient — which closes the ceiling this ADR named in its own
+> last line. The **rule** survives and moved to `POLICIES.md` § Constraints vs Reference: a known
+> defect is always a Constraint, phrased as an instruction, never a Reference describing how the
+> code is. `Bash(git show*)` in the baseline ledger, also from this ADR, is unaffected and stands.
+
 A run reported a verified `DONE` while leaving a defect its own reviewer had found. Tracing why produced three separate faults, none of which was a reasoning failure.
 
 The evidence is a real consumer run (Phong-Kaster/Calendar-Note, `loop/todo-calendar-screens`). Its Fresh-Context Review found hardcoded colours on the new screens, and the engine did everything the architecture asks: it traced the cause to a pre-existing hardcoded background in a core layout file, reasoned that fixing it literally would risk a contrast regression unless out-of-scope screens changed too, classified it Tier 2, and escalated. The human answered *keep the pattern, reword the criterion*. Then the engine recorded what it had learned in `knowledge/PROJECT.md`:
@@ -30,6 +37,6 @@ Three changes, all inside existing lifecycles:
 
 - Three files in `knowledge/`, and the distinction between them is load-bearing rather than tidy: conform to `PROJECT.md`, avoid `ISSUES.md`, implement `DOMAIN.md` exactly. Reconcile gains a matching classification — *known defect left unfixed* — which is the only one that survives a run without becoming a task.
 - The engine can now read any prior run's execution state, since every `.ai/` state remains in the branch's commits and `git show` is granted. The audit trail stops being write-only.
-- `ISSUES.md` must be pruned to stay useful. A resolved entry left behind teaches the next reader to distrust the rest, so deletion on resolution is a rule, not housekeeping. This is the removal half of the ratchet (ADR-007), which had a criterion but no process.
+- `ISSUES.md` must be pruned to stay useful. A resolved entry left behind teaches the next reader to distrust the rest, so deletion on resolution is a rule, not housekeeping. This is the removal half of the ratchet (ADR-019), which had a criterion but no process.
 - **Not solved here:** nothing verifies that an `ISSUES.md` entry is still true. A defect fixed by a human between runs leaves a stale entry until an iteration happens to notice. The same is true of `PROJECT.md` today, where the codebase-wins rule at least implies correction; `ISSUES.md` has no equivalent forcing function.
 - **Also not solved:** the engine still cannot be made to *act* on an entry. `ISSUES.md` informs the work; it does not schedule it. Turning an entry into work stays a human act — a new PRD, or a decision at an escalation.

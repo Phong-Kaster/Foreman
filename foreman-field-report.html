@@ -1,0 +1,687 @@
+<title>Foreman Field Report</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+  :root {
+    --paper:#E7E8E4; --surface:#F4F5F2; --surface-2:#DDDFDA;
+    --ink:#191D1E; --ink-2:#3D4547; --muted:#667072;
+    --rule:#C6CAC4; --rule-soft:#D6D9D3;
+    --accent:#0F5C63; --accent-ink:#0B4750;
+    --s-done:#2C6547; --s-warn:#9C6206; --s-crit:#9A2B22; --s-info:#35618E;
+    --f-display:"Archivo","Helvetica Neue",Arial,sans-serif;
+    --f-body:"Source Serif 4",Georgia,"Times New Roman",serif;
+    --f-mono:"JetBrains Mono",ui-monospace,"SF Mono",Consolas,monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper:#14181A; --surface:#1B2023; --surface-2:#232A2D;
+      --ink:#E8EBE9; --ink-2:#BAC3C2; --muted:#8A9694;
+      --rule:#2E373A; --rule-soft:#262E31;
+      --accent:#4FBDC7; --accent-ink:#7FD5DC;
+      --s-done:#63B489; --s-warn:#DFA53F; --s-crit:#E0736A; --s-info:#74A8DB;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper:#14181A; --surface:#1B2023; --surface-2:#232A2D;
+    --ink:#E8EBE9; --ink-2:#BAC3C2; --muted:#8A9694;
+    --rule:#2E373A; --rule-soft:#262E31;
+    --accent:#4FBDC7; --accent-ink:#7FD5DC;
+    --s-done:#63B489; --s-warn:#DFA53F; --s-crit:#E0736A; --s-info:#74A8DB;
+  }
+
+  /* ---- language switching: English is the at-rest default ---- */
+  [data-lang="vi"]{display:none}
+  :root[data-ui-lang="vi"] [data-lang="vi"]{display:revert}
+  :root[data-ui-lang="vi"] [data-lang="en"]{display:none}
+
+  *{box-sizing:border-box}
+  body{background:var(--paper);color:var(--ink);font-family:var(--f-body);font-size:17px;line-height:1.62;-webkit-font-smoothing:antialiased}
+  /* Vietnamese sets a touch looser: stacked diacritics need the headroom */
+  :root[data-ui-lang="vi"] body{line-height:1.72}
+  .wrap{max-width:940px;margin:0 auto;padding:0 28px 96px}
+  .col{max-width:68ch}
+
+  header.mast{border-bottom:2px solid var(--ink);padding:34px 0 18px;margin-bottom:30px}
+  /* ---- sticky topbar: a direct child of <body>, so its containing block is the
+     whole document and it keeps sticking after the masthead scrolls away ---- */
+  .topbar{position:sticky;top:0;z-index:50;background:var(--paper);border-bottom:1px solid var(--rule)}
+  .topbar-inner{max-width:940px;margin:0 auto;padding:9px 28px;display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap}
+  .eyebrow{font-family:var(--f-mono);font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:var(--accent-ink);margin:0}
+  .langselect{position:relative;display:inline-flex;flex:none}
+  .langselect select{font-family:var(--f-mono);font-size:11px;letter-spacing:.09em;text-transform:uppercase;padding:5px 30px 5px 12px;background:transparent;color:var(--ink-2);border:1px solid var(--rule);border-radius:2px;cursor:pointer;line-height:1.5;-webkit-appearance:none;-moz-appearance:none;appearance:none}
+  .langselect select:hover{color:var(--ink);border-color:var(--muted)}
+  .langselect select:focus-visible{outline:2px solid var(--accent-ink);outline-offset:-2px}
+  /* chevron drawn in CSS so it follows the theme tokens rather than the OS palette */
+  .langselect::after{content:"";position:absolute;right:12px;top:50%;width:5px;height:5px;border-right:1.5px solid var(--muted);border-bottom:1.5px solid var(--muted);transform:translateY(-70%) rotate(45deg);pointer-events:none}
+  .langselect:hover::after{border-color:var(--ink)}
+  /* the open list is painted by the OS: force readable values in dark mode */
+  .langselect option{background:var(--surface);color:var(--ink);text-transform:none;letter-spacing:normal}
+
+  h1{font-family:var(--f-display);font-weight:700;font-size:clamp(2.1rem,5.2vw,3.1rem);line-height:1.04;letter-spacing:-.021em;margin:0 0 14px;text-wrap:balance}
+  :root[data-ui-lang="vi"] h1{line-height:1.14}
+  .standfirst{font-size:1.11rem;color:var(--ink-2);margin:0;max-width:62ch}
+
+  .facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(142px,1fr));border:1px solid var(--rule);background:var(--surface);margin:28px 0 8px}
+  .fact{padding:13px 16px;border-right:1px solid var(--rule-soft)}
+  .fact:last-child{border-right:0}
+  .fact dt{font-family:var(--f-mono);font-size:10px;letter-spacing:.11em;text-transform:uppercase;color:var(--muted);margin:0 0 5px}
+  .fact dd{margin:0;font-family:var(--f-display);font-weight:600;font-size:1.02rem;font-variant-numeric:tabular-nums}
+  .facts-note{font-family:var(--f-mono);font-size:11.5px;color:var(--muted);margin:0 0 44px;line-height:1.65}
+
+  h2{font-family:var(--f-display);font-weight:700;font-size:1.62rem;letter-spacing:-.014em;margin:56px 0 6px;text-wrap:balance}
+  :root[data-ui-lang="vi"] h2{line-height:1.28}
+  h2+.sectionnote{margin:0 0 26px;color:var(--muted);font-size:.95rem;max-width:64ch}
+  h3{font-family:var(--f-display);font-weight:600;font-size:1.11rem;letter-spacing:-.006em;margin:0 0 8px;text-wrap:balance}
+  :root[data-ui-lang="vi"] h3{line-height:1.4}
+  p{margin:0 0 15px}
+  code,.mono{font-family:var(--f-mono);font-size:.855em;background:var(--surface-2);padding:.08em .34em;border-radius:2px}
+  strong{font-weight:600}
+
+  .verdict{border-left:3px solid var(--accent);padding:2px 0 2px 22px;margin:0 0 10px}
+  .verdict p:last-child{margin-bottom:0}
+  .verdict .lede{font-size:1.15rem}
+
+  .finding{display:grid;grid-template-columns:44px 1fr;gap:0 18px;padding:22px 0 24px;border-top:1px solid var(--rule-soft)}
+  .finding:first-of-type{border-top:1px solid var(--rule)}
+  .rank{font-family:var(--f-mono);font-weight:600;font-size:1.28rem;font-variant-numeric:tabular-nums;color:var(--muted);line-height:1.25;padding-top:1px}
+  .fbody{min-width:0}
+  .tagrow{display:flex;flex-wrap:wrap;gap:7px;margin:9px 0 0}
+  .tag{font-family:var(--f-mono);font-size:10px;letter-spacing:.07em;text-transform:uppercase;padding:3px 7px;border:1px solid var(--rule);color:var(--muted);border-radius:2px}
+  .tag.crit{color:var(--s-crit);border-color:var(--s-crit)}
+  .tag.warn{color:var(--s-warn);border-color:var(--s-warn)}
+  .tag.info{color:var(--s-info);border-color:var(--s-info)}
+  .tag.ok{color:var(--s-done);border-color:var(--s-done)}
+
+  .evidence{font-family:var(--f-mono);font-size:12.4px;line-height:1.55;background:var(--surface);border:1px solid var(--rule-soft);border-left:2px solid var(--rule);padding:11px 14px;margin:12px 0;overflow-x:auto;white-space:pre;color:var(--ink-2)}
+  .evnote{font-family:var(--f-mono);font-size:10px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin:0 0 -6px}
+
+  .fix{margin:12px 0 0;padding-left:15px;border-left:2px solid var(--accent)}
+  .fix .fixlabel{font-family:var(--f-mono);font-size:10px;letter-spacing:.11em;text-transform:uppercase;color:var(--accent-ink);display:block;margin-bottom:3px}
+  .fix p{margin:0;font-size:.95rem}
+
+  ul.minor{list-style:none;padding:0;margin:0}
+  ul.minor li{display:grid;grid-template-columns:96px 1fr;gap:16px;padding:11px 0;border-top:1px solid var(--rule-soft);font-size:.96rem}
+  ul.minor li:first-child{border-top:1px solid var(--rule)}
+  ul.minor .who{font-family:var(--f-mono);font-size:11px;color:var(--muted);padding-top:3px}
+
+  .pos{border-top:1px solid var(--rule-soft);padding:20px 0}
+  .pos:first-of-type{border-top:1px solid var(--rule)}
+
+  .correction{background:var(--surface);border:1px solid var(--rule-soft);padding:16px 18px;margin:0 0 14px;font-size:.96rem}
+  .correction h3{margin-bottom:6px}
+  .correction p:last-child{margin-bottom:0}
+
+  table.plan{width:100%;border-collapse:collapse;font-size:.95rem}
+  table.plan th,table.plan td{text-align:left;padding:10px 12px 10px 0;border-bottom:1px solid var(--rule-soft);vertical-align:top}
+  table.plan th{font-family:var(--f-mono);font-size:10px;letter-spacing:.11em;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--rule);font-weight:400}
+  table.plan td.effort{font-family:var(--f-mono);font-size:12px;color:var(--muted);white-space:nowrap}
+  .tablescroll{overflow-x:auto}
+
+  .timeline{font-family:var(--f-mono);font-size:12.2px;line-height:1.75;background:var(--surface);border:1px solid var(--rule-soft);padding:14px 16px;overflow-x:auto;white-space:pre;color:var(--ink-2);margin:0 0 8px}
+
+  footer.end{margin-top:64px;padding-top:18px;border-top:2px solid var(--ink);font-family:var(--f-mono);font-size:11.5px;color:var(--muted);line-height:1.75}
+
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+  @media (max-width:620px){
+    .finding{grid-template-columns:32px 1fr;gap:0 12px}
+    ul.minor li{grid-template-columns:1fr;gap:2px}
+  }
+</style>
+
+<div class="topbar">
+  <div class="topbar-inner">
+    <p class="eyebrow" data-lang="en">Harness review · Calendar-Note trial · 2026-09-10 → 09-11</p>
+    <p class="eyebrow" data-lang="vi">Đánh giá harness · Thử nghiệm Calendar-Note · 10-09 → 11-09-2026</p>
+    <div class="langselect">
+      <select id="lang-select" aria-label="Language / Ngôn ngữ">
+        <option value="en">English</option>
+        <option value="vi">Tiếng Việt</option>
+      </select>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+
+<header class="mast">
+  <h1 data-lang="en">Foreman Field Report</h1>
+  <h1 data-lang="vi">Báo cáo thực địa Foreman</h1>
+  <p class="standfirst" data-lang="en">One under-specified PRD, driven end to end to a verified <span class="mono">DONE</span>. What the run proved about the harness, what it broke, and what to fix first.</p>
+  <p class="standfirst" data-lang="vi">Một bản PRD còn nhiều chỗ bỏ ngỏ, được chạy trọn vẹn tới trạng thái <span class="mono">DONE</span> đã kiểm chứng. Lượt chạy này chứng minh được gì về harness, làm lộ ra những gì, và nên sửa gì trước.</p>
+</header>
+
+<dl class="facts">
+  <div class="fact" data-lang="en"><dt>Outcome</dt><dd>DONE, pushed</dd></div>
+  <div class="fact" data-lang="vi"><dt>Kết quả</dt><dd>DONE, đã push</dd></div>
+  <div class="fact" data-lang="en"><dt>Commits</dt><dd>14</dd></div>
+  <div class="fact" data-lang="vi"><dt>Commit</dt><dd>14</dd></div>
+  <div class="fact" data-lang="en"><dt>Tasks</dt><dd>10 of 10</dd></div>
+  <div class="fact" data-lang="vi"><dt>Hạng mục</dt><dd>10 / 10</dd></div>
+  <div class="fact" data-lang="en"><dt>Tests</dt><dd>138 · 0 fail</dd></div>
+  <div class="fact" data-lang="vi"><dt>Test</dt><dd>138 · 0 lỗi</dd></div>
+  <div class="fact" data-lang="en"><dt>Escalations</dt><dd>1</dd></div>
+  <div class="fact" data-lang="vi"><dt>Escalation</dt><dd>1</dd></div>
+  <div class="fact" data-lang="en"><dt>Findings</dt><dd>20 + 3 positives</dd></div>
+  <div class="fact" data-lang="vi"><dt>Phát hiện</dt><dd>20 + 3 điểm tốt</dd></div>
+</dl>
+<p class="facts-note" data-lang="en">PRD: a date-organised note app. Nine open questions, one flagged architectural ambiguity, no completion criteria — chosen because that is what real requirements look like. Verified independently after the run: all four Gradle tasks green with <span class="mono">--rerun-tasks</span> on the committed tree.</p>
+<p class="facts-note" data-lang="vi">PRD: một ứng dụng ghi chú tổ chức theo ngày. Chín câu hỏi bỏ ngỏ, một điểm mơ hồ về kiến trúc được đánh dấu, không có tiêu chí hoàn thành — chọn đúng bản này vì yêu cầu ngoài đời thực trông y như vậy. Đã kiểm chứng độc lập sau lượt chạy: cả bốn tác vụ Gradle đều xanh với <span class="mono">--rerun-tasks</span> trên cây mã đã commit.</p>
+
+<h2 data-lang="en">The verdict</h2>
+<h2 data-lang="vi">Kết luận</h2>
+<div class="verdict col">
+  <p class="lede" data-lang="en">Foreman works. It took a requirements document full of question marks and produced a merge-ready Android app, surviving three crashes, a quota exhaustion, and four operator interruptions along the way.</p>
+  <p class="lede" data-lang="vi">Foreman chạy được. Nó nhận một tài liệu yêu cầu đầy dấu hỏi và cho ra một ứng dụng Android sẵn sàng merge, trong khi vẫn sống sót qua ba lần sập, một lần hết hạn mức, và bốn lần bị người vận hành ngắt giữa chừng.</p>
+  <p data-lang="en">Every defect below sits at an edge — the runtime script, the observability, or the plumbing that moves knowledge between runs. <strong>None is in the builder/reviewer/verifier design, the tiered mutability model, or the evidence discipline.</strong> Those were load-bearing and they held.</p>
+  <p data-lang="vi">Mọi lỗi bên dưới đều nằm ở phần rìa — script runtime, khả năng quan sát, hoặc đường ống chuyển tri thức giữa các lượt chạy. <strong>Không lỗi nào nằm ở thiết kế builder/reviewer/verifier, ở mô hình phân tầng quyền sửa đổi, hay ở kỷ luật bằng chứng.</strong> Đó mới là phần chịu lực, và nó đã đứng vững.</p>
+  <p data-lang="en">The single most important thing the harness did was refuse to overclaim. Its final commit says <em>"DONE here means the machine-checkable half is verified and the rest is packaged for a person, not that all 14 criteria are proven"</em> — then hands over 20 reference images to approve, a 15-step device walkthrough, and 5 product calls to overrule. It had every opportunity to report a clean <span class="mono">DONE</span> over four unprovable criteria and didn't.</p>
+  <p data-lang="vi">Điều quan trọng nhất mà harness đã làm là từ chối nói quá. Commit cuối cùng của nó ghi: <em>"DONE ở đây nghĩa là nửa phần máy kiểm được đã được kiểm chứng, phần còn lại đã được đóng gói cho con người, chứ không phải cả 14 tiêu chí đều đã được chứng minh"</em> — rồi bàn giao 20 ảnh tham chiếu cần duyệt, một quy trình 15 bước cần chạy tay trên thiết bị, và 5 quyết định sản phẩm cần người phủ quyết. Nó hoàn toàn có thể báo một chữ <span class="mono">DONE</span> sạch sẽ đè lên bốn tiêu chí không thể chứng minh, nhưng nó đã không làm vậy.</p>
+  <p data-lang="en">So: harden the edges. Do not redesign the middle.</p>
+  <p data-lang="vi">Vậy nên: hãy gia cố phần rìa. Đừng thiết kế lại phần lõi.</p>
+</div>
+
+<h2 data-lang="en">How the run actually went</h2>
+<h2 data-lang="vi">Lượt chạy đã diễn ra thế nào</h2>
+<p class="sectionnote" data-lang="en">Wall-clock, corrected for the stopwatch bug in finding 12. The interruptions are the point — none was planned, and all of them are conditions an unattended run meets in the wild.</p>
+<p class="sectionnote" data-lang="vi">Thời gian thực, đã hiệu chỉnh theo lỗi đồng hồ ở phát hiện 12. Chính các lần gián đoạn mới là điều đáng nói — không lần nào được lên kế hoạch, và tất cả đều là tình huống mà một lượt chạy không người trông sẽ gặp ngoài thực tế.</p>
+<div class="timeline" data-lang="en">09-10  09:48   bootstrap · DoD drafted from 9 open questions · ESCALATE
+       10:02   human answers: DoD approved w/ 1 overrule, ledger + DOMAIN.md written
+       10:09   T-001 theme            27m   16 review findings, 1 Critical
+       10:36   T-010 screenshot infra  ~   [session teardown — killed mid-iteration]
+       10:58   recovered, salvaged debris, finished T-010
+       11:22   T-002 data layer + Home
+       12:00   T-003 create + future-date rule
+       ...     [operator stop — quota]
+09-11  11:00   T-006 calendar grid     ~   [QUOTA EXHAUSTED — watchdog burned in 5s]
+       11:25   recovered again, re-ran the review from scratch
+       11:54   T-006 calendar          ✅  113 tests, 7 mutations, Critical found
+       12:34   T-007 day notes
+       13:18   T-008 future-date refusal
+       13:45   T-009 docs + human checklist · DONE-candidate set
+       13:59   fresh verifier · Cleanup Commit · DONE</div>
+<div class="timeline" data-lang="vi">10-09  09:48   bootstrap · soạn DoD từ 9 câu hỏi bỏ ngỏ · ESCALATE
+       10:02   người trả lời: duyệt DoD, phủ quyết 1 điểm, ghi ledger + DOMAIN.md
+       10:09   T-001 theme            27p   16 phát hiện review, 1 Critical
+       10:36   T-010 hạ tầng ảnh chụp  ~   [phiên bị dọn — chết giữa iteration]
+       10:58   phục hồi, cứu phần dở dang, hoàn tất T-010
+       11:22   T-002 tầng dữ liệu + Home
+       12:00   T-003 tạo ghi chú + luật cấm ngày tương lai
+       ...     [người vận hành dừng — hạn mức]
+11-09  11:00   T-006 lưới lịch tháng   ~   [HẾT HẠN MỨC — watchdog cháy trong 5 giây]
+       11:25   phục hồi lần nữa, chạy lại review từ đầu
+       11:54   T-006 màn hình lịch     ✅  113 test, 7 đột biến, tìm ra Critical
+       12:34   T-007 ghi chú theo ngày
+       13:18   T-008 từ chối ngày tương lai
+       13:45   T-009 tài liệu + checklist cho người · đặt cờ DONE-candidate
+       13:59   verifier mới · Cleanup Commit · DONE</div>
+
+<h2 data-lang="en">What to fix first</h2>
+<h2 data-lang="vi">Nên sửa gì trước</h2>
+<p class="sectionnote" data-lang="en">Priority order, not a sequence. The first four are independent and each is a small change.</p>
+<p class="sectionnote" data-lang="vi">Đây là thứ tự ưu tiên, không phải trình tự bắt buộc. Bốn mục đầu độc lập với nhau và mỗi mục đều là một thay đổi nhỏ.</p>
+
+<div class="finding">
+  <div class="rank">01</div>
+  <div class="fbody">
+    <h3 data-lang="en">Quota exhaustion burns the entire watchdog budget in five seconds</h3>
+    <h3 data-lang="vi">Hết hạn mức đốt sạch ngân sách watchdog trong năm giây</h3>
+    <p data-lang="en">Twenty minutes into building the calendar, the CLI returned a refusal — and <strong>exited 0</strong>:</p>
+    <p data-lang="vi">Đang xây màn hình lịch được hai mươi phút, CLI trả về một lời từ chối — và <strong>thoát với mã 0</strong>:</p>
+    <div class="evidence">[11:20:24] engine: You've hit your session limit · resets 2:30pm (Asia/Bangkok)
+[11:20:24] engine invocation finished (success)
+WARNING: Crash detected (no Execution Status). Consecutive crashes: 1 / 3
+=== Iteration 2 === started 11:20:25
+           ... same message ...              Consecutive crashes: 2 / 3
+=== Iteration 3 === started 11:20:28
+           ... same message ...              Consecutive crashes: 3 / 3
+Watchdog limit reached. Stopping.                              exit 2</div>
+    <p data-lang="en">Three iterations consumed in five seconds, all guaranteed to fail, against a condition that would not clear for three hours. Twenty minutes of uncheckpointed work abandoned.</p>
+    <p data-lang="vi">Ba iteration bị tiêu trong năm giây, cả ba chắc chắn thất bại, trước một tình trạng mà ba tiếng nữa mới hết. Hai mươi phút công việc chưa kịp checkpoint bị bỏ đi.</p>
+    <p data-lang="en"><span class="mono">run.ps1</span>'s only test is whether <span class="mono">.ai/STATUS.md</span> exists. Absence means Crash. So a clean, deliberate, <em>informative</em> refusal — which names both the condition and the reset time — is indistinguishable from the engine dying mid-sentence. And the README then tells the human exit 2 is "usually a transient CLI or network problem. Start it again," which reproduces the same five-second burn.</p>
+    <p data-lang="vi">Phép kiểm duy nhất của <span class="mono">run.ps1</span> là xem <span class="mono">.ai/STATUS.md</span> có tồn tại không. Không có nghĩa là Crash. Thành ra một lời từ chối sạch sẽ, có chủ đích và <em>đầy đủ thông tin</em> — nêu rõ cả nguyên nhân lẫn giờ hết hạn — lại không phân biệt được với việc engine chết giữa câu. Rồi README bảo người dùng rằng mã thoát 2 "thường là sự cố CLI hoặc mạng tạm thời, cứ chạy lại", và chạy lại sẽ tái hiện đúng cú cháy năm giây đó.</p>
+    <p data-lang="en">This is the most consequential finding in the set, because quota exhaustion is <em>the</em> most likely interruption of a long unattended run — the exact use case Foreman exists for. The retry isn't merely useless; it spends the budget that protects against genuinely transient faults on a fault that is definitionally not transient.</p>
+    <p data-lang="vi">Đây là phát hiện hệ trọng nhất trong cả tập, vì hết hạn mức chính là kiểu gián đoạn dễ xảy ra nhất với một lượt chạy dài không người trông — đúng tình huống mà Foreman sinh ra để phục vụ. Việc thử lại không chỉ vô ích: nó tiêu ngân sách vốn để phòng các sự cố thật sự tạm thời vào một sự cố mà theo định nghĩa là không tạm thời.</p>
+    <div class="fix">
+      <span class="fixlabel" data-lang="en">Fix</span><span class="fixlabel" data-lang="vi">Cách sửa</span>
+      <p data-lang="en">Treat "invocation ended, exit 0, no status, no tool calls" as distinct from Crash: emit <span class="mono">FAILED</span> with the CLI's own last line as the reason. Back off between retries instead of hammering three in five seconds. Best: recognise a rate-limit refusal and stop with the reset time in the message.</p>
+      <p data-lang="vi">Coi trường hợp "chạy xong, thoát mã 0, không có status, không gọi tool nào" là một kết cục khác với Crash: phát <span class="mono">FAILED</span> kèm chính dòng cuối của CLI làm lý do. Giãn cách giữa các lần thử lại thay vì nện ba lần trong năm giây. Tốt nhất: nhận diện lời từ chối do hạn mức và dừng hẳn, kèm giờ hết hạn trong thông báo.</p>
+    </div>
+    <div class="tagrow">
+      <span class="tag crit" data-lang="en">Severity: critical</span><span class="tag crit" data-lang="vi">Mức độ: nghiêm trọng</span>
+      <span class="tag ok" data-lang="en">Observed live</span><span class="tag ok" data-lang="vi">Quan sát trực tiếp</span>
+      <span class="tag">run.ps1</span>
+    </div>
+  </div>
+</div>
+
+<div class="finding">
+  <div class="rank">02</div>
+  <div class="fbody">
+    <h3 data-lang="en">The Watchdog cannot tell "the engine died" from "the engine never started"</h3>
+    <h3 data-lang="vi">Watchdog không phân biệt được "engine đã chết" với "engine chưa từng khởi động"</h3>
+    <p data-lang="en">The same root cause as finding 1, reached from the other direction. <span class="mono">run.ps1:208</span> wraps the invocation in a catch that downgrades a launch failure to a warning; no status file then means Crash. Reproduced twice:</p>
+    <p data-lang="vi">Cùng một căn nguyên với phát hiện 1, chỉ là đi từ hướng khác. <span class="mono">run.ps1:208</span> bọc lời gọi trong một khối catch, hạ lỗi khởi chạy xuống thành cảnh báo; sau đó không có file status thì bị quy là Crash. Đã tái hiện hai lần:</p>
+    <div class="evidence">$ run.ps1 -ClaudeCommand "claude-not-installed"
+WARNING: Engine process error: The term 'claude-not-installed' is not recognized…
+→ 3 retries → Watchdog limit reached                           exit 2
+
+$ run.ps1   # with ENGINE.md grown past the Windows command-line limit
+WARNING: Engine process error: The filename or extension is too long
+→ 3 retries → Watchdog limit reached                           exit 2</div>
+    <p data-lang="en">Both deterministic, both permanent, both reported as transient. The runtime holds the distinguishing fact — the exception fired <em>before</em> the process ran — and discards it.</p>
+    <p data-lang="vi">Cả hai đều tất định, đều vĩnh viễn, và đều bị báo là tạm thời. Runtime nắm trong tay đúng dữ kiện để phân biệt — ngoại lệ bắn ra <em>trước khi</em> tiến trình kịp chạy — rồi vứt nó đi.</p>
+    <div class="fix">
+      <span class="fixlabel" data-lang="en">Fix</span><span class="fixlabel" data-lang="vi">Cách sửa</span>
+      <p data-lang="en">A launch exception is <span class="mono">FAILED</span> (exit 4) carrying the exception text, zero retries. Reserve Crash for "the process ran and produced no status." One branch in the catch block; it closes this and finding 1 together.</p>
+      <p data-lang="vi">Ngoại lệ khi khởi chạy phải là <span class="mono">FAILED</span> (mã thoát 4) kèm nguyên văn ngoại lệ, không thử lại lần nào. Chỉ dành Crash cho trường hợp "tiến trình đã chạy nhưng không sinh ra status". Thêm một nhánh trong khối catch là đóng được cả phát hiện này lẫn phát hiện 1.</p>
+    </div>
+    <div class="tagrow">
+      <span class="tag crit" data-lang="en">Severity: high</span><span class="tag crit" data-lang="vi">Mức độ: cao</span>
+      <span class="tag ok" data-lang="en">Reproduced twice</span><span class="tag ok" data-lang="vi">Tái hiện 2 lần</span>
+      <span class="tag">run.ps1</span>
+    </div>
+  </div>
+</div>
+
+<div class="finding">
+  <div class="rank">03</div>
+  <div class="fbody">
+    <h3 data-lang="en">A piped build command can make <span class="mono">BUILD FAILED</span> look like a pass</h3>
+    <h3 data-lang="vi">Lệnh build có pipe khiến <span class="mono">BUILD FAILED</span> trông như đã pass</h3>
+    <p data-lang="en">The engine found this itself and wrote it into <span class="mono">knowledge/PROJECT.md</span>:</p>
+    <p data-lang="vi">Chính engine tự phát hiện ra điều này và ghi vào <span class="mono">knowledge/PROJECT.md</span>:</p>
+    <div class="evidence">"./gradlew … 2>&amp;1 | tail -20 exits 0 even when the build failed, because the
+ exit status belongs to tail. This is not theoretical: it is how a BUILD FAILED
+ in this repository was first mistaken for a pass. (PIPESTATUS and
+ set -o pipefail are both rejected by the permission layer here.)"</div>
+    <p class="evnote" data-lang="vi">Tạm dịch: "<span class="mono">./gradlew … | tail -20</span> thoát mã 0 ngay cả khi build hỏng, vì mã thoát thuộc về <span class="mono">tail</span>. Đây không phải lý thuyết: đó chính là cách một <span class="mono">BUILD FAILED</span> trong repo này lần đầu bị nhầm thành pass."</p>
+    <p data-lang="en">Three documented limitations chain into one hole: the engine pipes output to keep it small, the pipe masks the exit code, and both standard remedies are refused by the capability matcher. The result is a live path to a verified <span class="mono">DONE</span> over a red build — the failure class POLICIES.md exists to prevent, arriving through the plumbing rather than the reasoning.</p>
+    <p data-lang="vi">Ba hạn chế đã được ghi nhận riêng lẻ móc vào nhau thành một lỗ hổng: engine dùng pipe để cắt ngắn output, pipe che mất mã thoát, và cả hai cách khắc phục chuẩn đều bị lớp kiểm quyền từ chối. Kết quả là một đường đi thật dẫn tới <span class="mono">DONE</span> "đã kiểm chứng" đè lên một bản build đỏ — đúng loại thất bại mà POLICIES.md sinh ra để ngăn, nhưng lần này đến từ đường ống kỹ thuật chứ không phải từ lập luận.</p>
+    <p data-lang="en"><strong>The encouraging half:</strong> a later iteration was observed announcing <em>"Running the full verification set in one command (no pipe, foreground)"</em> — the lesson being read back out of <span class="mono">knowledge/</span> and changing behaviour within the same run.</p>
+    <p data-lang="vi"><strong>Nửa đáng mừng:</strong> một iteration sau đó được ghi nhận là tuyên bố <em>"Chạy trọn bộ kiểm chứng trong một lệnh (không pipe, chạy ở tiền cảnh)"</em> — tức bài học đã được đọc ngược lại từ <span class="mono">knowledge/</span> và làm đổi hành vi ngay trong cùng lượt chạy.</p>
+    <div class="fix">
+      <span class="fixlabel" data-lang="en">Fix</span><span class="fixlabel" data-lang="vi">Cách sửa</span>
+      <p data-lang="en">One line in POLICIES.md: never accept a piped command's exit code as build evidence. Then either allow <span class="mono">pipefail</span> in the baseline ledger, or teach the matcher that a trailing <span class="mono">| tail</span> on an allowed command is still that command.</p>
+      <p data-lang="vi">Thêm một dòng vào POLICIES.md: không bao giờ lấy mã thoát của lệnh có pipe làm bằng chứng build. Sau đó hoặc cho phép <span class="mono">pipefail</span> trong ledger nền, hoặc dạy bộ so khớp rằng một lệnh đã được phép mà nối thêm <span class="mono">| tail</span> thì vẫn là lệnh đó.</p>
+    </div>
+    <div class="tagrow">
+      <span class="tag crit" data-lang="en">Severity: high</span><span class="tag crit" data-lang="vi">Mức độ: cao</span>
+      <span class="tag ok" data-lang="en">Observed live</span><span class="tag ok" data-lang="vi">Quan sát trực tiếp</span>
+      <span class="tag">POLICIES · baseline.json</span>
+    </div>
+  </div>
+</div>
+
+<div class="finding">
+  <div class="rank">04</div>
+  <div class="fbody">
+    <h3 data-lang="en">Two human typos in the capability ledger are unhandled — and it is the one file a human hand-edits</h3>
+    <h3 data-lang="vi">Hai lỗi gõ nhầm của con người trong capability ledger không được xử lý — mà đây lại đúng là file con người phải sửa tay</h3>
+    <p data-lang="en">ADR-004 is explicit that in V1 "the human physically writes the approved entry into the ledger." Both plausible slips are unguarded.</p>
+    <p data-lang="vi">ADR-004 nói rõ rằng ở V1 "con người tự tay ghi mục đã duyệt vào ledger". Cả hai kiểu sơ suất dễ xảy ra đều không được chắn.</p>
+    <div class="evidence">Mode A — one missing "]"
+  ConvertFrom-Json : Invalid array passed in, ',' expected. (68)
+  at run.ps1:125                                            exit 1
+  → undocumented code, and the same code as "ENGINE.md not found".
+    Engine never invoked. Nothing recorded anywhere.
+
+Mode B — key misspelled "allows" instead of "allow"
+  16 rules compiled  (= baseline only)
+  Bash(./gradlew.bat*) present? False
+  → no warning, no error. The approved capability silently dropped.</div>
+    <p data-lang="en">Mode B loops: the engine is denied a toolchain the human already granted, escalates to ask for it, the human re-approves into the same broken file, and round it goes. The compiler is the security-critical component and the only one a human edits by hand — and it has no test coverage.</p>
+    <p data-lang="vi">Kiểu B tạo thành vòng lặp: engine bị từ chối bộ công cụ mà con người đã cấp, nó escalate để xin, con người lại duyệt vào đúng cái file hỏng đó, rồi lặp lại. Bộ biên dịch quyền là thành phần trọng yếu về an toàn và cũng là thành phần duy nhất con người sửa tay — vậy mà không có lấy một test nào.</p>
+    <div class="fix">
+      <span class="fixlabel" data-lang="en">Fix</span><span class="fixlabel" data-lang="vi">Cách sửa</span>
+      <p data-lang="en">Wrap each ledger parse in try/catch, emit a real <span class="mono">FAILED</span> naming the file and parse position. Warn loudly on any entry contributing zero rules. Add Pester cases for both modes plus one asserting the deny rules are always appended.</p>
+      <p data-lang="vi">Bọc mỗi lần parse ledger trong try/catch, phát <span class="mono">FAILED</span> thật sự kèm tên file và vị trí lỗi cú pháp. Cảnh báo thật rõ với bất kỳ mục nào đóng góp 0 quy tắc. Bổ sung test Pester cho cả hai kiểu, cộng thêm một test khẳng định các quy tắc deny luôn được nối vào.</p>
+    </div>
+    <div class="tagrow">
+      <span class="tag warn" data-lang="en">Severity: medium-high</span><span class="tag warn" data-lang="vi">Mức độ: trung bình-cao</span>
+      <span class="tag ok" data-lang="en">Both reproduced</span><span class="tag ok" data-lang="vi">Tái hiện cả hai</span>
+      <span class="tag">run.ps1 · tests</span>
+    </div>
+  </div>
+</div>
+
+<div class="finding">
+  <div class="rank">05</div>
+  <div class="fbody">
+    <h3 data-lang="en">The run log is append-only across runs, and it produced a false result</h3>
+    <h3 data-lang="vi">Log chạy chỉ ghi nối tiếp qua mọi lượt chạy, và nó đã cho ra một kết luận sai</h3>
+    <p data-lang="en"><span class="mono">%TEMP%\loop-run-&lt;repo&gt;.log</span> opens in Append mode with no run separator, mixing every run the repository has ever done. SKILL.md step 5 points the operator at this exact file. It broke automation <strong>four times</strong> in this experiment:</p>
+    <p data-lang="vi"><span class="mono">%TEMP%\loop-run-&lt;repo&gt;.log</span> mở ở chế độ Append mà không có dấu phân tách giữa các lượt, nên trộn lẫn mọi lượt chạy repo từng thực hiện. SKILL.md bước 5 lại chỉ người vận hành đến đúng file này. Trong thí nghiệm này nó đã phá hỏng tự động hoá <strong>bốn lần</strong>:</p>
+    <div class="evidence">tail -f -n +1 …               → replayed a run from 3 days earlier as if live
+until grep -q "=== Status:"   → returned instantly, matching the old run
+until [ $(grep -c …) -ge 5 ]  → satisfied by history, not by this run
+grep -q "Status: DONE"        → reported the run COMPLETE while it was mid-task</div>
+    <p data-lang="en">The fourth is the one that matters: it produced a <em>wrong answer</em>, not just a wasted wait. Every one of these is the obvious thing to write.</p>
+    <p data-lang="vi">Lần thứ tư mới là lần đáng kể: nó cho ra một <em>câu trả lời sai</em>, chứ không chỉ là chờ vô ích. Và mỗi câu lệnh trên đều là thứ người ta sẽ viết ra một cách tự nhiên nhất.</p>
+    <div class="fix">
+      <span class="fixlabel" data-lang="en">Fix</span><span class="fixlabel" data-lang="vi">Cách sửa</span>
+      <p data-lang="en">Write <span class="mono">=== RUN &lt;guid&gt; | &lt;branch&gt; | &lt;iso8601&gt; ===</span> as the first line of every run and have SKILL.md tail from <span class="mono">-n 0</span>. A per-run filename with a stable <span class="mono">…-latest.log</span> alias is the fuller version.</p>
+      <p data-lang="vi">Ghi <span class="mono">=== RUN &lt;guid&gt; | &lt;branch&gt; | &lt;iso8601&gt; ===</span> làm dòng đầu tiên của mỗi lượt chạy, và để SKILL.md tail từ <span class="mono">-n 0</span>. Phương án đầy đủ hơn là mỗi lượt một file riêng, kèm một alias cố định <span class="mono">…-latest.log</span>.</p>
+    </div>
+    <div class="tagrow">
+      <span class="tag warn" data-lang="en">Severity: medium-high</span><span class="tag warn" data-lang="vi">Mức độ: trung bình-cao</span>
+      <span class="tag ok" data-lang="en">Failed 4× in one experiment</span><span class="tag ok" data-lang="vi">Hỏng 4 lần trong 1 thí nghiệm</span>
+      <span class="tag">run.ps1 · SKILL.md</span>
+    </div>
+  </div>
+</div>
+
+<h2 data-lang="en">Structural, worth designing properly</h2>
+<h2 data-lang="vi">Vấn đề cấu trúc, đáng thiết kế cho tử tế</h2>
+<p class="sectionnote" data-lang="en">Not bugs in the script. Each is a gap between what the architecture promises and what the mechanism delivers.</p>
+<p class="sectionnote" data-lang="vi">Đây không phải bug trong script. Mỗi mục là một khoảng hở giữa điều kiến trúc hứa hẹn và điều cơ chế thực sự làm được.</p>
+
+<div class="finding">
+  <div class="rank">06</div>
+  <div class="fbody">
+    <h3 data-lang="en"><span class="mono">knowledge/</span> compounds along one branch lineage only</h3>
+    <h3 data-lang="vi"><span class="mono">knowledge/</span> chỉ tích luỹ dọc theo đúng một dòng nhánh</h3>
+    <p data-lang="en">The README promises build commands and environment quirks are "paid for once, not once per feature." That holds only if you merged the previous run — <span class="mono">knowledge/</span> lives on the loop branch, and the architecture refuses to merge.</p>
+    <p data-lang="vi">README hứa rằng các lệnh build và những đặc thù môi trường chỉ "trả giá một lần, không phải mỗi tính năng một lần". Điều đó chỉ đúng nếu bạn đã merge lượt chạy trước — <span class="mono">knowledge/</span> nằm trên nhánh loop, mà kiến trúc thì từ chối merge.</p>
+    <p data-lang="en">Not theoretical here. A previous Calendar-Note run had already built and verified a complete host-side screenshot-testing harness. Branching this run from <span class="mono">main</span> made it invisible, and the bootstrap escalation stated flatly that the repository "has no host-side test setup," proposing to invent a second, different solution with Robolectric.</p>
+    <p data-lang="vi">Ở đây không phải chuyện lý thuyết. Một lượt chạy Calendar-Note trước đó đã dựng và kiểm chứng xong một bộ hạ tầng test ảnh chụp chạy trên máy chủ. Việc tách nhánh lượt này từ <span class="mono">main</span> khiến toàn bộ thứ đó tàng hình, và escalation lúc bootstrap tuyên bố thẳng rằng repo "không có hạ tầng test chạy trên host", rồi đề xuất phát minh một giải pháp thứ hai khác hẳn bằng Robolectric.</p>
+    <div class="evidence">already on loop/todo-calendar-screens, unmerged, unseen:
+  gradle/libs.versions.toml       screenshot plugin + catalogue entries
+  app/src/screenshotTest/…/ScreenshotScaffold.kt
+  app/src/screenshotTestDebug/reference/**        15 reference PNGs</div>
+    <p data-lang="en">The engine had <span class="mono">Bash(git show*)</span> the whole time; it had no reason to look. Pointed at the branch in the escalation answer, it imported the harness in a single iteration — and that harness went on to pin 20 reference images across the run.</p>
+    <p data-lang="vi">Engine có sẵn quyền <span class="mono">Bash(git show*)</span> suốt từ đầu; chỉ là nó không có lý do gì để đi tìm. Khi được chỉ thẳng vào nhánh đó trong câu trả lời escalation, nó nhập toàn bộ hạ tầng chỉ trong một iteration — và chính hạ tầng đó về sau đã ghim được 20 ảnh tham chiếu trong cả lượt chạy.</p>
+    <div class="fix">
+      <span class="fixlabel" data-lang="en">Fix</span><span class="fixlabel" data-lang="vi">Cách sửa</span>
+      <p data-lang="en">At bootstrap, enumerate <span class="mono">git branch --list 'loop/*'</span> and check each tip for <span class="mono">knowledge/</span> or infrastructure HEAD lacks. Surface it in the bootstrap escalation: <em>"a prior run on X already solved this — import it, or re-derive?"</em> Resolve the branch to a SHA with <span class="mono">git rev-parse</span> first, which sidesteps finding 14.</p>
+      <p data-lang="vi">Lúc bootstrap, liệt kê <span class="mono">git branch --list 'loop/*'</span> và kiểm tra đầu mỗi nhánh xem có <span class="mono">knowledge/</span> hay hạ tầng nào mà HEAD đang thiếu không. Đưa nó vào escalation lúc bootstrap: <em>"một lượt chạy trước trên nhánh X đã giải quyết việc này rồi — nhập về hay tự làm lại?"</em> Nên phân giải tên nhánh thành SHA bằng <span class="mono">git rev-parse</span> trước, như vậy tránh luôn được phát hiện 14.</p>
+    </div>
+    <div class="tagrow">
+      <span class="tag crit" data-lang="en">Severity: high</span><span class="tag crit" data-lang="vi">Mức độ: cao</span>
+      <span class="tag ok" data-lang="en">Confirmed live</span><span class="tag ok" data-lang="vi">Đã xác nhận trực tiếp</span>
+      <span class="tag">ENGINE.md §5</span>
+    </div>
+  </div>
+</div>
+
+<div class="finding">
+  <div class="rank">07</div>
+  <div class="fbody">
+    <h3 data-lang="en">There is a third evidence class, and the harness does not know about it</h3>
+    <h3 data-lang="vi">Tồn tại một lớp bằng chứng thứ ba mà harness chưa biết tới</h3>
+    <p data-lang="en">POLICIES.md assumes a binary: <strong>(M)</strong> a command's output, or <strong>(I)</strong> a human looking at a screen. The generated DoD inherited that binary and declared four criteria to contain clauses "no command can ever prove."</p>
+    <p data-lang="vi">POLICIES.md mặc định chỉ có hai lựa chọn: <strong>(M)</strong> output của một câu lệnh, hoặc <strong>(I)</strong> một con người nhìn vào màn hình. Bản DoD sinh ra kế thừa đúng thế lưỡng phân đó và tuyên bố bốn tiêu chí có chứa mệnh đề mà "không câu lệnh nào chứng minh nổi".</p>
+    <p data-lang="en">That is no longer true. Importing the screenshot harness, the engine recorded references, <em>opened the generated PNGs and looked at them</em>, then said:</p>
+    <p data-lang="vi">Điều đó không còn đúng nữa. Khi nhập bộ hạ tầng ảnh chụp, engine ghi lại các ảnh tham chiếu, <em>mở chính các file PNG vừa sinh ra và nhìn vào chúng</em>, rồi nói:</p>
+    <div class="evidence">"Validation passes — but a green validate against a just-recorded reference
+ proves nothing. Checking the harness can actually fail:"
+   → perturbed Color.kt, re-ran validate to confirm it goes red</div>
+    <p class="evnote" data-lang="vi">Tạm dịch: "Kiểm chứng đã pass — nhưng một lần validate xanh so với ảnh tham chiếu vừa mới ghi thì chẳng chứng minh được gì. Kiểm tra xem bộ hạ tầng này có thật sự báo đỏ được không:" → sửa lệch <span class="mono">Color.kt</span>, chạy lại validate để xác nhận nó chuyển đỏ.</p>
+    <p data-lang="en">That is a negative control on its own evidence mechanism, run unprompted. But the consequential part is the step before it: a multimodal engine reading a rendered image is a real evidence class. Weaker than a human, never the sole proof of anything safety-critical — but strictly stronger than declaring a criterion unprovable, and it composes with (M) because the render is pinned by a reference image. The human judges once; the machine defends it thereafter.</p>
+    <p data-lang="vi">Đó là một phép đối chứng âm trên chính cơ chế bằng chứng của nó, tự làm mà không ai bảo. Nhưng phần hệ trọng lại nằm ở bước ngay trước: một engine đa phương thức đọc được ảnh đã render chính là một lớp bằng chứng thật. Yếu hơn con người, và tuyệt đối không được dùng làm bằng chứng duy nhất cho bất cứ thứ gì liên quan an toàn — nhưng mạnh hơn hẳn việc tuyên bố một tiêu chí là không thể chứng minh, và nó ghép được với (M) vì bản render đã bị ghim bằng ảnh tham chiếu. Con người phán xét một lần; từ đó về sau máy giữ.</p>
+    <p data-lang="en">By the end of the run this had produced 20 reference images, including combined-state cases like <em>"Day cell — today, picked, with notes"</em> — precisely the overlap POLICIES.md warns about and precisely where the previous run shipped an invisible marker.</p>
+    <p data-lang="vi">Đến cuối lượt chạy, cách làm này đã sinh ra 20 ảnh tham chiếu, trong đó có các trạng thái chồng nhau như <em>"Ô ngày — hôm nay, đang chọn, có ghi chú"</em> — đúng kiểu chồng lấn mà POLICIES.md cảnh báo, và cũng đúng chỗ mà lượt chạy trước từng phát hành một dấu chấm vô hình.</p>
+    <div class="fix">
+      <span class="fixlabel" data-lang="en">Fix</span><span class="fixlabel" data-lang="vi">Cách sửa</span>
+      <p data-lang="en">Name <strong>(V) engine-inspected render</strong> as a third class in POLICIES.md with its limits stated. Have ENGINE.md §5 prefer (V)+(M) over escalating a perceptual criterion to (I). Update the visual-testing stack pack, which undersells that the engine can read the image.</p>
+      <p data-lang="vi">Đặt tên <strong>(V) bản render do engine tự xem</strong> làm lớp thứ ba trong POLICIES.md, kèm giới hạn rõ ràng. Sửa ENGINE.md §5 để ưu tiên (V)+(M) thay vì đẩy một tiêu chí cảm quan lên thành (I). Cập nhật gói kiến thức về visual testing, hiện đang nói nhẹ quá về chuyện engine đọc được ảnh.</p>
+    </div>
+    <div class="tagrow">
+      <span class="tag info" data-lang="en">Largest capability gain</span><span class="tag info" data-lang="vi">Lợi ích năng lực lớn nhất</span>
+      <span class="tag ok" data-lang="en">Observed live</span><span class="tag ok" data-lang="vi">Quan sát trực tiếp</span>
+      <span class="tag">POLICIES · ENGINE.md</span>
+    </div>
+  </div>
+</div>
+
+<div class="finding">
+  <div class="rank">08</div>
+  <div class="fbody">
+    <h3 data-lang="en">The iteration budget is a per-process bound, not a per-run bound</h3>
+    <h3 data-lang="vi">Ngân sách iteration là giới hạn theo tiến trình, không phải theo lượt chạy</h3>
+    <p data-lang="en">After a crash restart, the log reads:</p>
+    <p data-lang="vi">Sau một lần khởi động lại do sập, log ghi:</p>
+    <div class="evidence">=== Iteration 3 / 50 ===  10:36:23   (killed mid-flight)
+=== Iteration 1 / 50 ===  10:58:28   (restart — counter back to 1)</div>
+    <p data-lang="en">architecture.md §5 calls this a run-level safety bound that "stops an engine looping CONTINUE forever on an impossible goal." It is a local loop variable in a fresh process. Every <span class="mono">ESCALATE</span> is a stop-and-restart <em>by design</em>, so a run that escalates five times gets 250 iterations, and a crash-restart loop gets an unbounded number. This run restarted six times; its true iteration count was never visible to the bound meant to cap it.</p>
+    <p data-lang="vi">architecture.md §5 gọi đây là chặn an toàn ở cấp lượt chạy, để "ngăn engine lặp CONTINUE mãi mãi trên một mục tiêu bất khả". Thực tế nó chỉ là một biến cục bộ trong vòng lặp của một tiến trình mới toanh. Mỗi lần <em>ESCALATE</em> đều là dừng-rồi-chạy-lại <em>theo thiết kế</em>, nên một lượt chạy escalate năm lần sẽ có 250 iteration, còn vòng sập-rồi-chạy-lại thì không có giới hạn nào. Lượt chạy này khởi động lại sáu lần; con số iteration thật sự chưa bao giờ lọt vào tầm nhìn của cái chặn đáng ra phải giới hạn nó.</p>
+    <p data-lang="en">Combined with no wall-clock and no cost ceiling anywhere, a Foreman run has no effective upper bound on what it can spend.</p>
+    <p data-lang="vi">Cộng với việc không có trần thời gian thực lẫn trần chi phí ở bất kỳ đâu, một lượt chạy Foreman thực chất không có giới hạn trên nào cho mức tiêu tốn.</p>
+    <div class="fix">
+      <span class="fixlabel" data-lang="en">Fix</span><span class="fixlabel" data-lang="vi">Cách sửa</span>
+      <p data-lang="en">Derive the count from <span class="mono">git rev-list --count main..HEAD</span> on the loop branch — no new file, no new capability. Pair with per-iteration cost/duration logging so the bound can be expressed in money or minutes.</p>
+      <p data-lang="vi">Lấy số đếm từ <span class="mono">git rev-list --count main..HEAD</span> trên nhánh loop — không cần file mới, không cần quyền mới. Kết hợp với việc ghi log chi phí/thời lượng theo từng iteration, để có thể đặt giới hạn bằng tiền hoặc bằng phút.</p>
+    </div>
+    <div class="tagrow">
+      <span class="tag warn" data-lang="en">Severity: medium-high</span><span class="tag warn" data-lang="vi">Mức độ: trung bình-cao</span>
+      <span class="tag ok" data-lang="en">Observed live</span><span class="tag ok" data-lang="vi">Quan sát trực tiếp</span>
+      <span class="tag">run.ps1 · architecture.md</span>
+    </div>
+  </div>
+</div>
+
+<div class="finding">
+  <div class="rank">09</div>
+  <div class="fbody">
+    <h3 data-lang="en">The escalation file has two writers, no atomicity, and no completion signal</h3>
+    <h3 data-lang="vi">File escalation có hai người ghi, không nguyên tử, và không có tín hiệu hoàn tất</h3>
+    <p data-lang="en">ENGINE.md §12 persists the request <em>before</em> the engine stops, so the file's existence is not the signal that it is ready. Waiting for <span class="mono">.ai/ESCALATION.md</span> to appear and then writing a decision into it caught the engine mid-write: it logged <em>"recording the partial decision"</em>, consumed a half-written answer, and recovered on its own.</p>
+    <p data-lang="vi">ENGINE.md §12 ghi yêu cầu xuống đĩa <em>trước khi</em> engine dừng, nên việc file tồn tại không phải là tín hiệu cho biết nó đã sẵn sàng. Chờ <span class="mono">.ai/ESCALATION.md</span> xuất hiện rồi ghi quyết định vào đó đã bắt gặp engine đang ghi dở: nó log <em>"đang ghi nhận quyết định một phần"</em>, tiêu thụ một câu trả lời viết dở, rồi tự phục hồi.</p>
+    <p data-lang="en">The deeper consequence is in ADR-002, which claims Tier-2 hard stops are "enforced mechanically (the process exits) rather than by model obedience." That holds only once <span class="mono">STATUS.md</span> is written. In the window between, a decision that appears is consumed in the same process with the same context — which is what happened: bootstrap, decision consumption and a full replan ran in one context, with no fresh-context boundary between raising a question and acting on the answer.</p>
+    <p data-lang="vi">Hệ quả sâu hơn nằm ở ADR-002, vốn khẳng định các điểm dừng cứng Tier-2 được "thực thi bằng cơ chế (tiến trình thoát) chứ không dựa vào việc mô hình chịu nghe lời". Điều đó chỉ đúng sau khi <span class="mono">STATUS.md</span> đã được ghi. Trong khoảng thời gian ở giữa, một quyết định xuất hiện sẽ bị tiêu thụ ngay trong cùng tiến trình với cùng ngữ cảnh — và đó chính là điều đã xảy ra: bootstrap, tiêu thụ quyết định và lập lại kế hoạch toàn bộ đều chạy trong một ngữ cảnh, không có ranh giới ngữ cảnh sạch nào giữa lúc đặt câu hỏi và lúc hành động theo câu trả lời.</p>
+    <p data-lang="en">The Skill is safe (step 5 keys on the <span class="mono">Status: ESCALATE</span> line). The manual path in the consumer guide is not.</p>
+    <p data-lang="vi">Bản thân Skill thì an toàn (bước 5 bám vào dòng <span class="mono">Status: ESCALATE</span>). Nhưng lối làm thủ công trong hướng dẫn người dùng thì không.</p>
+    <div class="fix">
+      <span class="fixlabel" data-lang="en">Fix</span><span class="fixlabel" data-lang="vi">Cách sửa</span>
+      <p data-lang="en">Put the decision in a separate file the engine never writes. Have §6.2 refuse a decision that was not present at iteration start. Document "wait for <span class="mono">Status: ESCALATE</span>, not for the file."</p>
+      <p data-lang="vi">Đặt quyết định vào một file riêng mà engine không bao giờ ghi. Sửa §6.2 để từ chối một quyết định không hiện diện từ lúc iteration bắt đầu. Ghi rõ trong tài liệu: "chờ dòng <span class="mono">Status: ESCALATE</span>, đừng chờ file".</p>
+    </div>
+    <div class="tagrow">
+      <span class="tag warn" data-lang="en">Severity: medium</span><span class="tag warn" data-lang="vi">Mức độ: trung bình</span>
+      <span class="tag ok" data-lang="en">Triggered accidentally</span><span class="tag ok" data-lang="vi">Vô tình kích hoạt</span>
+      <span class="tag">ENGINE.md §6.2 · §12</span>
+    </div>
+  </div>
+</div>
+
+<div class="finding">
+  <div class="rank">10</div>
+  <div class="fbody">
+    <h3 data-lang="en">ADR-007's own trigger for <span class="mono">knowledge/CANDIDATES.md</span> has fired</h3>
+    <h3 data-lang="vi">Điều kiện mà chính ADR-007 đặt ra cho <span class="mono">knowledge/CANDIDATES.md</span> đã xảy ra</h3>
+    <p data-lang="en">ADR-007 deferred a candidate-lesson staging file with an explicit revisit condition: <em>"the failure it prevents — a lesson was lost because nobody was watching — has not yet been observed."</em></p>
+    <p data-lang="vi">ADR-007 hoãn việc làm file trung chuyển các bài học ứng viên, kèm điều kiện xem xét lại rất rõ: <em>"thất bại mà nó ngăn chặn — một bài học bị mất vì không ai ngồi xem — vẫn chưa được quan sát thấy."</em></p>
+    <p data-lang="en">It has now been observed. This run produced at least two stack-agnostic lessons that belong in <span class="mono">.loop/POLICIES.md</span>: the piped-exit-code trap (true of npm, pytest, cargo, make alike) and "never run the build in the background while editing sources" — a race, not a Gradle fact. Both went into <span class="mono">knowledge/PROJECT.md</span>, because that is the only file the engine may write. <span class="mono">.loop/</span> is deny-listed to it, correctly, and the Skill overwrites <span class="mono">.loop/</span> every invocation anyway.</p>
+    <p data-lang="vi">Giờ thì nó đã được quan sát thấy. Lượt chạy này sinh ra ít nhất hai bài học không phụ thuộc công nghệ, lẽ ra phải nằm trong <span class="mono">.loop/POLICIES.md</span>: cái bẫy mã thoát qua pipe (đúng với npm, pytest, cargo, make như nhau) và "đừng bao giờ chạy build dưới nền trong lúc đang sửa mã nguồn" — đây là một race condition, không phải đặc thù của Gradle. Cả hai đều rơi vào <span class="mono">knowledge/PROJECT.md</span>, vì đó là file duy nhất engine được phép ghi. <span class="mono">.loop/</span> bị chặn ghi với nó, và chặn như vậy là đúng; hơn nữa Skill vẫn ghi đè <span class="mono">.loop/</span> ở mỗi lần gọi.</p>
+    <p data-lang="en">Two portable lessons are now stranded in one repository. They were caught only because someone happened to be tailing the log as they scrolled past — exactly the condition the ADR named.</p>
+    <p data-lang="vi">Kết quả là hai bài học vốn mang đi được nay mắc kẹt trong đúng một repo. Chúng chỉ được phát hiện vì tình cờ có người đang tail log lúc chúng trôi qua — đúng y cái điều kiện mà ADR đã nêu tên.</p>
+    <div class="fix">
+      <span class="fixlabel" data-lang="en">Fix</span><span class="fixlabel" data-lang="vi">Cách sửa</span>
+      <p data-lang="en">Build it as sketched: the engine appends a proposed lesson, it survives the Cleanup Commit, the human triages at <span class="mono">DONE</span> and promotes into <span class="mono">.loop/</span> by hand. Promotion stays a human act; only the proposal becomes durable.</p>
+      <p data-lang="vi">Làm đúng như bản phác: engine ghi thêm một bài học đề xuất, nó sống sót qua Cleanup Commit, con người phân loại ở thời điểm <span class="mono">DONE</span> rồi tự tay nâng nó vào <span class="mono">.loop/</span>. Việc nâng cấp vẫn là hành động của con người; chỉ có phần đề xuất là được lưu bền.</p>
+    </div>
+    <div class="tagrow">
+      <span class="tag warn" data-lang="en">Severity: medium-high</span><span class="tag warn" data-lang="vi">Mức độ: trung bình-cao</span>
+      <span class="tag ok" data-lang="en">Trigger met</span><span class="tag ok" data-lang="vi">Điều kiện đã thoả</span>
+      <span class="tag">ADR-007</span>
+    </div>
+  </div>
+</div>
+
+<h2 data-lang="en">Worth knowing</h2>
+<h2 data-lang="vi">Đáng biết</h2>
+<p class="sectionnote" data-lang="en">Smaller, or further out. Each is real; none would change how I spend the first week.</p>
+<p class="sectionnote" data-lang="vi">Nhỏ hơn, hoặc xa hơn. Mục nào cũng có thật; nhưng không mục nào làm đổi cách tôi dùng tuần đầu tiên.</p>
+
+<ul class="minor">
+  <li><span class="who">11 · run.ps1</span>
+    <div data-lang="en"><strong>The <span class="mono">ENGINE.md</span> size ceiling is real and measured.</strong> The spec is passed as one command-line argument. Probing a native executable: 32,000 bytes accepted, 33,000 rejected with "The filename or extension is too long." <span class="mono">ENGINE.md</span> is 18,978 bytes — 58% consumed, ~13.7 KB headroom, and it grows every release because the ratchet writes to it. When it crosses, every consumer repo fails at once, reported as finding 2's misdiagnosed watchdog stop.</div>
+    <div data-lang="vi"><strong>Trần kích thước của <span class="mono">ENGINE.md</span> là có thật và đã đo được.</strong> Bản đặc tả được truyền vào như một tham số dòng lệnh duy nhất. Thử với một tệp thực thi gốc: 32.000 byte thì chấp nhận, 33.000 byte thì bị từ chối với thông báo "The filename or extension is too long". <span class="mono">ENGINE.md</span> hiện là 18.978 byte — đã dùng 58%, còn khoảng 13,7 KB, và nó phình thêm sau mỗi bản phát hành vì cơ chế ratchet ghi vào đó. Khi vượt ngưỡng, mọi repo người dùng sẽ hỏng cùng lúc, và được báo dưới dạng cú dừng watchdog chẩn đoán sai ở phát hiện 2.</div>
+  </li>
+  <li><span class="who">12 · run.ps1</span>
+    <div data-lang="en"><strong><span class="mono">Format-Elapsed</span> rounds hours instead of truncating.</strong> <span class="mono">[int]$span.TotalHours</span> rounds to nearest, so a 30m24s span prints <span class="mono">01:30:24</span>. Every iteration past the 30-minute mark reads an hour fast, in both the log and the console header — the exact number anyone uses to estimate cost. Fix: <span class="mono">[Math]::Floor()</span>.</div>
+    <div data-lang="vi"><strong><span class="mono">Format-Elapsed</span> làm tròn giờ thay vì cắt phần thập phân.</strong> <span class="mono">[int]$span.TotalHours</span> làm tròn tới số gần nhất, nên khoảng 30 phút 24 giây lại in ra <span class="mono">01:30:24</span>. Mọi iteration vượt mốc 30 phút đều bị đọc dôi thêm một tiếng, ở cả file log lẫn tiêu đề console — đúng con số mà ai cũng dùng để ước lượng chi phí. Sửa: dùng <span class="mono">[Math]::Floor()</span>.</div>
+  </li>
+  <li><span class="who">13 · run.ps1</span>
+    <div data-lang="en"><strong>No preflight.</strong> The script checks only that <span class="mono">.loop/ENGINE.md</span> exists — not that templates are present, that <span class="mono">claude</span> is on PATH, that the working directory is a git repository, or that the tree is clean, all of which the README lists as prerequisites. A preflight would have caught finding 17 on its own.</div>
+    <div data-lang="vi"><strong>Không có bước kiểm tra tiền đề.</strong> Script chỉ kiểm tra <span class="mono">.loop/ENGINE.md</span> có tồn tại không — chứ không kiểm tra các template có đủ không, <span class="mono">claude</span> có trong PATH không, thư mục làm việc có phải repo git không, hay cây mã có sạch không, dù README liệt kê tất cả những thứ đó là điều kiện tiên quyết. Chỉ riêng một bước kiểm tra như vậy đã bắt được phát hiện 17.</div>
+  </li>
+  <li><span class="who">14 · docs</span>
+    <div data-lang="en"><strong>A quoting trap in cross-branch reads.</strong> Git Bash rewrites <span class="mono">ref:path</span> into <span class="mono">ref;path</span> when the ref contains a slash <em>and</em> the path starts with a dot-directory — i.e. exactly <span class="mono">loop/&lt;prd-slug&gt;</span> plus <span class="mono">.ai/**</span>. Quoting doesn't help; only <span class="mono">MSYS_NO_PATHCONV=1</span> does, and the baseline rule <span class="mono">Bash(git show*)</span> doesn't match a leading env assignment. The documented SHA-based form is unaffected, so this only bites once someone implements finding 6. Cheapest remedy: <span class="mono">git rev-parse</span> first.</div>
+    <div data-lang="vi"><strong>Một cái bẫy về dấu nháy khi đọc chéo nhánh.</strong> Git Bash viết lại <span class="mono">ref:path</span> thành <span class="mono">ref;path</span> khi ref có dấu gạch chéo <em>và</em> đường dẫn bắt đầu bằng thư mục dấu chấm — tức đúng trường hợp <span class="mono">loop/&lt;prd-slug&gt;</span> cộng <span class="mono">.ai/**</span>. Đặt dấu nháy không cứu được; chỉ <span class="mono">MSYS_NO_PATHCONV=1</span> mới được, mà quy tắc nền <span class="mono">Bash(git show*)</span> lại không khớp với lệnh có gán biến môi trường ở đầu. Dạng dùng SHA như tài liệu hướng dẫn thì không bị ảnh hưởng, nên lỗi này chỉ cắn khi ai đó triển khai phát hiện 6. Cách rẻ nhất: chạy <span class="mono">git rev-parse</span> trước.</div>
+  </li>
+  <li><span class="who">15 · run.ps1</span>
+    <div data-lang="en"><strong>No cost or duration accounting.</strong> The stream-json <span class="mono">result</span> event carries cost, duration and token usage; the runtime prints only its subtype and discards the rest. Logging cost and wall-clock per iteration is a few lines and answers the question every loop-engineering decision turns on. Iterations here ran 17–45 minutes.</div>
+    <div data-lang="vi"><strong>Không hạch toán chi phí hay thời lượng.</strong> Sự kiện <span class="mono">result</span> trong luồng stream-json có mang chi phí, thời lượng và lượng token; runtime chỉ in ra subtype rồi vứt phần còn lại. Ghi log chi phí và thời gian thực theo từng iteration chỉ tốn vài dòng, mà lại trả lời đúng câu hỏi mấu chốt của mọi quyết định trong loop engineering. Ở đây mỗi iteration chạy từ 17 đến 45 phút.</div>
+  </li>
+  <li><span class="who">16 · .loop/</span>
+    <div data-lang="en"><strong>No version stamp.</strong> Nothing in <span class="mono">.loop/</span> records which Foreman version produced a branch, so a loop branch cannot be read back against the contract that generated it.</div>
+    <div data-lang="vi"><strong>Không có dấu phiên bản.</strong> Không có gì trong <span class="mono">.loop/</span> ghi lại phiên bản Foreman nào đã sinh ra một nhánh, nên không thể đọc ngược một nhánh loop và đối chiếu với bản hợp đồng đã tạo ra nó.</div>
+  </li>
+  <li><span class="who">17 · skill</span>
+    <div data-lang="en"><strong>Installed-skill drift is undetected.</strong> The copy in this consumer repo differed from source in twelve files and was missing a template entirely. Separately, <span class="mono">.claude/skills/</span> is gitignored while <span class="mono">.agents/skills/</span> is tracked, and the <span class="mono">.claude</span> copy is an absolute-path symlink that dangles after any branch switch.</div>
+    <div data-lang="vi"><strong>Không phát hiện được việc skill đã cài bị lệch bản.</strong> Bản sao trong repo người dùng này khác nguồn ở mười hai file và thiếu hẳn một template. Ngoài ra, <span class="mono">.claude/skills/</span> bị gitignore trong khi <span class="mono">.agents/skills/</span> lại được theo dõi, và bản sao trong <span class="mono">.claude</span> là một symlink đường dẫn tuyệt đối, sẽ đứt sau bất kỳ lần chuyển nhánh nào.</div>
+  </li>
+  <li><span class="who">18 · SKILL.md</span>
+    <div data-lang="en"><strong>Live supervision floods the supervisor.</strong> Step 5 streams every engine tool-use line into the conversation — ~15 notifications in the first 90 seconds. When the supervisor is itself an agent, that consumes the very context the loop exists to preserve. A filtered milestone stream alongside the verbose log fixes it.</div>
+    <div data-lang="vi"><strong>Giám sát trực tiếp làm ngập chính người giám sát.</strong> Bước 5 đẩy mọi dòng gọi tool của engine vào cuộc hội thoại — khoảng 15 thông báo trong 90 giây đầu. Khi người giám sát cũng là một agent, việc đó ngốn đúng phần ngữ cảnh mà cái loop sinh ra để giữ gìn. Chỉ cần một luồng lọc theo cột mốc chạy song song với log chi tiết là xong.</div>
+  </li>
+  <li><span class="who">19 · packs</span>
+    <div data-lang="en"><strong>Stack packs have no discovery.</strong> <span class="mono">android-compose-visual-testing</span> exists and is exactly what this Android-Compose repository needed; nothing suggested it. Opt-in is right, but opt-in still needs a prompt — bootstrap already fingerprints the build system and language.</div>
+    <div data-lang="vi"><strong>Các gói kiến thức công nghệ không có cơ chế khám phá.</strong> Gói <span class="mono">android-compose-visual-testing</span> đã tồn tại sẵn và đúng là thứ repo Android-Compose này cần; nhưng không có gì gợi ý nó cả. Để người dùng tự chọn là đúng, nhưng tự chọn thì vẫn cần được nhắc — mà bootstrap thì đã nhận diện sẵn hệ build và ngôn ngữ rồi.</div>
+  </li>
+  <li><span class="who">20 · portability</span>
+    <div data-lang="en"><strong>Still Windows-only</strong> (<span class="mono">run.sh</span> absent), and nothing verifies that a <span class="mono">knowledge/ISSUES.md</span> entry is still true — a defect a human fixes between runs leaves a stale entry until an iteration happens to notice. ADR-008 already names the second as unsolved.</div>
+    <div data-lang="vi"><strong>Vẫn chỉ chạy trên Windows</strong> (chưa có <span class="mono">run.sh</span>), và không có gì kiểm chứng rằng một mục trong <span class="mono">knowledge/ISSUES.md</span> còn đúng hay không — một lỗi mà con người sửa giữa hai lượt chạy sẽ để lại mục đã lỗi thời cho tới khi tình cờ có iteration nào đó nhận ra. ADR-008 đã tự nêu vấn đề thứ hai là chưa giải quyết.</div>
+  </li>
+</ul>
+
+<h2 data-lang="en">What is already working</h2>
+<h2 data-lang="vi">Những gì đang chạy tốt</h2>
+<p class="sectionnote" data-lang="en">Recorded deliberately: two of the recommendations above would be wrong if these were not true.</p>
+<p class="sectionnote" data-lang="vi">Ghi lại một cách có chủ đích: hai trong số các khuyến nghị ở trên sẽ là sai nếu những điều dưới đây không đúng.</p>
+
+<div class="pos col">
+  <h3 data-lang="en">The product-scope ratchet demonstrably transfers</h3>
+  <h3 data-lang="vi">Cơ chế ratchet ở phạm vi sản phẩm chứng minh được là có lan truyền</h3>
+  <p data-lang="en">DoD criterion 1 required a dark scheme with every Material 3 role filled. The engine assigned all 36 explicitly and wrote:</p>
+  <p data-lang="vi">Tiêu chí 1 của DoD yêu cầu một bảng màu tối điền đủ mọi vai trò của Material 3. Engine gán tường minh cả 36 vai trò và viết:</p>
+  <div class="evidence">"Every role is assigned explicitly. None is left at Material's default.
+ A half-filled scheme is the sneaky kind of bug: the roles you did set look
+ right, and some component you never thought about quietly picks up a purple
+ nobody chose."</div>
+  <p class="evnote" data-lang="vi">Tạm dịch: "Mọi vai trò đều được gán tường minh. Không vai trò nào bị bỏ ở giá trị mặc định của Material. Một bảng màu điền nửa vời là loại bug ranh mãnh: những vai trò bạn có đặt thì trông đúng, rồi một component bạn chưa từng nghĩ tới lặng lẽ nhặt lấy một màu tím chẳng ai chọn cả."</p>
+  <p data-lang="en">That is POLICIES.md § User-Interface Defects almost verbatim — a lesson earned by the <em>previous</em> run's hardcoded-colour failure, ratcheted into <span class="mono">.loop/</span>, now applied pre-emptively by a different run on a different branch before any reviewer caught it.</p>
+  <p data-lang="vi">Đó gần như nguyên văn mục § User-Interface Defects trong POLICIES.md — một bài học đổi bằng thất bại màu hardcode của lượt chạy <em>trước</em>, được ratchet vào <span class="mono">.loop/</span>, và nay được một lượt chạy khác trên một nhánh khác áp dụng phòng ngừa từ trước khi bất kỳ reviewer nào kịp bắt.</p>
+  <p data-lang="en">This is the counterweight to finding 6. ADR-007's split does exactly what it promised for the portable half; the failure is confined to the non-portable half, and its cause is not the stratification but that <span class="mono">knowledge/</span> rides on an unmerged branch. The fix must <em>not</em> be "promote repo knowledge into <span class="mono">.loop/</span>" — ADR-007 rejected that, and was right to.</p>
+  <p data-lang="vi">Đây là đối trọng của phát hiện 6. Cách phân tầng của ADR-007 làm đúng điều nó hứa với nửa phần mang đi được; thất bại chỉ giới hạn ở nửa không mang đi được, và nguyên nhân không nằm ở việc phân tầng mà ở chỗ <span class="mono">knowledge/</span> đi nhờ trên một nhánh chưa merge. Cách sửa <em>không</em> được là "đưa tri thức của repo lên <span class="mono">.loop/</span>" — ADR-007 đã bác bỏ hướng đó, và bác bỏ như vậy là đúng.</p>
+</div>
+
+<div class="pos col">
+  <h3 data-lang="en">The verification chain is not going through the motions</h3>
+  <h3 data-lang="vi">Chuỗi kiểm chứng không hề làm cho có</h3>
+  <p data-lang="en">Iteration 2 measured the build baseline before touching anything, so four pre-existing lint errors stayed legible as pre-existing. Its fresh-context review returned 16 findings on one task: one Critical — the README claimed Retrofit when the app uses Ktor, making "documentation matches the code" false about itself — and four Major, including <span class="mono">outlineVariant</span> measured at 1.26:1 contrast, the default for <span class="mono">HorizontalDivider</span>, meaning every separator in the app was invisible.</p>
+  <p data-lang="vi">Iteration 2 đo trạng thái build nền trước khi động vào bất cứ thứ gì, nhờ đó bốn lỗi lint có sẵn vẫn đọc ra được là "có sẵn từ trước". Vòng review ngữ cảnh sạch của nó trả về 16 phát hiện chỉ trên một hạng mục: một Critical — README ghi là dùng Retrofit trong khi ứng dụng dùng Ktor, khiến chính tiêu chí "tài liệu khớp với mã nguồn" trở thành sai về chính nó — và bốn Major, trong đó có <span class="mono">outlineVariant</span> đo được độ tương phản 1,26:1, vốn là giá trị mặc định của <span class="mono">HorizontalDivider</span>, nghĩa là mọi đường phân cách trong ứng dụng đều vô hình.</p>
+  <p data-lang="en">The calendar task went further: <strong>seven deliberate mutations</strong>, each failing exactly the tests predicted for it, three correctly failing nothing extra. One showed that dropping <span class="mono">selectedDate</span> fails the full-grid image while passing every day-cell image — a real lesson about what component-level pictures cannot see. Its re-run review then caught a Critical the first review had only filed: <strong>criterion 9 was false across midnight</strong> with the screen left open.</p>
+  <p data-lang="vi">Hạng mục màn hình lịch còn đi xa hơn: <strong>bảy đột biến cố ý</strong>, mỗi đột biến làm hỏng đúng những test đã dự đoán trước, ba trong số đó đúng là không làm hỏng thêm gì cả. Một đột biến cho thấy việc bỏ rơi <span class="mono">selectedDate</span> làm hỏng ảnh lưới đầy đủ nhưng vẫn pass mọi ảnh ô-từng-ngày — một bài học thật về giới hạn của ảnh chụp ở cấp component. Vòng review chạy lại sau đó bắt được một Critical mà vòng review đầu tiên chỉ mới ghi nhận chứ chưa sửa: <strong>tiêu chí 9 trở thành sai khi qua nửa đêm</strong> nếu để màn hình mở.</p>
+</div>
+
+<div class="pos col">
+  <h3 data-lang="en">Crash recovery works, unrehearsed</h3>
+  <h3 data-lang="vi">Cơ chế phục hồi sau sập hoạt động, không hề tập dượt</h3>
+  <p data-lang="en">Three interruptions, none planned: a session teardown mid-iteration, a quota exhaustion, and four operator stops. Every time, Recover assessed the dirty tree, judged coherence, re-ran verification before building on the debris, and resumed. After the quota crash it went further — it re-ran the fresh-context review <em>from scratch</em>, reasoning that the salvaged <span class="mono">ISSUES.md</span> entries cited a review whose output had died with the process. That re-run found the midnight Critical.</p>
+  <p data-lang="vi">Ba lần gián đoạn, không lần nào được lên kế hoạch: phiên làm việc bị dọn giữa iteration, một lần hết hạn mức, và bốn lần người vận hành bấm dừng. Lần nào cũng vậy, bước Recover đánh giá cây mã còn dở, xét xem nó có nhất quán không, chạy lại kiểm chứng trước khi xây tiếp lên phần dở dang, rồi tiếp tục. Sau cú sập vì hạn mức nó còn đi xa hơn — nó chạy lại vòng review ngữ cảnh sạch <em>từ đầu</em>, với lập luận rằng các mục <span class="mono">ISSUES.md</span> cứu về có trích dẫn một vòng review mà kết quả đã chết cùng tiến trình. Chính lần chạy lại đó tìm ra lỗi Critical về nửa đêm.</p>
+  <p data-lang="en">Nothing was ever lost but time. The README's "you can kill it at any time" was tested by accident, repeatedly, and held.</p>
+  <p data-lang="vi">Không có gì bị mất ngoài thời gian. Lời hứa "bạn có thể tắt nó bất cứ lúc nào" trong README đã bị kiểm chứng một cách tình cờ, nhiều lần, và nó đứng vững.</p>
+</div>
+
+<h2 data-lang="en">Two claims withdrawn</h2>
+<h2 data-lang="vi">Hai nhận định đã rút lại</h2>
+<p class="sectionnote" data-lang="en">Both were mine, both caught by re-testing rather than review, and both make the harness look better than the first pass suggested.</p>
+<p class="sectionnote" data-lang="vi">Cả hai đều là của tôi, cả hai đều bị bắt lỗi nhờ kiểm thử lại chứ không phải nhờ review, và cả hai đều khiến harness trông khá hơn so với đánh giá ban đầu.</p>
+
+<div class="correction col">
+  <h3 data-lang="en">"<span class="mono">git show</span> is broken for the paths ADR-008 needs"</h3>
+  <h3 data-lang="vi">"<span class="mono">git show</span> hỏng với đúng những đường dẫn mà ADR-008 cần"</h3>
+  <p data-lang="en">Overstated. The first test classified every <span class="mono">fatal:</span> as mangling, so genuine "not on this branch" misses were counted as bugs. The real rule needs both a slash in the ref and a dot-directory path. ENGINE.md §6.3 and the ISSUES template both specify a commit SHA, and the SHA form works — the documented flow is safe and <span class="mono">STATE.md</span> compaction is not destructive. What survives is finding 14.</p>
+  <p data-lang="vi">Nói quá. Phép thử đầu tiên quy mọi dòng <span class="mono">fatal:</span> thành lỗi biến dạng đường dẫn, nên những trường hợp "file này thật sự không có trên nhánh đó" cũng bị tính thành bug. Quy tắc thật đòi hỏi đồng thời ref có dấu gạch chéo <em>và</em> đường dẫn bắt đầu bằng thư mục dấu chấm. ENGINE.md §6.3 và template ISSUES đều chỉ định dùng SHA của commit, mà dạng SHA thì chạy đúng — nên quy trình như tài liệu mô tả là an toàn và việc nén <span class="mono">STATE.md</span> không hề phá dữ liệu. Phần còn lại đúng là phát hiện 14.</p>
+</div>
+
+<div class="correction col">
+  <h3 data-lang="en">"Writing into the escalation file destroyed the audit trail"</h3>
+  <h3 data-lang="vi">"Việc ghi vào file escalation đã phá hỏng dấu vết kiểm toán"</h3>
+  <p data-lang="en">It did not. The full 14,933-byte request is intact in the bootstrap checkpoint, all seven sections, byte-identical to a copy recovered independently from the raw event stream. Only the working-tree file was truncated. This is ADR-003's "the full <span class="mono">.ai/</span> evolution stays in branch history for audit" doing precisely its job. Finding 9 stands as a race; the damage claim does not.</p>
+  <p data-lang="vi">Không hề. Toàn bộ yêu cầu dài 14.933 byte vẫn nguyên vẹn trong checkpoint lúc bootstrap, đủ cả bảy mục, giống đến từng byte với một bản phục hồi độc lập lấy từ luồng sự kiện thô. Chỉ có file trong cây làm việc là bị cắt cụt. Đây chính là điều ADR-003 nói — "toàn bộ quá trình tiến hoá của <span class="mono">.ai/</span> vẫn nằm trong lịch sử nhánh để phục vụ kiểm toán" — đang làm đúng việc của nó. Phát hiện 9 vẫn đứng vững ở khía cạnh tranh chấp ghi đồng thời; còn nhận định về thiệt hại thì không.</p>
+</div>
+
+<h2 data-lang="en">Suggested order of work</h2>
+<h2 data-lang="vi">Thứ tự công việc đề xuất</h2>
+<div class="tablescroll">
+  <table class="plan">
+    <thead>
+      <tr data-lang="en"><th>Do</th><th>Change</th><th>Why now</th><th>Effort</th></tr>
+      <tr data-lang="vi"><th>Khi nào</th><th>Thay đổi</th><th>Vì sao làm ngay</th><th>Công sức</th></tr>
+    </thead>
+    <tbody>
+      <tr data-lang="en"><td>First</td><td>Clean-exit-without-status → <span class="mono">FAILED</span>, with backoff</td><td>Closes findings 1 and 2 together; quota exhaustion is the likeliest real interruption</td><td class="effort">~2 hours</td></tr>
+      <tr data-lang="vi"><td>Trước tiên</td><td>Thoát sạch mà không có status → <span class="mono">FAILED</span>, kèm giãn cách thử lại</td><td>Đóng cùng lúc phát hiện 1 và 2; hết hạn mức là kiểu gián đoạn thực tế dễ gặp nhất</td><td class="effort">~2 giờ</td></tr>
+      <tr data-lang="en"><td>First</td><td>Evidence rule for piped commands</td><td>Closes a live path to a false <span class="mono">DONE</span></td><td class="effort">~1 hour</td></tr>
+      <tr data-lang="vi"><td>Trước tiên</td><td>Quy tắc bằng chứng cho lệnh có pipe</td><td>Bịt một đường đi có thật dẫn tới <span class="mono">DONE</span> giả</td><td class="effort">~1 giờ</td></tr>
+      <tr data-lang="en"><td>First</td><td>Ledger parse guards + Pester coverage</td><td>The only human-edited file, and the only untested component</td><td class="effort">~half day</td></tr>
+      <tr data-lang="vi"><td>Trước tiên</td><td>Chắn lỗi parse ledger + bổ sung test Pester</td><td>File duy nhất con người sửa tay, cũng là thành phần duy nhất chưa có test</td><td class="effort">~nửa ngày</td></tr>
+      <tr data-lang="en"><td>First</td><td>Run banner in the log</td><td>Four failures in one experiment, one of them a false result</td><td class="effort">~1 hour</td></tr>
+      <tr data-lang="vi"><td>Trước tiên</td><td>Thêm dòng tiêu đề cho mỗi lượt chạy trong log</td><td>Bốn lần hỏng trong một thí nghiệm, một lần cho ra kết luận sai</td><td class="effort">~1 giờ</td></tr>
+      <tr data-lang="en"><td>Next</td><td>Bootstrap scans prior loop branches</td><td>Recovers the compounding-knowledge promise the README already makes</td><td class="effort">~1 day</td></tr>
+      <tr data-lang="vi"><td>Tiếp theo</td><td>Bootstrap quét các nhánh loop trước đó</td><td>Khôi phục lời hứa tích luỹ tri thức mà README đã nêu ra</td><td class="effort">~1 ngày</td></tr>
+      <tr data-lang="en"><td>Next</td><td>Name the (V) evidence class</td><td>Moves criteria out of the human-inspection column — the column that makes unattended runs untrustworthy</td><td class="effort">~half day</td></tr>
+      <tr data-lang="vi"><td>Tiếp theo</td><td>Đặt tên cho lớp bằng chứng (V)</td><td>Kéo các tiêu chí ra khỏi cột "người phải tự xem" — đúng cái cột khiến các lượt chạy không người trông trở nên không đáng tin</td><td class="effort">~nửa ngày</td></tr>
+      <tr data-lang="en"><td>Next</td><td>Persist the iteration count; log cost per iteration</td><td>Restores the one runaway bound the runtime claims to own</td><td class="effort">~half day</td></tr>
+      <tr data-lang="vi"><td>Tiếp theo</td><td>Lưu bền số đếm iteration; ghi log chi phí mỗi iteration</td><td>Khôi phục đúng cái chặn chống chạy vô tận mà runtime tự nhận là mình sở hữu</td><td class="effort">~nửa ngày</td></tr>
+      <tr data-lang="en"><td>Then</td><td>Split the decision out of <span class="mono">ESCALATION.md</span></td><td>Removes the two-writer race structurally</td><td class="effort">~half day</td></tr>
+      <tr data-lang="vi"><td>Sau đó</td><td>Tách phần quyết định ra khỏi <span class="mono">ESCALATION.md</span></td><td>Loại bỏ tận gốc tranh chấp hai người cùng ghi</td><td class="effort">~nửa ngày</td></tr>
+      <tr data-lang="en"><td>Then</td><td><span class="mono">CANDIDATES.md</span></td><td>ADR-007's stated trigger has fired; two lessons already stranded</td><td class="effort">~1 day</td></tr>
+      <tr data-lang="vi"><td>Sau đó</td><td><span class="mono">CANDIDATES.md</span></td><td>Điều kiện ADR-007 tự đặt ra đã xảy ra; hai bài học đang mắc kẹt</td><td class="effort">~1 ngày</td></tr>
+      <tr data-lang="en"><td>Then</td><td>Preflight, version stamp, <span class="mono">Format-Elapsed</span></td><td>Cheap individually; together they make runs comparable to each other</td><td class="effort">~1 day</td></tr>
+      <tr data-lang="vi"><td>Sau đó</td><td>Kiểm tra tiền đề, dấu phiên bản, <span class="mono">Format-Elapsed</span></td><td>Từng cái đều rẻ; gộp lại thì các lượt chạy mới so sánh được với nhau</td><td class="effort">~1 ngày</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<footer class="end">
+  <span data-lang="en">Method: one Foreman run against Calendar-Note from <span class="mono">main</span>, driven to a verified <span class="mono">DONE</span> and pushed to <span class="mono">loop/calendar-note-app</span>; plus direct probing of <span class="mono">run.ps1</span> with the repository's own <span class="mono">fake-claude.ps1</span> fixture.<br>
+  Six of twenty findings were reproduced end to end rather than read out of the source; two earlier claims were withdrawn after re-testing.<br>
+  Independently re-verified after the run: assembleDebug, testDebugUnitTest (138 tests, 0 failures), lintDebug (0 errors) and validateDebugScreenshotTest, all green with <span class="mono">--rerun-tasks</span> on the committed tree.<br>
+  Outstanding for a human: 20 reference images to approve, a 15-step device walkthrough, 5 product calls to overrule — including day-cell touch targets at 43.4dp against Android's 48dp minimum.</span>
+  <span data-lang="vi">Phương pháp: một lượt chạy Foreman trên Calendar-Note xuất phát từ <span class="mono">main</span>, dẫn tới trạng thái <span class="mono">DONE</span> đã kiểm chứng và push lên <span class="mono">loop/calendar-note-app</span>; cộng với việc dò trực tiếp <span class="mono">run.ps1</span> bằng chính fixture <span class="mono">fake-claude.ps1</span> của repo.<br>
+  Sáu trên hai mươi phát hiện được tái hiện trọn vẹn chứ không phải chỉ đọc ra từ mã nguồn; hai nhận định ban đầu đã được rút lại sau khi kiểm thử lại.<br>
+  Đã kiểm chứng độc lập sau lượt chạy: assembleDebug, testDebugUnitTest (138 test, 0 lỗi), lintDebug (0 lỗi) và validateDebugScreenshotTest, tất cả đều xanh với <span class="mono">--rerun-tasks</span> trên cây mã đã commit.<br>
+  Còn chờ con người: 20 ảnh tham chiếu cần duyệt, một quy trình 15 bước chạy tay trên thiết bị, 5 quyết định sản phẩm cần phủ quyết — trong đó có vùng chạm của ô ngày chỉ 43,4dp so với mức tối thiểu 48dp của Android.</span>
+</footer>
+
+</div>
+
+<script>
+  (function () {
+    var root = document.documentElement;
+    var sel = document.getElementById('lang-select');
+    var KEY = 'foreman-report-lang';
+
+    function apply(lang) {
+      root.setAttribute('data-ui-lang', lang);
+      root.setAttribute('lang', lang === 'vi' ? 'vi' : 'en');
+      if (sel.value !== lang) { sel.value = lang; }
+      try { localStorage.setItem(KEY, lang); } catch (e) {}
+    }
+
+    var initial = 'en';
+    try {
+      var saved = localStorage.getItem(KEY);
+      if (saved === 'vi' || saved === 'en') {
+        initial = saved;
+      } else if ((navigator.language || '').toLowerCase().indexOf('vi') === 0) {
+        initial = 'vi';
+      }
+    } catch (e) {}
+
+    apply(initial);
+    sel.addEventListener('change', function () { apply(sel.value); });
+  })();
+</script>

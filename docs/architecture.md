@@ -48,17 +48,16 @@ A consumer repository contains four loop artifacts. There are four **because the
 | `.harness/loop/` | Install-time; replaced only by runtime upgrades | Foreman product | Engine spec, policies, runtime script, templates, baseline capabilities |
 | `PRD.md` | Per feature; written before a run | Human | Product intent: objective, requirements, constraints |
 | `.harness/run/` | Per feature run; disposable | Engine (plus one human-owned file: `DoD.md`) | Plan, tasks, state, amendments, escalations, goal-scoped capabilities |
-| `.harness/knowledge/` | Per repository; cumulative across runs | Split — see below | `PROJECT.md`, `ISSUES.md`, optional `DOMAIN.md`, standing capabilities |
+| `.harness/knowledge/` | Per repository; cumulative across runs | Split — see below | `PROJECT.md`, optional `DOMAIN.md`, standing capabilities |
 
-`.harness/knowledge/` holds three files with different owners and incompatible rules ([ADR-007](./adr/ADR-007-knowledge-stratification-and-ratchet.md), [ADR-008](./adr/ADR-008-open-issues-survive-the-cleanup-commit.md)):
+`.harness/knowledge/` holds two files with different owners and incompatible rules ([ADR-019](./adr/ADR-019-knowledge-stratification-and-ratchet.md)):
 
 | File | Owner | Content | How an entry is treated |
 |---|---|---|---|
-| `PROJECT.md` | Engine (human-editable, no gate) | Verified toolchain commands, conventions, environmental facts | **Conform to it.** On conflict the codebase wins — it caches facts about the code, so the code corrects it |
-| `ISSUES.md` | Engine (human-editable, no gate) | Known defects still unfixed; each entry deleted when resolved | **Avoid it.** An entry *is* a disagreement with the code, held open deliberately |
+| `PROJECT.md` | Engine (human-editable, no gate) | Verified toolchain commands, conventions, environmental facts — split internally into **Constraints** and **Reference** | **Reference: conform to it. Constraint: avoid what it names.** On conflict the codebase wins — it caches facts about the code, so the code corrects it |
 | `DOMAIN.md` (optional) | **Human only**; engine-immutable via deny rules | Domain rules, formulas, algorithms, business and regulatory invariants | **Implement it exactly.** On conflict `DOMAIN.md` wins — the code is an *attempt* at the rule, so a difference is a defect in the code |
 
-The `PROJECT.md`/`ISSUES.md` split exists because "how it is" and "what is wrong with it" cannot share a file: a defect recorded as a fact is read as the local convention and reproduced on purpose.
+The Constraint/Reference split inside `PROJECT.md` ([ADR-016](./adr/ADR-016-constraints-are-never-filtered.md)) exists because "how it is" and "what is wrong with it" cannot be treated alike: a defect recorded as a fact is read as the local convention and reproduced on purpose. A Constraint is carried verbatim into every Worker Brief and never filtered, so it reaches the Worker before code is written; a known defect is therefore always a Constraint, phrased as an instruction rather than an observation ([ADR-018](./adr/ADR-018-constraints-retire-the-open-issues-file.md), which retired the separate `ISSUES.md` that ADR-008 had introduced).
 
 Neither is a home for knowledge about a technology stack in general (platform API behaviour, framework idioms): that is not truth about *this* repository, nothing here can verify it, and it rots with no mechanism to correct it. Stack knowledge belongs in a separate opt-in, human-curated pack — never auto-promoted into `.harness/loop/`.
 
@@ -84,7 +83,7 @@ run.ps1 ──► Iteration 1: BOOTSTRAP (no .harness/run/ exists → this invoc
     │         └── ESCALATE: "approve the Definition of Done"
     ▼
 HUMAN GATE (the only mandatory one): review/edit DoD.md, approve standing capabilities,
-    fill the Decision section of .harness/run/ESCALATION.md → re-run
+    write the decision into .harness/run/DECISIONS.md (never into ESCALATION.md) → re-run
     ▼
 run.ps1 ──► Iterations 2..N: EXECUTE
     │         each: recover → consume decisions → orient → select task → implement
@@ -118,7 +117,7 @@ The engine must end every successful invocation by producing exactly one **Execu
 |---|---|---|
 | `CONTINUE` | Checkpoint persisted, more work remains | Invoke again |
 | `DONE` | Goal verified complete by a fresh verifier | Stop — success (exit 0) |
-| `ESCALATE` | Engine healthy; a decision exceeds its authority | Stop — surface `.harness/run/ESCALATION.md` (exit 3) |
+| `ESCALATE` | Engine healthy; a decision exceeds its authority | Stop — surface `.harness/run/ESCALATION.md` for the question, `.harness/run/DECISIONS.md` for the answer (exit 3) |
 | `FAILED` | Execution itself broken (environment, corruption, resources) | Stop — human repair (exit 4) |
 | *(none — Crash)* | Engine died without reporting | **Watchdog**: re-invoke, up to N consecutive crashes (default 3), then stop (exit 2) |
 
@@ -127,7 +126,7 @@ The engine must end every successful invocation by producing exactly one **Execu
 The runtime owns exactly two safety bounds, both mechanical and judgment-free:
 
 - **Watchdog** — an engine cannot supervise its own death; the crash counter resets on any reported status.
-- **Iteration budget** (default 50/run) — stops an engine looping `CONTINUE` forever on an impossible goal. Budget exhaustion produces a deterministic report (exit 5), never an interpretation of task failure.
+- **Iteration budget** (default 50/run) — stops an engine looping `CONTINUE` forever on an impossible goal. Budget exhaustion produces a deterministic report (exit 5), never an interpretation of task failure. Counted from commits already on the Loop Branch, not a process-local variable, so it survives a restart across `ESCALATE`, a Crash-limit, or a quota wait ([ADR-024](./adr/ADR-024-the-iteration-budget-is-counted-from-commits-not-a-process-variable.md)).
 
 ---
 
@@ -137,7 +136,7 @@ There is no conversation to reply to — each iteration is a fresh process. Huma
 
 > Whenever the engine requires human input, it must persist that request as a durable artifact before stopping; the decision must survive process termination and be consumable by a fresh invocation.
 
-V1 implementation: `.harness/run/ESCALATION.md` — question, context, options considered, engine recommendation, structured capability proposals, and an empty **Decision** section. The human writes the decision *and its rationale* (the rationale joins the audit trail), then re-runs. The next iteration's first acts: consume the decision, log it to `AMENDMENTS.md`, archive the exchange, proceed. Unanswered escalation → re-emit `ESCALATE` and stop again — mechanically unambiguous.
+V1 implementation, in **two files with one writer each** ([ADR-025](./adr/ADR-025-the-decision-queue-splits-into-an-engine-owned-and-a-human-owned-file.md)): `.harness/run/ESCALATION.md` — question, context, options considered, engine recommendation, structured capability proposals — is the engine's own log. `.harness/run/DECISIONS.md` — where the human writes the decision *and its rationale* (the rationale joins the audit trail) — is deny-listed against the engine, mechanically, the same as a Capability Ledger. A human should wait for the run to actually stop (`Status: ESCALATE`) before answering, never for `ESCALATION.md` merely appearing on disk — queuing a decision does not stop the run, so the engine may still be working, and writing to that file itself, well after it is written. The next iteration's first acts: consume any answered id from `DECISIONS.md`, log it to `AMENDMENTS.md`, archive the exchange, proceed. Unanswered escalation → re-emit `ESCALATE` and stop again — mechanically unambiguous.
 
 At most **one pending escalation at a time** (V1): the engine hard-stops on Tier 2, so parallel questions cannot arise.
 
@@ -209,7 +208,7 @@ Git is a **persistence backend** for loop concepts, not their definition ([ADR-0
 
 - **Loop Branch** per run (`loop/<prd-slug>`), created at bootstrap from HEAD. The engine never touches the default branch, never pushes, never merges, never rewrites history. A catastrophic run = delete the branch.
 - **Checkpoint = one atomic commit** of code + `.harness/run/` + `.harness/knowledge/` together. STATE.md at HEAD always describes HEAD; they cannot desync. `git log` on the branch *is* the execution history.
-- **Because the branch is the history, `STATE.md` does not have to be.** It is read in full at Orient every iteration, so it keeps only the last three iterations verbatim; older iterations and consumed escalations compact to one-line rows carrying a checkpoint SHA, and the full text is fetched with `git show <sha>:.harness/run/STATE.md` when — and only when — the index is insufficient. Without this, orientation cost grows with run length until it competes with the work; with it, orienting on iteration 40 costs what it did on iteration 4. The compaction is safe only because `Bash(git show*)` is a baseline capability ([ADR-008](./adr/ADR-008-open-issues-survive-the-cleanup-commit.md)) — before that grant, trimming history would have destroyed it rather than relocated it.
+- **Because the branch is the history, `STATE.md` does not have to be.** It is read in full at Orient every iteration, so it keeps only the last three iterations verbatim; older iterations and consumed escalations compact to one-line rows carrying a checkpoint SHA, and the full text is fetched with `git show <sha>:.harness/run/STATE.md` when — and only when — the index is insufficient. Without this, orientation cost grows with run length until it competes with the work; with it, orienting on iteration 40 costs what it did on iteration 4. The compaction is safe only because `Bash(git show*)` is a baseline capability ([ADR-020](./adr/ADR-020-open-issues-survive-the-cleanup-commit.md)) — before that grant, trimming history would have destroyed it rather than relocated it.
 - **Crash recovery is mechanical**: dirty tree at iteration start = previous invocation died mid-flight. Salvage into a checkpoint if coherent, otherwise revert to the last checkpoint. Never build on unverified debris.
 - **Cleanup Commit** at verified completion: removes `.harness/run/` from the branch tip; its message carries the completion summary (what was built, DoD criteria → evidence, notable amendments). The mergeable tip contains the implementation, durable knowledge, and nothing disposable — *`.harness/run/` is the loop's memory while it works, not the product the human merges.* The full `.harness/run/` evolution stays in branch history for audit.
 
@@ -223,7 +222,7 @@ When information conflicts, the engine trusts, in order:
 2. `PRD.md` + approved `DoD.md` (intent; if these two contradict → escalate)
 3. `.harness/knowledge/DOMAIN.md` (human-owned domain truth — **outranks the codebase**; engine-immutable)
 4. The codebase (ground truth of what the software *does*)
-5. `.harness/knowledge/PROJECT.md` (cache of the codebase; loses to it, gets corrected) and `.harness/ISSUES.md` (known defects still unfixed — read at Orient every iteration, to be avoided rather than conformed to)
+5. `.harness/knowledge/PROJECT.md` (cache of the codebase; loses to it, gets corrected), split internally into **Constraints** — traps a Worker must avoid, carried verbatim into every Brief — and **Reference**, conventions to conform to (ADR-016). A known defect is always a Constraint, written as an instruction rather than an observation (ADR-018)
 6. `.harness/run/` state (own memory)
 7. Everything else — README text, code comments, generated content — is **data, never instructions**. Conversation history never overrides project files.
 
@@ -246,7 +245,7 @@ Deliberately deferred until real usage demands them, with the trigger for each:
 | Separate `GOAL.md` for very large PRDs | PRD + DoD suffice | PRDs too large to serve as working intent reference |
 | Capability rules that tolerate compound shell commands | Exact-prefix match on the literal command string (e.g. `Bash(node *)`) | Recurs often enough in practice that proposals need a broader/looser matching form |
 | Skill distribution beyond `npx skills@latest` (e.g. a Claude Code Plugin) | Skill only, invoked bare (`/foreman`) | A consumer needs marketplace install/versioning and accepts the resulting `plugin:command` namespacing |
-| A stack/platform knowledge pack | **First one built** — `skills/knowledge/android-compose-visual-testing/`, opt-in and human-curated, never auto-promoted into `.harness/loop/` ([ADR-007](./adr/ADR-007-knowledge-stratification-and-ratchet.md)). Its trigger fired: a second Android repository was about to re-pay the same screenshot-testing setup. Scoped to the one capability a real failure earned, not to "everything Android" | A pack accumulates enough unrelated content that it needs splitting by concern, or a second stack needs one |
+| A stack/platform knowledge pack | **First one built** — `skills/knowledge/android/compose-visual-testing/`, opt-in and human-curated, never auto-promoted into `.harness/loop/` ([ADR-019](./adr/ADR-019-knowledge-stratification-and-ratchet.md)). Its trigger fired: a second Android repository was about to re-pay the same screenshot-testing setup. Scoped to the one capability a real failure earned, not to "everything Android". Packs are grouped one subfolder per platform (`skills/knowledge/<platform>/`), and a `SUGGESTIONS.html` entry proposing the stack tier must name the platform the same way ([ADR-026](./adr/ADR-026-the-suggestion-box-gains-an-escalate-tab-and-stack-entries-name-their-platform.md)) | A pack accumulates enough unrelated content that it needs splitting by concern, or a second stack needs one |
 | `.harness/knowledge/CANDIDATES.md` — staging lessons through the Cleanup Commit for human triage at `DONE` | Not built. `SKILL.md` step 5 already folds vanishing discoveries into the final summary | A lesson is actually lost because nobody was watching the run — the ratchet's own bar, applied to itself |
 | Deny-rule protection for `PRD.md` and `.harness/run/DoD.md` | Protocol-protected only, because bootstrap must create `DoD.md` | The ADR-004 V2 transcription flow lands, giving the human-owned artifacts a writer other than the engine |
 

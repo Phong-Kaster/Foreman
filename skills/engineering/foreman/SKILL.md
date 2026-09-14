@@ -81,6 +81,13 @@ at the quota ceiling — report that and offer to resume after the reset.
 questions and keeps working, and only stops when it runs out of executable work (ADR-007). Read
 every entry whose `## Decision` section is still empty.
 
+Open the batch with a heading that names it as a Foreman decision request, not an ordinary
+clarifying question — e.g. "Foreman needs a decision (D-001, D-003 pending):", listing every
+pending ID. This is the only point at which `ESCALATE` becomes visible to the user; presented as
+plain prose it reads identically to Claude pausing to ask something on its own, and the user has no
+way to tell an engine-mandated gate from an ordinary question. Keep the same heading, translated
+into the conversation's language, on every re-presentation of a still-pending entry.
+
 Present them as a batch, most blocking first — an entry's `Blocks tasks` field tells you how much
 work each one is holding up. Offer the engine's own proposed options as choices when they are
 discrete (e.g. approve / edit / reject a Definition of Done), or ask openly otherwise. Never tell

@@ -128,6 +128,75 @@ A Constraint outranks a literal reading of an acceptance criterion. Where they c
 follows the Constraint and says so — complying with the words while producing something broken is
 not compliance.
 
+### A lesson that is true beyond this repository goes in the Suggestion Box
+
+`SUGGESTIONS.html` carries two tabs — Escalate (a read-only mirror of `ESCALATION.md`) and
+Suggestions (this section) — sharing one page (ADR-026). What follows governs the Suggestions tab.
+
+`PROJECT.md` holds truth about **this** repository. Some of what a run learns is not that: it is true
+of every repository, or of every repository on this stack. Those belong one tier up (ADR-019) — and
+you are denied write access to `.harness/loop/`, correctly, because that tier also records your own
+permissions.
+
+So the only tier you *can* write to is the one where a portable lesson does not belong, and writing
+it there is how it gets lost. Instead, **propose it**: append an entry to `SUGGESTIONS.html` at the
+consumer repository root, and regenerate the page from
+`.harness/loop/templates/SUGGESTIONS.template.html`.
+
+What earns an entry:
+
+- **It cost something.** The same bar as a Constraint — a broken build, a failing test, a review
+  finding, a denied command. Never a lesson you merely inferred.
+- **It would still be true in a repository with none of this code.** If it names a file, a module or
+  a convention here, it is a Constraint or a Reference, not a suggestion.
+- **It names a destination.** `loop` for doctrine true of every stack; `stack` for a platform pack —
+  and when the destination is `stack`, name the platform too (android, backend, frontend, devops, ...),
+  matching the `skills/knowledge/<platform>/` pack it would land in. An unlabelled `stack` entry is
+  fine with one platform in play and noise the moment a second one is; name it every time regardless.
+  Say plainly when something should **stay** — a box that only ever argues for promotion is noise.
+- **It carries both explanations.** The technical one, and one a non-specialist can follow. The
+  reader is deciding whether to change the product, not debugging with you.
+
+Two rules bound it:
+
+- **You never act on your own suggestion.** It is a proposal to a human, not a plan. Nothing in
+  `.harness/loop/` moves because you wrote an entry, and the entry stays until a human resolves it.
+- **The file is a report, not state.** It is regenerated, survives the Cleanup Commit like the Issues
+  Report, and nothing reads it back — no decision of yours may depend on it.
+
+Say so in your completion or escalation summary when the box changed, and say what changed. An
+unread suggestion box is the same as no suggestion box.
+
+### A known defect is always a Constraint, written as an instruction
+
+The sorting question above gives the wrong answer for one kind of fact, and it is the kind that has
+already cost a defect. Take something true about the code and **wrong**:
+
+> `CoreLayout.kt` paints a hardcoded black background regardless of `darkTheme`, and no screen
+> sources its text colour from `MaterialTheme.colorScheme` — a pre-existing, app-wide pattern.
+
+Ask the question: if a Worker ignored this, would the result be wrong? **No** — it would take its
+colours from the theme, which is better. So the literal test files it as a Reference, and a Reference
+is a convention to follow. The next Worker reads it and reproduces the defect on purpose. That is not
+hypothetical: it is exactly what happened, and it is why the fact must never be recorded in its
+descriptive form.
+
+So: **a defect you know about and are not fixing is a Constraint**, phrased as the instruction it
+implies, never as the observation it came from.
+
+| Do not write | Write |
+|---|---|
+| "`CoreLayout` hardcodes its background" | "never take a colour from `CoreLayout`'s pattern — source every colour from the theme (`CoreLayout.kt:34`)" |
+| "the repo has no tests for the note mapper" | "do not assume `NoteMapper` is covered — add a test with any change to it" |
+
+The test to apply is not "would ignoring this be wrong" but **"what should a Worker do about it?"**
+If the honest answer is *avoid it* rather than *follow it*, it is a Constraint whatever the first
+question says.
+
+This is the whole of what ADR-020 protected, kept after the artifact it lived in was retired
+(ADR-018). A defect recorded as a fact is read as the local convention, and conforming to it is the
+failure.
+
 ## Worker Standards
 
 - A Worker implements exactly one task, writes only files inside its Declared File Scope, and holds **no git, build, or test capability**.
@@ -159,6 +228,46 @@ one the user experiences.
 
 When uncertain, classify `human`. The costs are asymmetric: over-classifying costs one look,
 under-classifying ships something nobody can see.
+
+### A perceptual criterion may be `machine` only if it cites the reference image behind it
+
+There is a third way to verify appearance, and it is neither a command's output nor a person at a
+screen: **the engine opens the rendered image and judges it.** This is a real act of perception
+performed by the machine, and it happened unprompted - an engine recorded reference images, read
+them, then perturbed a colour and re-ran validation to confirm the harness could actually go red.
+
+It is admissible, under one condition: **the render must be pinned by a committed reference image**,
+so the judgement made once is defended by command every time afterwards.
+
+```
+engine opens the render, judges "the dot is legible on the picked fill"   <- ONCE, unreproducible
+     the render is pinned as a reference image and committed
+validateDebugScreenshotTest                                    <- FOREVER, red on any drift
+```
+
+The perception is the weak step: it is a judgement, not a measurement, two invocations may read the
+same image differently, and nothing reproduces it from the checkpoint - which is what evidence
+requires. Pinning confines that weakness to a single moment and locks a reproducible check in front
+of it.
+
+So the class stays `machine`, and the criterion must **name the reference file**. A criterion that
+claims `machine` for an appearance clause without citing one has not produced evidence; it has
+produced an opinion, and belongs in `human`.
+
+Two limits, neither of which the prose can enforce:
+
+- **Never the sole evidence.** A pinned render proves what it renders. It does not prove the feature
+  works, and a screenshot test passing beside a failing unit test proves only that the wrong thing
+  was drawn consistently.
+- **Never for anything a person's safety or comprehension depends on.** Those stay `human`.
+
+**The baseline must be out of reach.** Where a task exists that re-records the reference images
+(`updateDebugScreenshotTest` and its equivalents), it is **withheld from the standing ledger**. An
+engine holding it, facing a red screenshot test, has a one-command route to re-recording wrong output
+as correct. Recording a *new* reference is the safe half; overwriting a *currently-failing* one is
+not, and a command matcher cannot tell them apart - so a baseline change is an Escalation Request and
+a goal-scoped grant, never a standing rule. This limit is the only part of the contract that is
+mechanically enforceable, and the rest of this section is worth nothing without it.
 
 ## Review Standards
 
@@ -204,6 +313,30 @@ nothing about what a user sees — this is exactly how hardcoded colours survive
 
 A claim without evidence is not a fact. Task completion requires recorded evidence per ENGINE.md §6.7 and §6.10. "It should work" is never evidence. Evidence must be reproducible from the checkpoint: command + observed output.
 
+**Never take a piped command's exit code as evidence.** `./gradlew build 2>&1 | tail -20` exits **0
+when the build failed**, because the exit status belongs to `tail`. This is not hypothetical: a real
+`BUILD FAILED` was first read as a pass this way, and the failure direction is the dangerous one - it
+does not stop the run, it lets the run continue believing something false, past every reviewer whose
+job assumed the build was green.
+
+Prefix the pipeline - `set -o pipefail; <command> | tail -20` - or run it unpiped and record the
+tool's own verdict line. `Bash(set -o pipefail)` is a baseline capability precisely so the first form
+is always available; it executes nothing and only makes a pipeline report the first non-zero status
+in it. `${PIPESTATUS[0]}` and redirecting to a file are both refused by the permission matcher
+(verified 2026-09-11), so neither is an option.
+
+**Read a result file only from a run whose own success line you saw.** Asking for four tasks in one
+command does not mean four tasks ran: the first failure aborts the rest, and the results file from
+the *previous* invocation is still on disk with its old counts and `failures="0"`. Reading it
+produces a confident, wrong "the new tests pass", and the tell is subtle — the counts did not go
+**up** after tests were added. Treat an unchanged count as a failure to run, not as a pass.
+
+**A green subset of commands is not a green tree.** Know which commands cover which source sets, and
+which cover none. A build task and a unit-test task can both report success while a third source set
+does not compile at all — changing a signature the third one calls is enough. When you change
+anything shared, run the command set that covers the whole tree, and say which commands that was.
+"Everything I ran passed" is only evidence if you can name what you did not run.
+
 ## Capability Risk Classes
 
 - **Low-risk (baseline, permanent, ships with the runtime):** reading repository files; `git status/diff/log/add/commit/checkout/branch` local operations; creating and editing files inside the consumer repository (excluding protected paths).
@@ -226,3 +359,14 @@ Protected paths (never writable by the engine, enforced by runtime deny rules): 
 - `git push` of the Loop Branch is permitted only under a granted capability, and only for that branch. Pushing makes a mid-run machine failure survivable and lets the human review from elsewhere; it is never a step toward merging, which stays a human act.
 - One atomic checkpoint commit per iteration: code + `.harness/run/` + `.harness/knowledge/` together.
 - Commit messages: first line `loop(phase-<n>): <what a human would call this>` — a plain-language summary, not a list of task ids. Body lists what each Worker did, the evidence summary, and amendments made.
+
+**Reading a file out of an earlier commit or another branch is not symmetric across paths.**
+`git show <ref>:<path>` behaves for ordinary source paths. For a path beginning with a dot-directory
+— `.harness/**` included, which is every path this loop writes — Git Bash rewrites `ref:path` into
+`ref;path` and fails with *"unknown revision or path not in the working tree"*. That message reads
+exactly like the file is absent when it is present, so the natural conclusion is the wrong one: that
+the history holds nothing.
+
+Prefix those reads with `MSYS_NO_PATHCONV=1`, or resolve the ref to a SHA with `git rev-parse` first
+— the SHA form is unaffected. Never conclude a record is missing from that error alone; re-read it
+the other way before believing it.

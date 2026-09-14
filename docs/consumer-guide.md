@@ -118,13 +118,13 @@ The first invocation finds no `.harness/run/` and therefore bootstraps: it reads
 
 ## 4. The one mandatory gate: approve the Definition of Done
 
-**Skill path:** the skill reads `.harness/run/ESCALATION.md` and asks you directly in conversation — the DoD, the proposed capabilities, and any ambiguity the engine flagged, presented as a normal question with the engine's own considered options as choices. Answer it like any other question; the skill writes your decision (and rationale) into `.harness/run/ESCALATION.md`'s `## Decision` section and any approved capability into the right ledger file, then resumes automatically. You never open a file yourself.
+**Skill path:** the skill reads `.harness/run/ESCALATION.md` and asks you directly in conversation — the DoD, the proposed capabilities, and any ambiguity the engine flagged, presented as a normal question with the engine's own considered options as choices. Answer it like any other question; the skill writes your decision (and rationale) into `.harness/run/DECISIONS.md` — never into `ESCALATION.md`, which stays the engine's own file — and any approved capability into the right ledger file, then resumes automatically. You never open a file yourself.
 
 **Manual path:** open `.harness/run/DoD.md` and `.harness/run/ESCALATION.md`. The DoD is the exam the whole run will be graded against — this is your highest-leverage five minutes:
 
 1. Edit the criteria freely: tighten vague ones, delete wrong ones, add missing ones. Every criterion must be provable by evidence.
 2. Review the proposed standing capabilities (your repo's build/test/lint commands). Narrow anything too broad; paste approved entries into the named ledger file.
-3. Write your decision **and rationale** under `## Decision` in `.harness/run/ESCALATION.md`.
+3. In `.harness/run/DECISIONS.md` — a separate file, not `ESCALATION.md` — write a heading with the entry's id (e.g. `## D-001`) and your decision **and rationale** underneath it. The engine cannot write this file, so nothing you save here can ever collide with it; still, wait to write until you see `Status: ESCALATE` printed, not merely for `ESCALATION.md` to appear, since queuing a decision does not stop the engine and it may still be working (and still writing its own file) for a while after.
 4. Re-run `run.ps1`.
 
 After approval the DoD is immutable to the engine either way: it may propose changes, never apply them.
@@ -142,7 +142,7 @@ Practically:
 - Start from `.harness/loop/templates/DOMAIN-KNOWLEDGE.template.md`. State each rule precisely enough to be implemented and tested from that text alone, and cite the authority so it can be re-checked later.
 - Be explicit about units, valid ranges and boundary behaviour. That is where implementations silently diverge.
 - Don't create an empty one. No domain rules means no file — a stub is clutter that every iteration reads.
-- Don't put general stack knowledge here ("Android 13 changed notification permissions"). That is not truth about *your* project, nothing in your repo can verify it, and it goes stale with nothing to correct it — see [ADR-007](./adr/ADR-007-knowledge-stratification-and-ratchet.md).
+- Don't put general stack knowledge here ("Android 13 changed notification permissions"). That is not truth about *your* project, nothing in your repo can verify it, and it goes stale with nothing to correct it — see [ADR-019](./adr/ADR-019-knowledge-stratification-and-ratchet.md).
 
 ## 5. While the loop runs
 
@@ -151,7 +151,7 @@ Nothing is required from you. There are exactly five ways a run ends, and `run.p
 | Ending | Exit | Meaning | Your move |
 |---|---|---|---|
 | `DONE` | 0 | Goal verified complete by a fresh verifier iteration. | Review and merge — §6. |
-| `ESCALATE` | 3 | A decision above the engine's authority: an architecture change (Tier 2), an intent gap (Tier 3), a capability request, missing product information. | Skill path: answer in conversation, as in §4. Manual path: read `.harness/run/ESCALATION.md`, write decision + rationale under `## Decision`, re-run. One pending escalation at a time, always. |
+| `ESCALATE` | 3 | A decision above the engine's authority: an architecture change (Tier 2), an intent gap (Tier 3), a capability request, missing product information. | Skill path: answer in conversation, as in §4. Manual path: read `.harness/run/ESCALATION.md`, write decision + rationale into `.harness/run/DECISIONS.md` under the matching id, re-run. One pending escalation at a time, always. |
 | `FAILED` | 4 | Execution itself is broken — environment, repository corruption, exhausted resources. Not "the task was hard". | Repair the environment, re-run (or ask the skill to). The engine resumes from the last checkpoint. |
 | Watchdog | 2 | `MaxConsecutiveCrashes` (default 3) invocations died without producing any status. | Usually a transient CLI/network fault. Inspect `.harness/run/STATE.md`, re-run. |
 | Budget | 5 | `MaxIterations` (default 50) exhausted. A deterministic safety stop, never an interpretation of task failure. | Inspect `.harness/run/STATE.md` for actual progress, then re-run to continue — or raise `-MaxIterations`. |
@@ -182,7 +182,9 @@ git merge loop/<prd-slug>
 
 The three-dot form is deliberate: it diffs the branch against the point it diverged from, so unrelated commits landing on your default branch meanwhile don't pollute the review.
 
-**What the run knew was still wrong** is in `.harness/ISSUES.md` — defects the engine found and did not fix, because they were out of scope, because a review finding was filed rather than resolved, or because you deferred them. That file survives the Cleanup Commit and is read by every future iteration as a list of patterns to *avoid*, so a later run does not reproduce them. Entries cite the commit SHA holding the full record; read it back with `git show <sha>:<path>`. Prune an entry once it is resolved — the file is worth reading only while everything in it is still true.
+**What the run knew was still wrong** is recorded as **Constraints** in `.harness/knowledge/PROJECT.md` — defects the engine found and did not fix, because they were out of scope, because a review finding was filed rather than resolved, or because you deferred them. A Constraint is carried verbatim into every Worker Brief and checked against every diff, so a later run does not reproduce the defect. Each is written as an instruction (*"never do X here, because Y"*) and cites `file:line`. Prune one once it is resolved — a stale Constraint misleads worse than a missing one.
+
+Separately, `.harness/ISSUES.md` is the **Issues Report**: regenerated every iteration for you, not for the engine, listing what is stuck — abandoned tasks, queued decisions, and `human` criteria still unsigned. It survives the Cleanup Commit so a stopped run is legible when you come back to it.
 
 Either way: **merging is your act — the engine never merges, never pushes, never touches your default branch.**
 
