@@ -2,6 +2,7 @@
 @.claude/distributable-parity.md
 @.claude/adr-convention.md
 @.claude/field-reports.md
+@.claude/guide-parity.md
 
 # Foreman — working notes
 
