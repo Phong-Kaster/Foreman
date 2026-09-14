@@ -130,6 +130,9 @@ not compliance.
 
 ### A lesson that is true beyond this repository goes in the Suggestion Box
 
+`SUGGESTIONS.html` carries two tabs — Escalate (a read-only mirror of `ESCALATION.md`) and
+Suggestions (this section) — sharing one page (ADR-026). What follows governs the Suggestions tab.
+
 `PROJECT.md` holds truth about **this** repository. Some of what a run learns is not that: it is true
 of every repository, or of every repository on this stack. Those belong one tier up (ADR-019) — and
 you are denied write access to `.harness/loop/`, correctly, because that tier also records your own
@@ -146,8 +149,11 @@ What earns an entry:
   finding, a denied command. Never a lesson you merely inferred.
 - **It would still be true in a repository with none of this code.** If it names a file, a module or
   a convention here, it is a Constraint or a Reference, not a suggestion.
-- **It names a destination.** `loop` for doctrine true of every stack; `stack` for a platform pack;
-  and say plainly when something should **stay** — a box that only ever argues for promotion is noise.
+- **It names a destination.** `loop` for doctrine true of every stack; `stack` for a platform pack —
+  and when the destination is `stack`, name the platform too (android, backend, frontend, devops, ...),
+  matching the `skills/knowledge/<platform>/` pack it would land in. An unlabelled `stack` entry is
+  fine with one platform in play and noise the moment a second one is; name it every time regardless.
+  Say plainly when something should **stay** — a box that only ever argues for promotion is noise.
 - **It carries both explanations.** The technical one, and one a non-specialist can follow. The
   reader is deciding whether to change the product, not debugging with you.
 

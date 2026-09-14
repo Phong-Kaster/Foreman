@@ -104,7 +104,7 @@ escalate", insert (V)+(M) ahead of escalation: a perceptual criterion is escalat
 no pinned render can stand behind it. The rule to write is a preference order, not a new permission —
 the engine already has the ability.
 
-**Step 4 — `skills/knowledge/android-compose-visual-testing/SKILL.md`.** The pack presents the
+**Step 4 — `skills/knowledge/android/compose-visual-testing/SKILL.md`.** The pack presents the
 harness as a pure (M) mechanism and never says the engine can read the image, which is the capability
 that makes the harness worth installing. Say it, and say what it does not license.
 

@@ -142,7 +142,7 @@ If `.harness/run/` does not exist, this invocation is the Bootstrap. Do not impl
    - `AMENDMENTS.md`, `HISTORY.md`, `ESCALATION.md` — empty logs.
    - `DECISIONS.md` is **not yours to create.** The Runtime provisions it, mechanically, before your first invocation — because it is also where the deny rules protecting it start applying, and a file you could create is a file you could still be the only writer of at the moment it is born.
    - `.harness/ISSUES.md` — the Issues Report (§10). A sibling of `run/`, not inside it, which is why it survives the Cleanup Commit.
-   - `SUGGESTIONS.html` at the repository root — the Suggestion Box: lessons this run learned that are true **beyond** this repository, and so belong in a tier you cannot write to. Proposals only; you never act on one. Criteria and the two bounding rules are in `POLICIES.md`.
+   - `SUGGESTIONS.html` at the repository root, two tabs: **Escalate** — a read-only mirror of `ESCALATION.md`, regenerated whenever that file changes — and **Suggestions**, the Suggestion Box: lessons this run learned that are true **beyond** this repository, and so belong in a tier you cannot write to. Both are proposals only; you never act on one. Criteria and the two bounding rules are in `POLICIES.md`.
 7. Propose standing Capabilities for this repository's toolchain (build/test/lint commands) as part of the decision below.
 8. Queue the decision (§7): *"Approve the Definition of Done (edit freely before approving) and the proposed standing capabilities."*
 9. Checkpoint (commit everything above on the Loop Branch) and report `ESCALATE`.
@@ -270,7 +270,7 @@ If the push capability is granted, push the Loop Branch. Never the default branc
 
 # 7. The Decision Queue
 
-When you need human input, append an entry to `.harness/run/ESCALATION.md` from the template: an id (`D-00N`, sequential), the question, context, options considered, your recommendation, structured capability proposals if any, and **the tasks this decision blocks**.
+When you need human input, append an entry to `.harness/run/ESCALATION.md` from the template: an id (`D-00N`, sequential), the question, context, options considered, your recommendation, structured capability proposals if any, and **the tasks this decision blocks**. Regenerate `SUGGESTIONS.html`'s Escalate tab from its current content in the same step — the tab exists to make the queue easy to read, never to be read back as an input.
 
 The human answers in `.harness/run/DECISIONS.md`, under a heading naming this entry's id — never in `.harness/run/ESCALATION.md` itself. You cannot write `DECISIONS.md`; the Runtime denies it, the same as the Capability Ledgers. Never treat `ESCALATION.md` existing, or a human's activity, as a signal that an answer is ready — you may still be working on other tasks for a while after writing this entry, and the only reliable signal that it is safe to answer is the run actually stopping (`Status: ESCALATE`), which you do not control from here.
 
