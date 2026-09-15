@@ -212,7 +212,32 @@ failure.
 
 ## Verification Class Criteria
 
-Every DoD criterion is either `machine` or `human` (ADR-015). The split is not usually a judgement call:
+Every DoD criterion declares one of **three** classes (ADR-015, ADR-025):
+
+| Class | Who produces the evidence | What closes it |
+|---|---|---|
+| `machine` | a command | the command's output |
+| `machine-then-human` | a command drives it **first**, then a person looks | **the person's signature** |
+| `human-only` | nothing can drive it — perception, judgement | the person's signature |
+
+**A machine pre-check never closes a `machine-then-human` criterion.** It exists to stop the human
+being the *first* person to find a defect, not to replace them. Earned on a real run: fourteen
+`machine` criteria were green, a fresh-context Verifier re-proved every one of them, a machine check
+of the criterion in question reported pass — and the human opened the app once and found it broken.
+
+Three rules keep the pre-check honest, and the third is the one that failed:
+
+- **A pre-check that fails is a defect**, reconciled into the run like any other failure, consuming
+  the normal attempt budget and abandonable at the third try. It does not become a note for the human.
+- **A pre-check that passes is written as "did not fail when driven from state X"**, never as "works".
+  The difference is not pedantry: a criterion labelled as machine-verified is read faster, so a
+  pre-check that oversells itself makes the human's look *worse* than no pre-check at all.
+- **A criterion any command will drive must name the state it is driven from.** The pass above was
+  false because the check ran on a device where the permission was already granted, while the
+  criterion said *install fresh, grant when asked, then open*. Two different paths; the automated one
+  was the one that worked. Name the starting state or automation will quietly pick the easy branch.
+
+The old split still decides which of the three a criterion lands in:
 
 | `machine` | `human` |
 |---|---|
@@ -232,8 +257,22 @@ is two claims: the record is removed (`machine`), and the delete control is visi
 the requirement was specified unusually well; it means the criteria are measuring a layer beneath the
 one the user experiences.
 
-When uncertain, classify `human`. The costs are asymmetric: over-classifying costs one look,
-under-classifying ships something nobody can see.
+When uncertain, classify for a human signature — `machine-then-human` if anything can drive it,
+`human-only` otherwise. The costs are asymmetric: over-classifying costs one look, under-classifying
+ships something nobody can see.
+
+### What the environment can do is a fact, and facts go stale
+
+`knowledge/PROJECT.md` caches what this repository can run. **A claim there about the absence of a
+capability — no device, no emulator, no `adb`, no container — is re-checked before it is used to
+classify a criterion, not trusted because it is written down.** One command settles it.
+
+Earned: a repository's `PROJECT.md` stated "No emulator, no device, no `adb`, no Robolectric — there
+is no command here that can prove it", and every run dutifully classed anything needing a running app
+as `human`. The claim was false. `adb` was installed, a device was attached, and the project already
+had an `androidTest/` source set wired to a working instrumentation runner. Three runs inherited the
+note and none re-read the ground under it. An absence is the one kind of claim that rots silently,
+because nothing ever fails to remind you of it.
 
 ### A perceptual criterion may be `machine` only if it cites the reference image behind it
 

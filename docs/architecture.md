@@ -101,6 +101,14 @@ HUMAN: reviews the Loop Branch (tip = implementation + knowledge + completion su
     no execution state) and merges. Merging is always a human act.
 ```
 
+At that fresh-verification step a criterion belongs to one of three classes
+([ADR-025](./adr/ADR-025-a-machine-drives-a-human-criterion-before-a-person-signs-it.md)): `machine`,
+closed by a command; `machine-then-human`, **driven** by the verifier on an emulator or device and
+then signed by a person; and `human-only`, perception that nothing may claim. A machine never closes
+a criterion a person owns — it exists so that the person is not the first to find the defect. The
+criteria still awaiting a signature survive the run that raised them, in `knowledge/ISSUES.md`.
+
+
 ### Iteration anatomy
 
 An **Iteration** is *not* one task. It is: reconstruct context from durable artifacts → execute autonomously until a **Stable Checkpoint** → persist all changes → return one **Execution Status**. The invariant is not granularity; it is that *every iteration leaves the repository in a consistent, resumable state.* For V1 simplicity: one iteration → one checkpoint → one commit.

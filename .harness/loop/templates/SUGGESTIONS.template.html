@@ -52,6 +52,16 @@
   .tabs button .n{display:inline-block;margin-left:7px;padding:1px 6px;border-radius:8px;background:var(--surface-2);color:var(--ink-2);font-size:10.5px}
   .panel{padding-top:6px}
   .panel[hidden]{display:none}
+  /* Verify tab. The unlooked-at half is given the visual weight, deliberately: a card that
+     reads as finished gets skimmed, and skimming is the failure this tab exists to prevent. */
+  .card.verify > summary .tick{margin-right:8px}
+  .card.verify > summary input[type=checkbox]{width:17px;height:17px;vertical-align:-3px;cursor:pointer}
+  .needs-eyes{border-left:3px solid var(--accent,#8B80FF);padding:2px 0 2px 12px;margin:10px 0}
+  .needs-eyes p{margin:0 0 6px}
+  .drove{opacity:.72;font-size:.92em;margin:10px 0 0}
+  .drove p{margin:0 0 4px}
+  .card.verify.human-only .drove{display:none}
+  .empty{opacity:.7;font-style:italic}
 
   .banner{border:1px solid var(--new);border-left:3px solid var(--new);background:var(--surface);padding:14px 18px;margin:26px 0 34px;font-size:.98rem}
   .banner strong{color:var(--new)}
@@ -125,6 +135,9 @@
   <div class="tabs" role="tablist">
     <button role="tab" id="tab-btn-escalate" aria-controls="panel-escalate" data-tab="escalate">
       <span data-lang="vi">Cần quyết</span><span data-lang="en">Escalate</span><span class="n" id="n-escalate">0</span>
+    </button>
+    <button role="tab" id="tab-btn-verify" aria-controls="panel-verify" data-tab="verify">
+      <span data-lang="vi">Cần nhìn</span><span data-lang="en">Verify</span><span class="n" id="n-verify">0</span>
     </button>
     <button role="tab" id="tab-btn-suggest" aria-controls="panel-suggest" data-tab="suggest">
       <span data-lang="vi">Góp ý</span><span data-lang="en">Suggestions</span><span class="n" id="n-suggest">0</span>
@@ -202,6 +215,64 @@
      repository (ADR-019, POLICIES.md § "A lesson that is true beyond this
      repository goes in the Suggestion Box").
 ============================================================================ -->
+<!-- ============================================================================
+     VERIFY TAB — one card per DoD criterion still awaiting a human signature:
+     every `machine-then-human` and every `human-only` one. Regenerate whenever a
+     Human Verification Request is raised or a signature lands in DECISIONS.md.
+
+     THE CARD LEADS WITH WHAT NOBODY HAS LOOKED AT. The machine's own result is
+     supporting detail underneath, never the headline, and a pre-check that passed
+     is worded "did not fail when driven from X" — never "works". A card that reads
+     like a finished tick gets skimmed, and skimming is how a green run ships a
+     button rendered invisible against its own background.
+
+     The checkboxes here are a SCRATCHPAD, saved per-browser. They are not the
+     sign-off: this whole file is rewritten every time the engine queues a
+     decision, so a tick here does not survive. The sign-off is a `[x]` in
+     .harness/run/DECISIONS.md, which the Runtime denies the engine write access
+     to. "Copy sign-off" emits exactly that markdown for pasting.
+============================================================================ -->
+<section id="panel-verify" class="panel" role="tabpanel" aria-labelledby="tab-btn-verify" hidden>
+
+<div class="banner esc">
+  <p data-lang="vi"><strong>Ô tick ở đây chỉ để cậu theo dõi.</strong> Chữ ký thật là <span class="mono">[x]</span> trong <span class="mono">.harness/run/DECISIONS.md</span> — trang này bị ghi đè toàn bộ mỗi lần engine queue một quyết định, nên tick ở đây sẽ mất. Bấm <em>Chép chữ ký</em> để lấy đoạn markdown dán vào.</p>
+  <p data-lang="en"><strong>The checkboxes here are your scratchpad.</strong> The signature is an <span class="mono">[x]</span> in <span class="mono">.harness/run/DECISIONS.md</span> — this page is rewritten in full every time the engine queues a decision, so a tick here does not survive. Use <em>Copy sign-off</em> to get the markdown to paste.</p>
+  <p><button type="button" id="copy-signoff" class="copybtn"><span data-lang="vi">Chép chữ ký</span><span data-lang="en">Copy sign-off</span></button> <span id="copy-note" class="mono"></span></p>
+</div>
+
+<!-- ONE CARD PER CRITERION AWAITING A SIGNATURE. Copy the shape below.
+       data-criterion  the DoD criterion number, exactly
+       class           "card verify" plus "human-only" when nothing could drive it
+       .needs-eyes     FIRST, and never empty — what no command has looked at
+       .drove          what was driven, and THE STATE IT WAS DRIVEN FROM
+
+     EVERY block needs BOTH languages. A <p> carrying only data-lang="en" is invisible while the page
+     is in Vietnamese — the card then renders as a bare title with no evidence and no warning at all,
+     which is worse than omitting the card. Write the vi line and the en line as a pair, always.
+<details class="card verify" data-criterion="15">
+  <summary><label class="tick"><input type="checkbox" data-verify="15"></label><span class="id">15</span>
+    <span data-lang="vi">Cài mới, mở lần đầu trong ngày → có lời chào</span><span data-lang="en">Fresh install, first open of a day → the greeting appears</span>
+    <span class="tag">machine-then-human</span></summary>
+  <div class="needs-eyes">
+    <p data-lang="vi"><strong>Chưa ai nhìn:</strong> icon có phải glyph trắng phẳng không, chữ có bị cắt không.</p>
+    <p data-lang="en"><strong>Nobody has looked at:</strong> whether the small icon is a flat white glyph, and whether the text is readable rather than clipped.</p>
+  </div>
+  <div class="drove">
+    <p data-lang="vi"><strong>Đã chạy từ:</strong> máy ảo sạch, dữ liệu app đã xoá, quyền được cấp khi được hỏi.</p>
+    <p data-lang="en"><strong>Driven from:</strong> a clean managed device, app data cleared, permission granted when asked.</p>
+    <p data-lang="vi"><strong>Kết quả:</strong> không đổ — tiêu đề, nội dung, channel và importance đều khớp.</p>
+    <p data-lang="en"><strong>Result:</strong> did not fail — title, text, channel and importance all matched.</p>
+  </div>
+</details>
+-->
+
+<!-- Empty state — use instead of any card when nothing awaits a signature:
+<p class="empty" data-lang="vi">Không có tiêu chí nào đang chờ chữ ký.</p>
+<p class="empty" data-lang="en">Nothing is awaiting a signature.</p>
+-->
+
+</section>
+
 <section id="panel-suggest" class="panel" role="tabpanel" aria-labelledby="tab-btn-suggest" hidden>
 
 <div class="banner">
@@ -355,11 +426,63 @@ $ set -o pipefail; false | tail -1 ; echo $?
     // Badge counts are computed here, never hand-authored, so they can never drift
     // from the cards actually on the page.
     var buttons=document.querySelectorAll('.tabs button'), TKEY='cn-suggestions-tab';
-    var panels={escalate:document.getElementById('panel-escalate'), suggest:document.getElementById('panel-suggest')};
+    var panels={escalate:document.getElementById('panel-escalate'), verify:document.getElementById('panel-verify'), suggest:document.getElementById('panel-suggest')};
     var escalateCount=panels.escalate.querySelectorAll(':scope > details.card').length;
+    var verifyCards=panels.verify.querySelectorAll(':scope > details.card');
     var suggestCount=panels.suggest.querySelectorAll(':scope > details.card').length;
     document.getElementById('n-escalate').textContent=escalateCount;
     document.getElementById('n-suggest').textContent=suggestCount;
+
+    // --- Verify tab: a scratchpad, and an escape hatch back to the real channel ---
+    // The ticks are per-browser and deliberately NOT the sign-off: this file is rewritten whole
+    // every time the engine queues a decision. The badge counts what is still UNTICKED, so it
+    // behaves like the Escalate badge - outstanding work, not total work.
+    var VKEY='cn-verify-ticks';
+    function loadTicks(){ try{ return JSON.parse(localStorage.getItem(VKEY)||'{}'); }catch(e){ return {}; } }
+    function saveTicks(t){ try{ localStorage.setItem(VKEY, JSON.stringify(t)); }catch(e){} }
+    // Counted from the checkboxes themselves, never from storage: localStorage is unavailable in
+    // plenty of places this file gets opened (a file:// URL under a strict policy, a preview pane,
+    // a private window), and a badge that silently stops moving when it is missing is worse than
+    // one that never persisted. Storage only remembers the ticks; the DOM decides the number.
+    function refreshVerifyBadge(){
+      var left=0;
+      verifyCards.forEach(function(c){ var b=c.querySelector('input[type=checkbox]'); if(b && !b.checked) left++; });
+      document.getElementById('n-verify').textContent=left;
+    }
+    var ticks=loadTicks();
+    verifyCards.forEach(function(card){
+      var box=card.querySelector('input[type=checkbox]');
+      if(!box) return;
+      box.checked = !!ticks[card.dataset.criterion];
+      box.addEventListener('click', function(e){ e.stopPropagation(); });
+      box.addEventListener('change', function(){
+        var t=loadTicks(); if(box.checked){ t[card.dataset.criterion]=true; } else { delete t[card.dataset.criterion]; }
+        saveTicks(t);
+        refreshVerifyBadge();
+      });
+    });
+    refreshVerifyBadge();
+
+    var copyBtn=document.getElementById('copy-signoff');
+    if(copyBtn){
+      copyBtn.addEventListener('click', function(){
+        var lines=[];
+        verifyCards.forEach(function(c){
+          var id=c.dataset.criterion;
+          var b=c.querySelector('input[type=checkbox]');
+          var label=(c.querySelector("summary span[data-lang='en']")||{}).textContent||'';
+          lines.push('- ['+((b&&b.checked)?'x':' ')+'] '+id+' - '+label.trim());
+        });
+        // String.fromCharCode(10) and not a backslash-n escape: this template is transcribed by
+        // hand and by tooling, and an escape that survives neither is how this line broke once.
+        var md=lines.join(String.fromCharCode(10));
+        var note=document.getElementById('copy-note');
+        // Paste target is DECISIONS.md, under the Human Verification Request's own id.
+        function done(ok){ if(note) note.textContent = ok ? 'copied - paste under the D-0NN heading in DECISIONS.md' : 'copy failed; select the text manually'; }
+        if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(md).then(function(){done(true)},function(){done(false)}); }
+        else { done(false); }
+      });
+    }
     function select(name){
       buttons.forEach(function(b){b.setAttribute('aria-selected', String(b.dataset.tab===name))});
       Object.keys(panels).forEach(function(k){panels[k].hidden = (k!==name)});
@@ -367,8 +490,9 @@ $ set -o pipefail; false | tail -1 ; echo $?
     }
     buttons.forEach(function(b){b.addEventListener('click',function(){select(b.dataset.tab)})});
     var start='suggest';
-    try{var stored=localStorage.getItem(TKEY); if(stored==='escalate'||stored==='suggest') start=stored; else if(escalateCount>0) start='escalate';}
-    catch(e){ if(escalateCount>0) start='escalate'; }
+    var firstOpen = escalateCount>0 ? 'escalate' : (verifyCards.length>0 ? 'verify' : 'suggest');
+    try{var stored=localStorage.getItem(TKEY); if(panels[stored]) start=stored; else start=firstOpen;}
+    catch(e){ start=firstOpen; }
     select(start);
   })();
 </script>
