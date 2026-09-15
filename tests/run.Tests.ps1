@@ -546,3 +546,203 @@ Describe "run.ps1 protects the human's half of the Decision Queue" {
         } finally { Remove-TestRepo -TestRepo $repo }
     }
 }
+
+Describe "run.ps1 pins the top-level Iteration's Model Tier" {
+
+    # The tier map existed to route Workers, and nothing ever applied it to the Iteration itself:
+    # --model was passed only when a human supplied -Model, so the Orchestrator - and the Verifier,
+    # which POLICIES.md marks "Always Capable, no exception" - ran at whatever the CLI defaults to.
+    # Measured on the Calendar-Note alarms run: 979 of 1,215 Orchestrator messages below Capable.
+
+    function Set-TestModels {
+        param([string]$TestRepo)
+        $json = '{ "fast": { "model": "tier-fast" }, "capable": { "model": "tier-capable" } }'
+        Set-Content -Path (Join-Path $TestRepo ".harness/loop/models.json") -Value $json
+    }
+
+    It "dispatches an ordinary iteration at the Fast tier from models.json" {
+        $repo = New-TestRepo
+        try {
+            Set-TestModels -TestRepo $repo
+            $argLog = Join-Path $repo "args.txt"
+            $env:FAKE_CLAUDE_ARGLOG = $argLog
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("DONE|ok")
+            Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "2") | Out-Null
+
+            $recorded = Get-Content $argLog -Raw
+            $recorded | Should Match "--model"
+            $recorded | Should Match "tier-fast"
+            $recorded | Should Not Match "tier-capable"
+        } finally {
+            Remove-Item Env:\FAKE_CLAUDE_ARGLOG -ErrorAction SilentlyContinue
+            Remove-TestRepo -TestRepo $repo
+        }
+    }
+
+    It "raises the Verifier iteration to Capable when STATE.md records a DONE-candidate" {
+        $repo = New-TestRepo
+        try {
+            Set-TestModels -TestRepo $repo
+            New-Item -ItemType Directory -Path (Join-Path $repo ".harness/run") -Force | Out-Null
+            # The exact shape STATE.md uses in the field, bold markers and all.
+            Set-Content -Path (Join-Path $repo ".harness/run/STATE.md") -Value "- **DONE-candidate:** yes, re-confirmed this iteration"
+            $argLog = Join-Path $repo "args.txt"
+            $env:FAKE_CLAUDE_ARGLOG = $argLog
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("DONE|ok")
+            Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "2") | Out-Null
+
+            $recorded = Get-Content $argLog -Raw
+            $recorded | Should Match "tier-capable"
+            $recorded | Should Not Match "tier-fast"
+        } finally {
+            Remove-Item Env:\FAKE_CLAUDE_ARGLOG -ErrorAction SilentlyContinue
+            Remove-TestRepo -TestRepo $repo
+        }
+    }
+
+    It "does not raise the tier when STATE.md says the run is NOT a DONE-candidate" {
+        $repo = New-TestRepo
+        try {
+            Set-TestModels -TestRepo $repo
+            New-Item -ItemType Directory -Path (Join-Path $repo ".harness/run") -Force | Out-Null
+            Set-Content -Path (Join-Path $repo ".harness/run/STATE.md") -Value "- **DONE-candidate:** no"
+            $argLog = Join-Path $repo "args.txt"
+            $env:FAKE_CLAUDE_ARGLOG = $argLog
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("DONE|ok")
+            Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "2") | Out-Null
+
+            (Get-Content $argLog -Raw) | Should Match "tier-fast"
+        } finally {
+            Remove-Item Env:\FAKE_CLAUDE_ARGLOG -ErrorAction SilentlyContinue
+            Remove-TestRepo -TestRepo $repo
+        }
+    }
+
+    It "lets an explicit -Model override the map, since a human overriding it is not it being ignored" {
+        $repo = New-TestRepo
+        try {
+            Set-TestModels -TestRepo $repo
+            $argLog = Join-Path $repo "args.txt"
+            $env:FAKE_CLAUDE_ARGLOG = $argLog
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("DONE|ok")
+            Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "2", "-Model", "human-choice") | Out-Null
+
+            $recorded = Get-Content $argLog -Raw
+            $recorded | Should Match "human-choice"
+            $recorded | Should Not Match "tier-fast"
+        } finally {
+            Remove-Item Env:\FAKE_CLAUDE_ARGLOG -ErrorAction SilentlyContinue
+            Remove-TestRepo -TestRepo $repo
+        }
+    }
+
+    It "falls back to the CLI default when models.json is absent, rather than failing the run" {
+        $repo = New-TestRepo
+        try {
+            $argLog = Join-Path $repo "args.txt"
+            $env:FAKE_CLAUDE_ARGLOG = $argLog
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("DONE|ok")
+            $code = Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "2")
+
+            $code | Should Be 0
+            (Get-Content $argLog -Raw) | Should Not Match "--model"
+        } finally {
+            Remove-Item Env:\FAKE_CLAUDE_ARGLOG -ErrorAction SilentlyContinue
+            Remove-TestRepo -TestRepo $repo
+        }
+    }
+}
+
+Describe "run.ps1 records what each iteration cost" {
+
+    # run.ps1 measured every iteration's duration and printed it to the console with Write-Host, so
+    # after the Calendar-Note run nothing on disk could say which iteration was slow or what any of
+    # them cost. The first question asked of that run had to be answered by parsing a debug log out
+    # of %TEMP% that survived only by luck.
+
+    It "writes one row per iteration, with the columns needed to find the expensive one" {
+        $repo = New-TestRepo
+        try {
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("CONTINUE|working", "DONE|ok")
+            Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "4") | Out-Null
+
+            $telemetry = Join-Path $repo ".harness/TELEMETRY.tsv"
+            Test-Path $telemetry | Should Be $true
+            $rows = @(Get-Content $telemetry)
+            $rows[0] | Should Match "iteration"
+            $rows[0] | Should Match "seconds"
+            $rows[0] | Should Match "cost_usd"
+            # header + one row per iteration
+            $rows.Count | Should Be 3
+            $rows[1] | Should Match "CONTINUE"
+            $rows[2] | Should Match "DONE"
+        } finally {
+            Remove-TestRepo -TestRepo $repo
+        }
+    }
+
+    It "keeps the rows outside .harness/run/, which the Cleanup Commit deletes" {
+        $repo = New-TestRepo
+        try {
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("DONE|ok")
+            Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "2") | Out-Null
+
+            Test-Path (Join-Path $repo ".harness/TELEMETRY.tsv") | Should Be $true
+            Test-Path (Join-Path $repo ".harness/run/TELEMETRY.tsv") | Should Be $false
+        } finally {
+            Remove-TestRepo -TestRepo $repo
+        }
+    }
+}
+
+Describe "run.ps1 surfaces an ESCALATE to the human" {
+
+    # ESCALATE stops the loop dead and the run waits on a human who has no idea they are being
+    # waited on - about 46 minutes of pure idle across two decisions on the Calendar-Note run. The
+    # page built for this, SUGGESTIONS.html's Escalate tab, was never regenerated once: the copy in
+    # that repository carried no D-0NN id at all.
+
+    It "detects that the page is missing the decision the engine just queued" {
+        $repo = New-TestRepo
+        try {
+            New-Item -ItemType Directory -Path (Join-Path $repo ".harness/run") -Force | Out-Null
+            Set-Content -Path (Join-Path $repo ".harness/run/ESCALATION.md") -Value "### D-001 - needs a human"
+            # A page from before this decision: exactly the Calendar-Note failure.
+            Set-Content -Path (Join-Path $repo "SUGGESTIONS.html") -Value "<html><body>no decisions here</body></html>"
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("ESCALATE|question")
+            $code = Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "2", "-NoOpenEscalation")
+
+            $code | Should Be 3
+            $log = Join-Path $env:TEMP ("loop-run-" + (Split-Path $repo -Leaf) + ".log")
+            (Get-Content $log -Raw) | Should Match "STALE"
+        } finally {
+            Remove-TestRepo -TestRepo $repo
+        }
+    }
+
+    It "treats a page that does carry the decision as current" {
+        $repo = New-TestRepo
+        try {
+            New-Item -ItemType Directory -Path (Join-Path $repo ".harness/run") -Force | Out-Null
+            Set-Content -Path (Join-Path $repo ".harness/run/ESCALATION.md") -Value "### D-001 - needs a human"
+            Set-Content -Path (Join-Path $repo "SUGGESTIONS.html") -Value "<html><body>D-001 needs a human</body></html>"
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("ESCALATE|question")
+            Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "2", "-NoOpenEscalation") | Should Be 3
+
+            $log = Join-Path $env:TEMP ("loop-run-" + (Split-Path $repo -Leaf) + ".log")
+            (Get-Content $log -Raw) | Should Not Match "STALE"
+        } finally {
+            Remove-TestRepo -TestRepo $repo
+        }
+    }
+
+    It "still exits 3 when there is no page to open at all" {
+        $repo = New-TestRepo
+        try {
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("ESCALATE|question")
+            Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "2") | Should Be 3
+        } finally {
+            Remove-TestRepo -TestRepo $repo
+        }
+    }
+}

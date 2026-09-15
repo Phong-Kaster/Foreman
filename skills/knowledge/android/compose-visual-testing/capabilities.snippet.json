@@ -18,6 +18,17 @@
       "scope": "-",
       "lifetime": "goal, and only when a human has approved a deliberate baseline change",
       "allow": []
+    },
+    {
+      "_comment": "GOAL-SCOPED, not standing: paste into .harness/run/capabilities.json when a run first needs a reference image for a case that has none. It expires with the run, per the human's rule that a grant dies when the loop finishes the goal it was given.",
+      "_why_this_is_safe_to_grant_once_for_a_whole_run": "The wrapper hashes every existing reference before invoking Gradle and restores any that changed, so only NEW files can survive it - the create/overwrite distinction the permission matcher cannot make, made by a script instead (ADR-002). Overwriting a currently-failing baseline still requires a human, exactly as before. What changes is that recording the NEXT new reference no longer stops the loop: the Calendar-Note alarms run asked for this same grant four times (D-003, D-004, D-006, D-007) and nothing new was decided after the first.",
+      "intent": "Record reference images for screenshot cases that have none yet, for the remainder of this run, without re-escalating once per case",
+      "command": "powershell skills/knowledge/android/compose-visual-testing/record-new-references.ps1 -TestFilter \"*<Case>*\"",
+      "scope": "creates missing reference PNGs only; any pre-existing image the run modifies is restored and the script exits 2",
+      "lifetime": "goal",
+      "allow": [
+        "Bash(powershell*record-new-references.ps1*)"
+      ]
     }
   ]
 }

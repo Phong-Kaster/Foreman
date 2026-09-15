@@ -40,7 +40,11 @@
 
 Two tiers exist: **Fast** and **Capable**, mapped to concrete model identifiers in `.harness/loop/models.json` — the only place a vendor model name appears. `ENGINE.md` and this file never name one directly.
 
-**Always Capable, no exception:** the Reviewer, the Verifier, the Orchestrator (the top-level Iteration itself, in every capacity), and every bootstrap fan-out analysis role (ADR-009). These are judgment-heavy roles by definition; tiering applies only to Worker implementation.
+**Always Capable, no exception:** the Reviewer, the Verifier, and every bootstrap fan-out analysis role (ADR-009). These are the roles that decide whether work is *correct*, and none of them may run below Capable.
+
+**The Orchestrator runs at Fast in its ordinary capacity, and at Capable whenever it is the Verifier (§11).** The Runtime chooses this before the invocation starts and passes `--model` itself, because one model is fixed for a whole invocation and the Iteration cannot switch its own mid-session. `STATE.md`'s DONE-candidate is the signal, the same one §6.3 branches on.
+
+This line was earned, not reasoned: the Calendar-Note alarms run passed `--model` **never**, so the top-level session inherited the CLI default for the entire run. 979 of 1,215 Orchestrator messages ran below Capable, and the Verifier — this table's one "no exception" — re-proved all 36 DoD criteria on the cheaper model. Meanwhile the Workers, the only role tiering was supposed to touch, ran at Capable throughout. The tier system was not merely unenforced, it was inverted.
 
 **A Worker's task may be classified Fast only if all of the following hold**, assessed by the arm's-length planning roles at bootstrap or Phase re-grouping — never by the Worker itself, and never by the role that proposed the task:
 
@@ -49,6 +53,8 @@ Two tiers exist: **Fast** and **Capable**, mapped to concrete model identifiers 
 - it embeds no architecture decision, no new external dependency, no new cross-module contract.
 
 Everything else defaults to **Capable**. When genuinely uncertain, classify Capable — the cost of a wrong Fast classification is a wasted attempt at the wrong tier; the cost of a wrong Capable classification is a few cents.
+
+**If nothing is ever classified Fast, the tier is misconfigured, not the criteria.** Measured on the Calendar-Note alarms run: 7 of 7 tasks Capable, and the Fast model consumed 6,363 input tokens and one cent across the whole run. The criteria above are correctly cautious; a planning role that will not stake a Kotlin/Compose task on the Fast tier is behaving well. The fix belongs in `models.json` — raise what Fast maps to until a cautious planner can choose it — never in loosening these three conditions.
 
 **A failed Fast-tier attempt escalates the task to Capable for its remaining attempts** (`ENGINE.md` §8) — mechanical, not re-judged, and free: it does not consume an extra attempt beyond the normal three.
 
@@ -312,6 +318,23 @@ nothing about what a user sees — this is exactly how hardcoded colours survive
 ## Evidence Requirements
 
 A claim without evidence is not a fact. Task completion requires recorded evidence per ENGINE.md §6.7 and §6.10. "It should work" is never evidence. Evidence must be reproducible from the checkpoint: command + observed output.
+
+**Evidence is written to a file and read in summary; it is not pasted whole into the transcript.**
+Redirect a build, test or lint run to a file under the run directory, then read back only what
+decides the question: the exit code, the summary line, the failing cases. Cite the file so the
+Reviewer and the Verifier can open the whole thing.
+
+Nothing about the standard changes: the command still has to actually run, unpiped (see below), the
+output still has to exist on disk, and a claim still has to be reproducible from the checkpoint. What
+changes is how many times that output gets paid for. Every token placed in a transcript is re-read on
+every later turn of the same invocation, so a full Gradle log pasted at turn 20 is charged again at
+turns 21 through 146.
+
+Measured on the Calendar-Note alarms run: **143 million cache-read tokens across 645 turns, 222K of
+context carried per turn on average and 767K at the worst session — 55% of the entire bill.** The
+same growth is what makes a single iteration expensive enough to matter: one 33-minute iteration took
+the five-hour quota window to 97%, and the loop then sat idle for 2h38m waiting for it to reset. Over
+half the run's wall clock — 3.4 of 6.5 hours measured — was the engine not running at all.
 
 **Never take a piped command's exit code as evidence.** `./gradlew build 2>&1 | tail -20` exits **0
 when the build failed**, because the exit status belongs to `tail`. This is not hypothetical: a real
