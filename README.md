@@ -8,6 +8,8 @@ That is the whole idea. The rest of this page explains it slowly — small words
 > The agent forgets. The repository doesn't.
 > The engine requests. The human decides. The runtime enforces.
 
+📖 **Prefer to read this as a web page?** [**phong-kaster.github.io/Foreman**](https://phong-kaster.github.io/Foreman/) — the same content, bilingual (English / Tiếng Việt), with a navigable sidebar. This README stays the source of truth.
+
 ---
 
 ## 1. What is it?
@@ -267,6 +269,7 @@ Foreman/
 ├── .harness/loop/                            ← THE SAME THING, standalone — for manual installs
 ├── tests/                            ← Pester tests for run.ps1, driven by a fake `claude` stub
 ├── docs/
+│   ├── index.html                    the same page as a bilingual site (GitHub Pages)
 │   ├── architecture.md               the complete design
 │   ├── consumer-guide.md             manual-install operating manual
 │   └── adr/                          why each big decision was made
