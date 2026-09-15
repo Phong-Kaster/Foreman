@@ -51,9 +51,11 @@
     color-scheme:dark;
   }
 
-  [data-lang="en"]{display:none}
-  :root[data-ui-lang="en"] [data-lang="en"]{display:revert}
-  :root[data-ui-lang="en"] [data-lang="vi"]{display:none}
+  /* Hide the inactive language only. Never set `display` on the active one: the
+     element keeps whatever display its own rules give it (.btn, .navgroup li a).
+     `!important` because these selectors must outrank any class rule, now or later. */
+  :root:not([data-ui-lang="en"]) [data-lang="en"]{display:none !important}
+  :root[data-ui-lang="en"] [data-lang="vi"]{display:none !important}
 
   *{box-sizing:border-box}
   html{scroll-behavior:smooth}
