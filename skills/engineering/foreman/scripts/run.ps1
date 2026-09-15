@@ -297,7 +297,9 @@ function Write-Telemetry {
     try {
         if (-not (Test-Path $TelemetryFile)) {
             $header = @("when","iteration","status","seconds","tier","model","turns","cache_read_tokens","cost_usd") -join "`t"
-            Set-Content -Path $TelemetryFile -Value $header -Encoding utf8
+            # -Encoding utf8 writes a BOM on PowerShell 5.1, which lands inside the first column name
+            # and breaks any strict TSV reader. The rows are ASCII; write them without one.
+            [System.IO.File]::WriteAllLines($TelemetryFile, @($header), (New-Object System.Text.UTF8Encoding($false)))
         }
         $row = @(
             (Get-Date -Format o),
@@ -310,7 +312,7 @@ function Write-Telemetry {
             $script:IterCacheRead,
             ("{0:F4}" -f $script:IterCost)
         ) -join "`t"
-        Add-Content -Path $TelemetryFile -Value $row -Encoding utf8
+        [System.IO.File]::AppendAllLines($TelemetryFile, [string[]]@($row), (New-Object System.Text.UTF8Encoding($false)))
     } catch { }   # Measurement must never be able to stop execution.
 }
 
@@ -922,7 +924,7 @@ for ($iteration = $priorIterations + 1; $iteration -le $MaxIterations; $iteratio
     Remove-Item $StatusFile -Force
     Write-RunLog "=== Status: $($status.Word) === $(Get-Date -Format o)"
     Write-Telemetry -Iteration $iteration -Status $status.Word -IterStart $IterStart -Tier $iterTier -Model $iterModel
-    Write-Host ("Status: {0} (iteration took {1}, total elapsed {2}, {3} turns, {4:C2})" -f $status.Word, (Format-Elapsed $IterStart), (Format-Elapsed $RunStart), $script:IterTurns, $script:IterCost) -ForegroundColor Yellow
+    Write-Host ("Status: {0} (iteration took {1}, total elapsed {2}, {3} turns, USD {4:F2})" -f $status.Word, (Format-Elapsed $IterStart), (Format-Elapsed $RunStart), $script:IterTurns, $script:IterCost) -ForegroundColor Yellow
     if ($status.Reason -ne "") { Write-Host $status.Reason }
 
     # Provisioned here too, not only before invoking: bootstrap is the Iteration that FIRST creates
