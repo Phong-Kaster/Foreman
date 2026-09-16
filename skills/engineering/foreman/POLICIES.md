@@ -239,23 +239,21 @@ Three rules keep the pre-check honest, and the third is the one that failed:
 
 The old split still decides which of the three a criterion lands in:
 
-| `machine` | `human` |
+| Closed by a command (`machine`) | Needs a signature (`machine-then-human`, or `human-only` when nothing can drive it) |
 |---|---|
 | Business logic: CRUD correctness, date arithmetic, validation, scoping rules | Appearance: colour, contrast, readability, spacing, alignment |
 | Behaviour and flow: an action reaches the intended screen, state transitions are correct, data survives a restart | Whether a control can actually be **seen and found** |
 | The app builds **and starts without crashing**, each screen opens without throwing | Whether the result looks like what was asked for |
 
 Building is not running. `assembleDebug` proves the code type-checks and says nothing about whether a
-screen renders. Where a device or emulator is available, launch-and-open-each-screen is `machine` and
-should be written that way; where it is not, that is a `human` item.
+screen renders.
 
-**A user-facing capability usually needs one criterion of each class.** "The user can delete a note"
-is two claims: the record is removed (`machine`), and the delete control is visible and reachable
-(`human`). Asserting only the first is how a correctly-wired button ships rendered invisible.
-
-**A DoD covering user-facing behaviour with zero `human` criteria is a defect.** Zero does not mean
-the requirement was specified unusually well; it means the criteria are measuring a layer beneath the
-one the user experiences.
+**A user-facing capability usually needs one criterion of each kind**, and a DoD covering
+user-facing behaviour with **zero** criteria needing a signature is a defect. "The user can delete a
+note" is two claims: the record is removed, and the delete control is visible and reachable.
+Asserting only the first is how a correctly-wired button ships rendered invisible; a zero count does
+not mean the requirement was specified unusually well, it means the criteria are measuring a layer
+beneath the one the user experiences.
 
 When uncertain, classify for a human signature — `machine-then-human` if anything can drive it,
 `human-only` otherwise. The costs are asymmetric: over-classifying costs one look, under-classifying
