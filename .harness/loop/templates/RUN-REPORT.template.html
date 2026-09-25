@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en" data-ui-lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Run Report</title>
+<!--
+  RUN REPORT - rendered by run.ps1 (Write-RunReport), never by the engine (ADR-027, ENGINE.md 14.5).
+  The Runtime substitutes every double-braced placeholder mechanically: counts and metadata as plain
+  text, the five SECTION blocks as HTML converted from the engine's Markdown ledgers. The engine's own
+  words are English; only this page's chrome is bilingual.
+-->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+  :root{
+    --paper:#E7E8E4; --surface:#F4F5F2; --surface-2:#DDDFDA;
+    --ink:#191D1E; --ink-2:#3D4547; --muted:#667072;
+    --rule:#C6CAC4; --rule-soft:#D6D9D3;
+    --accent:#0F5C63; --accent-ink:#0B4750;
+    --ok:#2E6B3A; --partial:#9C6206; --bad:#9A2B22;
+    --f-display:"Archivo","Helvetica Neue",Arial,sans-serif;
+    --f-body:"Source Serif 4",Georgia,"Times New Roman",serif;
+    --f-mono:"JetBrains Mono",ui-monospace,"SF Mono",Consolas,monospace;
+  }
+  @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+    --paper:#14181A; --surface:#1B2023; --surface-2:#232A2D;
+    --ink:#E8EBE9; --ink-2:#BAC3C2; --muted:#8A9694;
+    --rule:#2E373A; --rule-soft:#262E31;
+    --accent:#4FBDC7; --accent-ink:#7FD5DC;
+    --ok:#7CC98A; --partial:#DFA53F; --bad:#E0736A;
+  }}
+  :root[data-theme="dark"]{
+    --paper:#14181A; --surface:#1B2023; --surface-2:#232A2D;
+    --ink:#E8EBE9; --ink-2:#BAC3C2; --muted:#8A9694;
+    --rule:#2E373A; --rule-soft:#262E31;
+    --accent:#4FBDC7; --accent-ink:#7FD5DC;
+    --ok:#7CC98A; --partial:#DFA53F; --bad:#E0736A;
+  }
+  [data-lang="vi"]{display:none}
+  :root[data-ui-lang="vi"] [data-lang="vi"]{display:revert}
+  :root[data-ui-lang="vi"] [data-lang="en"]{display:none}
+
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--f-body);font-size:17px;line-height:1.7;-webkit-font-smoothing:antialiased}
+  .topbar{position:sticky;top:0;z-index:50;background:var(--paper);border-bottom:1px solid var(--rule)}
+  .topbar-inner{max-width:900px;margin:0 auto;padding:9px 28px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+  .topbar .who{font-family:var(--f-mono);font-size:11px;letter-spacing:.11em;text-transform:uppercase;color:var(--muted)}
+  select{font-family:var(--f-mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;padding:4px 26px 4px 9px;color:var(--ink);background-color:var(--surface);border:1px solid var(--rule);border-radius:2px;-webkit-appearance:none;appearance:none;
+    background-image:linear-gradient(45deg,transparent 50%,currentColor 50%),linear-gradient(135deg,currentColor 50%,transparent 50%);
+    background-position:calc(100% - 14px) 52%,calc(100% - 9px) 52%;background-size:5px 5px,5px 5px;background-repeat:no-repeat;cursor:pointer}
+  select option{background:var(--surface);color:var(--ink)}
+  .wrap{max-width:900px;margin:0 auto;padding:0 28px 90px}
+  header.mast{border-bottom:2px solid var(--ink);padding:34px 0 22px}
+  .eyebrow{font-family:var(--f-mono);font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:var(--accent-ink);margin:0 0 12px}
+  h1{font-family:var(--f-display);font-weight:700;font-size:clamp(2rem,5vw,2.9rem);line-height:1.12;letter-spacing:-.02em;margin:0 0 14px}
+  .outcome{display:inline-block;font-family:var(--f-mono);font-size:13px;letter-spacing:.08em;padding:4px 10px;border:1.5px solid currentColor;border-radius:2px;margin:0 0 12px}
+  .outcome.ok{color:var(--ok)} .outcome.partial{color:var(--partial)} .outcome.bad{color:var(--bad)}
+  .reason{font-size:1.05rem;color:var(--ink-2);margin:0 0 18px;max-width:64ch}
+  .facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px 22px;margin:0;font-size:.95rem}
+  .facts dt{font-family:var(--f-mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+  .facts dd{margin:0;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+  .warn{border:1px solid var(--partial);border-left:3px solid var(--partial);background:var(--surface);padding:14px 18px;margin:26px 0 0;font-size:.96rem}
+  .warn strong{color:var(--partial)}
+  .warn p{margin:0}
+  section{margin-top:48px}
+  h2{font-family:var(--f-display);font-weight:700;font-size:1.5rem;line-height:1.3;margin:0 0 4px}
+  h2 .n{font-family:var(--f-mono);font-size:12px;color:var(--muted);font-weight:400;margin-left:8px}
+  .note{margin:0 0 18px;color:var(--muted);font-size:.95rem;max-width:64ch}
+  .md{border-top:1px solid var(--rule);padding-top:14px}
+  .md h3{font-family:var(--f-display);font-weight:600;font-size:1.12rem;margin:26px 0 8px}
+  .md h4,.md h5,.md h6{font-family:var(--f-display);font-weight:600;font-size:1rem;margin:18px 0 6px}
+  .md p{margin:0 0 12px}
+  .md ul,.md ol{margin:0 0 14px;padding-left:22px}
+  .md blockquote{margin:0 0 14px;padding:4px 0 4px 14px;border-left:2px solid var(--rule);color:var(--ink-2)}
+  .md hr{border:none;border-top:1px solid var(--rule-soft);margin:22px 0}
+  .md pre{font-family:var(--f-mono);font-size:12.5px;line-height:1.6;background:var(--surface);border:1px solid var(--rule-soft);padding:10px 14px;overflow-x:auto;margin:0 0 14px}
+  code{font-family:var(--f-mono);font-size:.85em;background:var(--surface-2);padding:.08em .34em;border-radius:2px;overflow-wrap:anywhere}
+  pre code{background:none;padding:0}
+  .scroll{overflow-x:auto;margin:0 0 14px}
+  table{width:100%;border-collapse:collapse;font-size:.92rem}
+  th,td{text-align:left;padding:8px 12px 8px 0;border-bottom:1px solid var(--rule-soft);vertical-align:top}
+  th{font-family:var(--f-mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--rule);font-weight:400}
+  .empty{color:var(--muted);font-size:.95rem}
+  details>summary{cursor:pointer;font-family:var(--f-mono);font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+  footer{margin-top:56px;padding-top:17px;border-top:2px solid var(--ink);font-family:var(--f-mono);font-size:11.5px;color:var(--muted);line-height:1.8}
+  @media (max-width:560px){.topbar-inner,.wrap{padding-left:16px;padding-right:16px}}
+</style>
+</head>
+<body>
+
+<div class="topbar"><div class="topbar-inner">
+  <span class="who">{{REPO}} · <span data-lang="en">run report</span><span data-lang="vi">báo cáo lần chạy</span></span>
+  <select id="lang" aria-label="Language / Ngôn ngữ">
+    <option value="en">English</option>
+    <option value="vi">Tiếng Việt</option>
+  </select>
+</div></div>
+
+<div class="wrap">
+
+<header class="mast">
+  <p class="eyebrow">{{MODE}} · {{BRANCH}}</p>
+  <h1><span data-lang="en">Run Report</span><span data-lang="vi">Báo cáo lần chạy</span></h1>
+  <p class="outcome {{OUTCOME_CLASS}}">{{OUTCOME}}</p>
+  <p class="reason">{{REASON}}</p>
+  <dl class="facts">
+    <div><dt><span data-lang="en">Iterations</span><span data-lang="vi">Số vòng</span></dt><dd>{{ITERATIONS}}</dd></div>
+    <div><dt><span data-lang="en">This session</span><span data-lang="vi">Phiên này</span></dt><dd>{{ELAPSED}}</dd></div>
+    <div><dt><span data-lang="en">Assumptions</span><span data-lang="vi">Giả định</span></dt><dd>{{N_ASSUMPTIONS}}</dd></div>
+    <div><dt><span data-lang="en">Recoverable actions</span><span data-lang="vi">Hành động khôi phục được</span></dt><dd>{{N_RECOVERY}}</dd></div>
+    <div><dt><span data-lang="en">Generated</span><span data-lang="vi">Tạo lúc</span></dt><dd>{{GENERATED}}</dd></div>
+  </dl>
+  <div class="warn">
+    <p data-lang="en"><strong>Read this first.</strong> In Autonomous mode the engine decided alone and ran with every tool allowed except a Deny List. That list is prefix matching over command strings, not a security boundary: it stops an engine that slips while following the rules, not one that routes around them. Review the assumptions and recoverable actions below before you merge anything.</p>
+    <p data-lang="vi"><strong>Đọc phần này trước.</strong> Ở chế độ Tự động, engine tự quyết mọi thứ và chạy với mọi công cụ được phép, trừ một danh sách cấm. Danh sách đó chỉ so khớp tiền tố của chuỗi lệnh, không phải rào an ninh: nó chặn được engine lỡ tay khi đang làm đúng luật, không chặn được engine cố tình lách. Hãy xem các giả định và hành động khôi phục bên dưới trước khi merge bất cứ thứ gì.</p>
+  </div>
+</header>
+
+<section id="assumptions">
+  <h2><span data-lang="en">Decisions the engine made alone</span><span data-lang="vi">Những quyết định engine tự đưa ra</span><span class="n">{{N_ASSUMPTIONS}}</span></h2>
+  <p class="note" data-lang="en">Each is a question a Collaborative run would have asked you. To overturn one, answer its id in <code>.harness/run/DECISIONS.md</code> and re-run, or run its revert command yourself.</p>
+  <p class="note" data-lang="vi">Mỗi mục là một câu mà chế độ Hợp tác lẽ ra đã hỏi bạn. Muốn lật lại, trả lời id của nó trong <code>.harness/run/DECISIONS.md</code> rồi chạy lại, hoặc tự chạy lệnh revert của nó.</p>
+  <div class="md">{{SECTION_ASSUMPTIONS}}</div>
+</section>
+
+<section id="recovery">
+  <h2><span data-lang="en">Actions git cannot undo, and how to undo them</span><span data-lang="vi">Hành động git không tự hoàn tác được, và cách hoàn tác</span><span class="n">{{N_RECOVERY}}</span></h2>
+  <p class="note" data-lang="en">Deletions, snapshots and pushes made through the Recovery Wrappers. Captured copies are in <code>.harness/trash/</code>.</p>
+  <p class="note" data-lang="vi">Các lần xoá, chụp lại và push đi qua wrapper khôi phục. Bản sao đã chụp nằm trong <code>.harness/trash/</code>.</p>
+  <div class="md">{{SECTION_RECOVERY}}</div>
+</section>
+
+<section id="issues">
+  <h2><span data-lang="en">What is not finished, and what waits for a person</span><span data-lang="vi">Những gì chưa xong, và những gì chờ người kiểm tra</span></h2>
+  <p class="note" data-lang="en">From <code>.harness/ISSUES.md</code>: abandoned tasks with their attempts, unfixed review findings, and the <code>human</code> criteria under "Awaiting a person".</p>
+  <p class="note" data-lang="vi">Lấy từ <code>.harness/ISSUES.md</code>: task bị bỏ kèm các lần thử, lỗi review chưa sửa, và các tiêu chí <code>human</code> trong mục "Awaiting a person".</p>
+  <div class="md">{{SECTION_ISSUES}}</div>
+</section>
+
+<section id="dod">
+  <h2><span data-lang="en">Definition of Done</span><span data-lang="vi">Định nghĩa "xong"</span></h2>
+  <p class="note" data-lang="en">The checklist you approved at the start. Evidence for each criterion is in the Loop Branch's commit messages.</p>
+  <p class="note" data-lang="vi">Checklist bạn đã duyệt lúc bắt đầu. Bằng chứng cho từng tiêu chí nằm trong commit message của nhánh Loop.</p>
+  <div class="md">{{SECTION_DOD}}</div>
+</section>
+
+<section id="state">
+  <details>
+    <summary><span data-lang="en">Engine state at the end (STATE.md)</span><span data-lang="vi">Trạng thái engine lúc kết thúc (STATE.md)</span></summary>
+    <div class="md">{{SECTION_STATE}}</div>
+  </details>
+</section>
+
+<footer>
+  <span data-lang="en">Rendered by run.ps1 from the engine's ledgers (ADR-027). Nothing on this page applies itself; merging is always yours.</span>
+  <span data-lang="vi">run.ps1 dựng trang này từ các sổ ghi của engine (ADR-027). Không có gì trên trang tự áp dụng; merge luôn là việc của bạn.</span>
+</footer>
+
+</div>
+
+<script>
+  (function(){
+    var root=document.documentElement, sel=document.getElementById('lang'), KEY='foreman-run-report-lang', lang='en';
+    try{ var saved=localStorage.getItem(KEY); if(saved==='vi'||saved==='en') lang=saved; }catch(e){}
+    function apply(v){ root.setAttribute('data-ui-lang',v); root.setAttribute('lang',v); sel.value=v; }
+    apply(lang);
+    sel.addEventListener('change',function(){ apply(sel.value); try{ localStorage.setItem(KEY,sel.value); }catch(e){} });
+  })();
+</script>
+</body>
+</html>

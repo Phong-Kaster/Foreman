@@ -225,6 +225,36 @@ Describe "run.ps1 quota bound (ADR-012)" {
         } finally { Remove-TestRepo -TestRepo $repo }
     }
 
+    It "does not treat a seven-day warning below the ceiling as a five-hour trip" {
+        $repo = New-TestRepo
+        try {
+            # Field run, 2026-09-24: five_hour 45%, seven_day 88%, CLI warning typed seven_day. The
+            # Runtime slept until the five-hour reset, which could never clear a seven-day warning.
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("WARNED7|CONTINUE|more work", "DONE|kept going")
+            $exit = Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "5", "-NoQuotaWait")
+            $exit | Should Be 0
+        } finally { Remove-TestRepo -TestRepo $repo }
+    }
+
+    It "still stops on the seven-day window once it reaches the ceiling" {
+        $repo = New-TestRepo
+        try {
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("WARNED7|CONTINUE|more work", "DONE|never reached")
+            $exit = Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "5", "-NoQuotaWait", "-QuotaStopPercent", "85")
+            $exit | Should Be 6
+        } finally { Remove-TestRepo -TestRepo $repo }
+    }
+
+    It "stops at the hour budget instead of sleeping past it for a quota reset" {
+        $repo = New-TestRepo
+        try {
+            # QUOTA:95 trips the ceiling; its reset is ~2 s away, beyond a budget of ~0.4 s.
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("QUOTA:95|CONTINUE|more work", "DONE|never reached")
+            $exit = Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "5", "-MaxHours", "0.0001")
+            $exit | Should Be 5
+        } finally { Remove-TestRepo -TestRepo $repo }
+    }
+
     It "waits for the reset and then continues, instead of stopping" {
         $repo = New-TestRepo
         try {
@@ -543,6 +573,445 @@ Describe "run.ps1 protects the human's half of the Decision Queue" {
             Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "2") | Out-Null
 
             (Get-Content (Join-Path $repo ".harness/run/DECISIONS.md") -Raw) | Should Match "Approved - ship it."
+        } finally { Remove-TestRepo -TestRepo $repo }
+    }
+}
+
+Describe "run.ps1 Run Mode switch (ADR-027)" {
+
+    # The mode is how much authority the engine holds, so it lives where the engine cannot write it
+    # and where the Skill can rewrite it mid-run without leaving a dirty tree the engine would revert
+    # as crash debris (ENGINE.md 6.1): the git directory.
+
+    function Get-ModeFile([string]$repo) { Join-Path $repo ".git/foreman-mode" }
+    function Get-RunLogText([string]$repo) {
+        Get-Content (Join-Path $env:TEMP ("loop-run-" + (Split-Path $repo -Leaf) + ".log")) -Raw
+    }
+
+    It "records -Mode Autonomous in the git directory and logs it on every iteration header" {
+        $repo = New-TestRepo
+        try {
+            # Autonomous permissions compile from the real Deny List, as in any installed runtime.
+            New-Item -ItemType Directory -Path (Join-Path $repo ".harness/loop/capabilities") -Force | Out-Null
+            Copy-Item (Join-Path $RepoRootDir ".harness/loop/capabilities/baseline.json") (Join-Path $repo ".harness/loop/capabilities/")
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("CONTINUE|a", "DONE|ok")
+            Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "3", "-Mode", "Autonomous") | Out-Null
+
+            (Get-Content (Get-ModeFile $repo) -TotalCount 1).Trim() | Should Be "Autonomous"
+            $headers = @((Get-RunLogText $repo) -split "`n" | Where-Object { $_ -match '=== Iteration' })
+            $headers.Count | Should Be 2
+            ($headers | Where-Object { $_ -notmatch 'mode Autonomous' }).Count | Should Be 0
+            # Never inside the working tree: .harness/run/ existing before bootstrap would skip it.
+            (Test-Path (Join-Path $repo ".harness/run/MODE")) | Should Be $false
+        } finally { Remove-TestRepo -TestRepo $repo }
+    }
+
+    It "starts a run that has not bootstrapped in Collaborative, whatever the previous run used" {
+        $repo = New-TestRepo
+        try {
+            Set-Content -Path (Get-ModeFile $repo) -Value "Autonomous"
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("DONE|ok")
+            Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "2") | Out-Null
+
+            (Get-Content (Get-ModeFile $repo) -TotalCount 1).Trim() | Should Be "Collaborative"
+            (Get-RunLogText $repo) | Should Match 'mode Collaborative'
+        } finally { Remove-TestRepo -TestRepo $repo }
+    }
+
+    It "keeps the mode of a run already in progress when relaunched without -Mode" {
+        $repo = New-TestRepo
+        try {
+            New-Item -ItemType Directory -Path (Join-Path $repo ".harness/run") -Force | Out-Null
+            # Autonomous permissions compile from the real Deny List, as in any installed runtime.
+            New-Item -ItemType Directory -Path (Join-Path $repo ".harness/loop/capabilities") -Force | Out-Null
+            Copy-Item (Join-Path $RepoRootDir ".harness/loop/capabilities/baseline.json") (Join-Path $repo ".harness/loop/capabilities/")
+            Set-Content -Path (Get-ModeFile $repo) -Value "Autonomous"
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("DONE|ok")
+            Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "2") | Out-Null
+
+            (Get-Content (Get-ModeFile $repo) -TotalCount 1).Trim() | Should Be "Autonomous"
+            (Get-RunLogText $repo) | Should Match 'mode Autonomous'
+        } finally { Remove-TestRepo -TestRepo $repo }
+    }
+
+    It "picks up a mode switch written mid-run at the next iteration, without being overwritten by -Mode" {
+        $repo = New-TestRepo
+        try {
+            # Autonomous permissions compile from the real Deny List, as in any installed runtime.
+            New-Item -ItemType Directory -Path (Join-Path $repo ".harness/loop/capabilities") -Force | Out-Null
+            Copy-Item (Join-Path $RepoRootDir ".harness/loop/capabilities/baseline.json") (Join-Path $repo ".harness/loop/capabilities/")
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("SETMODE:Autonomous|CONTINUE|a", "CONTINUE|b", "DONE|ok")
+            Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "4", "-Mode", "Collaborative") | Out-Null
+
+            $log = Get-RunLogText $repo
+            $log | Should Match 'mode switched: Collaborative -> Autonomous'
+            $headers = @($log -split "`n" | Where-Object { $_ -match '=== Iteration' })
+            $headers[0] | Should Match 'mode Collaborative'
+            $headers[1] | Should Match 'mode Autonomous'
+            $headers[2] | Should Match 'mode Autonomous'
+        } finally { Remove-TestRepo -TestRepo $repo }
+    }
+
+    It "denies the engine Edit and Write on the mode file" {
+        $repo = New-TestRepo
+        try {
+            $argLog = Join-Path $repo "args.txt"
+            $env:FAKE_CLAUDE_ARGLOG = $argLog
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("DONE|ok")
+            Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "2") | Out-Null
+
+            $recorded = (Get-Content $argLog -Raw)
+            $settingsPath = ($recorded -split '--settings\s+')[1].Split(' ')[0].Trim()
+            $settings = Get-Content $settingsPath -Raw | ConvertFrom-Json
+            ($settings.permissions.deny -contains "Edit(.git/foreman-mode)") | Should Be $true
+            ($settings.permissions.deny -contains "Write(.git/foreman-mode)") | Should Be $true
+        } finally {
+            Remove-Item Env:\FAKE_CLAUDE_ARGLOG -ErrorAction SilentlyContinue
+            Remove-TestRepo -TestRepo $repo
+        }
+    }
+
+    It "refuses a mode it does not know" {
+        $repo = New-TestRepo
+        try {
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("DONE|ok")
+            $code = Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-Mode", "Yolo")
+            $code | Should Not Be 0
+            (Test-Path (Get-ModeFile $repo)) | Should Be $false
+        } finally { Remove-TestRepo -TestRepo $repo }
+    }
+}
+
+Describe "run.ps1 dirties the tree with DECISIONS.md, and ENGINE.md 6.1 knows it" {
+
+    # The Runtime provisions DECISIONS.md AFTER the bootstrap Iteration has committed (the directory
+    # does not exist before it), so the Iteration after bootstrap always enters on a dirty tree - and
+    # ENGINE.md 6.1 used to read any dirty tree as crash debris to salvage or revert. The same holds
+    # after every answer the human writes. This pins both halves: the dirt is real, and the spec
+    # names it as never-debris.
+
+    It "leaves DECISIONS.md as the only dirt the next Iteration finds after a bootstrap checkpoint" {
+        $repo = New-TestRepo
+        try {
+            $statusLog = Join-Path $env:TEMP ("foreman-status-" + (Split-Path $repo -Leaf) + ".txt")
+            $env:FAKE_CLAUDE_GITSTATUSLOG = $statusLog
+            # The queue file lives outside the repo so it is not itself dirt.
+            $queue = Join-Path $env:TEMP ("foreman-queue-" + (Split-Path $repo -Leaf) + ".txt")
+            Set-Content -Path $queue -Value @("COMMIT|CONTINUE|bootstrap", "DONE|ok")
+            $env:FAKE_CLAUDE_QUEUE = $queue
+            Push-Location $repo
+            try {
+                & powershell -NoProfile -ExecutionPolicy Bypass -File $RunPs1 -ClaudeCommand $FakeClaude -QuietEngine -MaxIterations 3 | Out-Null
+            } finally { Pop-Location }
+
+            $entries = @(Get-Content $statusLog)
+            $entries[1] | Should Be "entry: ?? .harness/run/DECISIONS.md"
+        } finally {
+            Remove-Item Env:\FAKE_CLAUDE_GITSTATUSLOG -ErrorAction SilentlyContinue
+            Remove-Item $statusLog, $queue -ErrorAction SilentlyContinue
+            Remove-TestRepo -TestRepo $repo
+        }
+    }
+
+    It "has ENGINE.md 6.1 exempt DECISIONS.md from crash-debris recovery" {
+        $spec = Get-Content (Join-Path $RepoRootDir ".harness/loop/ENGINE.md") -Raw
+        $recover = ($spec -split '## 6\.1 Recover')[1].Split([string[]]@('## 6.2'), 'None')[0]
+        $recover | Should Match 'DECISIONS\.md.{0,40}never debris'
+    }
+}
+
+Describe "Recovery Wrappers (ENGINE.md 14.3, ADR-027)" {
+
+    # Autonomous mode lets the engine take destructive actions only through these wrappers, on the
+    # promise that each one is captured first and can be put back. These tests hold them to that:
+    # perform the action, then run the recorded restore command and check the original is back.
+
+    $BinDir = Join-Path $RepoRootDir ".harness/loop/bin"
+
+    function Invoke-Wrapper([string]$repo, [string]$name, [string[]]$wrapperArgs) {
+        Push-Location $repo
+        try {
+            & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $BinDir $name) @wrapperArgs 2>&1 | Out-Null
+            return $LASTEXITCODE
+        } finally { Pop-Location }
+    }
+    function Get-RestoreCommands([string]$repo) {
+        # The leading comma stops PowerShell unrolling a one-element array into a bare string.
+        return ,@(Get-Content (Join-Path $repo ".harness/run/RECOVERY.md") | Where-Object { $_ -match '^- \*\*Restore:\*\* `(.+)`$' } | ForEach-Object { $Matches[1] })
+    }
+
+    It "trash moves a path outside the repo into .harness/trash and its restore command brings it back" {
+        $repo = New-TestRepo
+        $outside = Join-Path $env:TEMP ("foreman-outside-" + [guid]::NewGuid().ToString("N").Substring(0, 8))
+        try {
+            New-Item -ItemType Directory -Path (Join-Path $outside "sub") -Force | Out-Null
+            Set-Content -Path (Join-Path $outside "sub/data.txt") -Value "precious"
+
+            Invoke-Wrapper $repo "foreman-trash.ps1" @("-Path", $outside) | Should Be 0
+            (Test-Path $outside) | Should Be $false
+
+            $restore = Get-RestoreCommands $repo
+            $restore.Count | Should Be 1
+            Invoke-Expression $restore[0]
+            (Get-Content (Join-Path $outside "sub/data.txt")) | Should Be "precious"
+        } finally {
+            Remove-Item $outside -Recurse -Force -ErrorAction SilentlyContinue
+            Remove-TestRepo -TestRepo $repo
+        }
+    }
+
+    It "trash keeps the captured copy out of git and out of the dirty tree" {
+        $repo = New-TestRepo
+        $outside = Join-Path $env:TEMP ("foreman-outside-" + [guid]::NewGuid().ToString("N").Substring(0, 8))
+        try {
+            Set-Content -Path $outside -Value "x"
+            Invoke-Wrapper $repo "foreman-trash.ps1" @("-Path", $outside) | Should Be 0
+            Push-Location $repo
+            try { $dirty = @(& git status --porcelain --untracked-files=all) } finally { Pop-Location }
+            # Only the ledger is new; the trash is excluded through .git/info/exclude.
+            ($dirty | Where-Object { $_ -match 'trash' }).Count | Should Be 0
+            ($dirty -join ';') | Should Match 'RECOVERY\.md'
+        } finally {
+            Remove-Item $outside -Force -ErrorAction SilentlyContinue
+            Remove-TestRepo -TestRepo $repo
+        }
+    }
+
+    It "trash refuses the repository itself and a drive root" {
+        $repo = New-TestRepo
+        try {
+            Invoke-Wrapper $repo "foreman-trash.ps1" @("-Path", $repo) | Should Not Be 0
+            Invoke-Wrapper $repo "foreman-trash.ps1" @("-Path", "C:\") | Should Not Be 0
+            (Test-Path (Join-Path $repo "seed.txt")) | Should Be $true
+        } finally { Remove-TestRepo -TestRepo $repo }
+    }
+
+    It "snapshot captures a file whose restore command undoes a later overwrite" {
+        $repo = New-TestRepo
+        try {
+            $db = Join-Path $repo "notes.db"
+            Set-Content -Path $db -Value "original rows"
+            Invoke-Wrapper $repo "foreman-snapshot.ps1" @("-Path", $db) | Should Be 0
+            Set-Content -Path $db -Value "dropped"
+
+            Invoke-Expression (Get-RestoreCommands $repo)[0]
+            (Get-Content $db) | Should Be "original rows"
+        } finally { Remove-TestRepo -TestRepo $repo }
+    }
+
+    It "push refuses any branch that is not a Loop Branch" {
+        $repo = New-TestRepo
+        try {
+            Invoke-Wrapper $repo "foreman-push.ps1" @() | Should Not Be 0
+            (Test-Path (Join-Path $repo ".harness/run/RECOVERY.md")) | Should Be $false
+        } finally { Remove-TestRepo -TestRepo $repo }
+    }
+
+    It "push records the remote's previous SHA, and its restore command puts the remote back" {
+        $repo = New-TestRepo
+        $remote = Join-Path $env:TEMP ("foreman-remote-" + [guid]::NewGuid().ToString("N").Substring(0, 8))
+        try {
+            & git init --bare --quiet $remote 2>$null | Out-Null
+            Push-Location $repo
+            try {
+                & git remote add origin $remote
+                & git checkout --quiet -b loop/demo 2>$null
+                & git push --quiet origin HEAD:refs/heads/loop/demo 2>$null
+                $first = (& git rev-parse HEAD).Trim()
+                Set-Content -Path "more.txt" -Value "phase 1"
+                & git add -A; & git -c user.email=t@l -c user.name=t commit --quiet -m "phase 1"
+            } finally { Pop-Location }
+
+            Invoke-Wrapper $repo "foreman-push.ps1" @() | Should Be 0
+            Push-Location $repo
+            try {
+                ((& git ls-remote origin refs/heads/loop/demo) -split '\s+')[0] | Should Not Be $first
+                Invoke-Expression (Get-RestoreCommands $repo)[0] 2>$null
+                ((& git ls-remote origin refs/heads/loop/demo) -split '\s+')[0] | Should Be $first
+            } finally { Pop-Location }
+        } finally {
+            Remove-Item $remote -Recurse -Force -ErrorAction SilentlyContinue
+            Remove-TestRepo -TestRepo $repo
+        }
+    }
+}
+
+Describe "run.ps1 in Autonomous mode (ADR-027)" {
+
+    function Get-CompiledSettings([string]$argLog) {
+        $recorded = (Get-Content $argLog -Raw)
+        $settingsPath = ($recorded -split '--settings\s+')[1].Split(' ')[0].Trim()
+        return (Get-Content $settingsPath -Raw | ConvertFrom-Json)
+    }
+    function Copy-RealBaseline([string]$repo) {
+        New-Item -ItemType Directory -Path (Join-Path $repo ".harness/loop/capabilities") -Force | Out-Null
+        Copy-Item (Join-Path $RepoRootDir ".harness/loop/capabilities/baseline.json") (Join-Path $repo ".harness/loop/capabilities/baseline.json")
+    }
+    function Copy-ReportTemplate([string]$repo) {
+        New-Item -ItemType Directory -Path (Join-Path $repo ".harness/loop/templates") -Force | Out-Null
+        Copy-Item (Join-Path $RepoRootDir ".harness/loop/templates/RUN-REPORT.template.html") (Join-Path $repo ".harness/loop/templates/")
+    }
+
+    It "tells the engine its mode in the prompt, never in the system prompt" {
+        $repo = New-TestRepo
+        try {
+            $argLog = Join-Path $repo "args.txt"
+            $env:FAKE_CLAUDE_ARGLOG = $argLog
+            Copy-RealBaseline $repo
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("DONE|ok")
+            Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "2", "-Mode", "Autonomous") | Out-Null
+            (Get-Content $argLog -Raw) | Should Match "Run Mode: Autonomous\."
+        } finally {
+            Remove-Item Env:\FAKE_CLAUDE_ARGLOG -ErrorAction SilentlyContinue
+            Remove-TestRepo -TestRepo $repo
+        }
+    }
+
+    It "compiles every tool as allowed, the Deny List and the immutable rules as denied" {
+        $repo = New-TestRepo
+        try {
+            $argLog = Join-Path $repo "args.txt"
+            $env:FAKE_CLAUDE_ARGLOG = $argLog
+            Copy-RealBaseline $repo
+            New-Item -ItemType Directory -Path (Join-Path $repo ".harness/knowledge") -Force | Out-Null
+            Set-Content -Path (Join-Path $repo ".harness/knowledge/capabilities.json") -Value '{"entries":[{"intent":"repo-specific denial","deny":["Bash(./deploy.sh*)"]}]}'
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("DONE|ok")
+            Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "2", "-Mode", "Autonomous") | Out-Null
+
+            $settings = Get-CompiledSettings $argLog
+            ($settings.permissions.allow -contains "Bash") | Should Be $true
+            ($settings.permissions.deny -contains "Bash(git push*)") | Should Be $true
+            ($settings.permissions.deny -contains "Bash(npm publish*)") | Should Be $true
+            ($settings.permissions.deny -contains "Bash(./deploy.sh*)") | Should Be $true
+            ($settings.permissions.deny -contains "Write(.harness/loop/**)") | Should Be $true
+            ($settings.permissions.deny -contains "Write(.git/foreman-mode)") | Should Be $true
+        } finally {
+            Remove-Item Env:\FAKE_CLAUDE_ARGLOG -ErrorAction SilentlyContinue
+            Remove-TestRepo -TestRepo $repo
+        }
+    }
+
+    It "leaves Collaborative permissions exactly as the ledgers say" {
+        $repo = New-TestRepo
+        try {
+            $argLog = Join-Path $repo "args.txt"
+            $env:FAKE_CLAUDE_ARGLOG = $argLog
+            Copy-RealBaseline $repo
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("DONE|ok")
+            Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "2") | Out-Null
+
+            $settings = Get-CompiledSettings $argLog
+            ($settings.permissions.allow -contains "Bash") | Should Be $false
+            ($settings.permissions.allow -contains "Bash(git status*)") | Should Be $true
+            ($settings.permissions.deny -contains "Bash(npm publish*)") | Should Be $false
+        } finally {
+            Remove-Item Env:\FAKE_CLAUDE_ARGLOG -ErrorAction SilentlyContinue
+            Remove-TestRepo -TestRepo $repo
+        }
+    }
+
+    It "ends DONE_PARTIAL with exit 7 and a Run Report that git never sees" {
+        $repo = New-TestRepo
+        try {
+            Copy-RealBaseline $repo; Copy-ReportTemplate $repo
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("DONE_PARTIAL|two criteria await a person")
+            $code = Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "2", "-Mode", "Autonomous")
+            $code | Should Be 7
+
+            $report = Get-Content (Join-Path $repo "RUN-REPORT.html") -Raw
+            $report | Should Match 'DONE_PARTIAL'
+            $report | Should Match 'two criteria await a person'
+            $report | Should Not Match '\{\{'
+            Push-Location $repo
+            try { (@(& git status --porcelain) -join ';') | Should Not Match 'RUN-REPORT' } finally { Pop-Location }
+        } finally { Remove-TestRepo -TestRepo $repo }
+    }
+
+    It "renders the ledgers into the report, HTML-escaped" {
+        $repo = New-TestRepo
+        try {
+            Copy-RealBaseline $repo; Copy-ReportTemplate $repo
+            New-Item -ItemType Directory -Path (Join-Path $repo ".harness/run") -Force | Out-Null
+            $tick = [char]96
+            Set-Content -Path (Join-Path $repo ".harness/run/ASSUMPTIONS.md") -Value @("# ASSUMPTIONS", "", "## A-001 - chose Room over SQLDelight", "", "- **Tier:** 2", ("- **Revert:** " + $tick + "git revert abc123" + $tick), "", "Evil <script>alert(1)</script> text")
+            Set-Content -Path (Join-Path $repo ".harness/run/RECOVERY.md") -Value @("# RECOVERY", "", "## R-001 - deleted", "", "## R-002 - pushed loop/x")
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("DONE|ok")
+            Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "2", "-Mode", "Autonomous") | Out-Null
+
+            $report = Get-Content (Join-Path $repo "RUN-REPORT.html") -Raw
+            $report | Should Match 'A-001 - chose Room over SQLDelight'
+            $report | Should Match '<code>git revert abc123</code>'
+            $report | Should Match '&lt;script&gt;'
+            $report | Should Not Match '<script>alert'
+            $report | Should Match '<dd>1</dd>'
+            $report | Should Match '<dd>2</dd>'
+        } finally { Remove-TestRepo -TestRepo $repo }
+    }
+
+    It "reads DoD.md from history once the Cleanup Commit has removed .harness/run/" {
+        $repo = New-TestRepo
+        try {
+            Copy-RealBaseline $repo; Copy-ReportTemplate $repo
+            Push-Location $repo
+            try {
+                New-Item -ItemType Directory -Path ".harness/run" -Force | Out-Null
+                Set-Content -Path ".harness/run/DoD.md" -Value "criterion 7: notes survive a restart"
+                & git add -A; & git -c user.email=t@l -c user.name=t commit --quiet -m "phase"
+                & git rm -r --quiet .harness/run; & git -c user.email=t@l -c user.name=t commit --quiet -m "cleanup"
+            } finally { Pop-Location }
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("DONE|verified")
+            Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "2", "-Mode", "Autonomous") | Out-Null
+
+            (Get-Content (Join-Path $repo "RUN-REPORT.html") -Raw) | Should Match 'criterion 7: notes survive a restart'
+        } finally { Remove-TestRepo -TestRepo $repo }
+    }
+
+    It "backs off past the crash limit instead of stopping" {
+        $repo = New-TestRepo
+        try {
+            Copy-RealBaseline $repo
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("CRASH", "CRASH", "CRASH", "DONE|recovered")
+            $code = Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "6", "-MaxConsecutiveCrashes", "2", "-CrashBackoffSeconds", "0", "-Mode", "Autonomous")
+            $code | Should Be 0
+        } finally { Remove-TestRepo -TestRepo $repo }
+    }
+
+    It "still stops at the crash limit in Collaborative mode" {
+        $repo = New-TestRepo
+        try {
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("CRASH", "CRASH", "CRASH", "DONE|recovered")
+            $code = Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "6", "-MaxConsecutiveCrashes", "2", "-CrashBackoffSeconds", "0")
+            $code | Should Be 2
+        } finally { Remove-TestRepo -TestRepo $repo }
+    }
+
+    It "stops at the hour budget with exit 5 and still writes the report" {
+        $repo = New-TestRepo
+        try {
+            Copy-RealBaseline $repo; Copy-ReportTemplate $repo
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("CONTINUE|a", "CONTINUE|b", "CONTINUE|c")
+            $code = Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "5", "-MaxHours", "0.00001", "-Mode", "Autonomous")
+            $code | Should Be 5
+            (Get-Content (Join-Path $repo "RUN-REPORT.html") -Raw) | Should Match 'Hour budget'
+        } finally { Remove-TestRepo -TestRepo $repo }
+    }
+
+    It "fails cleanly, instead of falling back to Collaborative, when the Deny List is missing" {
+        $repo = New-TestRepo
+        try {
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("DONE|ok")
+            $code = Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "2", "-Mode", "Autonomous")
+            $code | Should Be 4
+        } finally { Remove-TestRepo -TestRepo $repo }
+    }
+
+    It "writes no report in Collaborative mode" {
+        $repo = New-TestRepo
+        try {
+            Copy-ReportTemplate $repo
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("DONE|ok")
+            Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "2") | Out-Null
+            (Test-Path (Join-Path $repo "RUN-REPORT.html")) | Should Be $false
         } finally { Remove-TestRepo -TestRepo $repo }
     }
 }

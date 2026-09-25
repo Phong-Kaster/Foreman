@@ -21,8 +21,15 @@
       QUOTA:<pct>|<directive>  -> emits rate_limit_event at <pct> utilization on five_hour,
                                   then behaves as <directive> (e.g. QUOTA:95|CONTINUE|more work)
       QUOTA7:<pct>|<directive> -> same, but the utilization lands on the seven_day window
+      WARNED7|<directive>      -> allowed_warning typed seven_day (five_hour 45%, seven_day 88%),
+                                  then behaves as <directive>
       REJECTED                 -> rate_limit_event with status=rejected, writes no status
                                   (an invocation the usage limit refused to run)
+      COMMIT|<directive>       -> writes .harness/run/STATE.md, commits everything (a Stable
+                                  Checkpoint), then behaves as <directive>
+      SETMODE:<mode>|<directive> -> rewrites <git-dir>/foreman-mode, as the Skill does to switch a
+                                  live run, then behaves as <directive>
+                                  (e.g. SETMODE:Autonomous|CONTINUE|more work)
 
     An empty or missing queue writes nothing (a crash), so an unconfigured test fails loudly
     rather than silently looping.
@@ -51,6 +58,13 @@ if ($env:FAKE_CLAUDE_ARGLOG) {
     try { Add-Content -Path $env:FAKE_CLAUDE_ARGLOG -Value ($args -join ' ') } catch {}
 }
 
+# Optional: record the working tree as the engine finds it on entry - what ENGINE.md 6.1 inspects
+# to decide whether the previous invocation left crash debris.
+if ($env:FAKE_CLAUDE_GITSTATUSLOG) {
+    $porcelain = @(& git status --porcelain --untracked-files=all 2>$null) -join ';'
+    try { Add-Content -Path $env:FAKE_CLAUDE_GITSTATUSLOG -Value ("entry: " + $porcelain) } catch {}
+}
+
 $RepoRoot = (Get-Location).Path
 $RunDir = Join-Path (Join-Path $RepoRoot ".harness") "run"
 if (-not (Test-Path $RunDir)) { New-Item -ItemType Directory -Path $RunDir -Force | Out-Null }
@@ -67,7 +81,7 @@ Set-Content -Path $QueueFile -Value $rest
 
 # ---------- emitters ----------
 function Emit-RateLimit {
-    param([double]$FiveHour, [double]$SevenDay, [string]$Status = "allowed")
+    param([double]$FiveHour, [double]$SevenDay, [string]$Status = "allowed", [string]$Type = "five_hour")
     # resetsAt is deliberately in the near future so waiting tests stay fast.
     $resets = [int][double]::Parse((Get-Date).ToUniversalTime().Subtract([datetime]'1970-01-01').TotalSeconds) + 2
     $obj = @{
@@ -75,7 +89,7 @@ function Emit-RateLimit {
         session_id = "fake-session"
         rate_limit_info = @{
             status = $Status
-            rateLimitType = "five_hour"
+            rateLimitType = $Type
             resetsAt = $resets
             unifiedWindows = @{
                 five_hour = @{ utilization = $FiveHour; resetsAt = $resets }
@@ -137,6 +151,30 @@ if ($directive -eq "REJECTED") {
 # following directive, exactly as the real CLI does.
 if ($directive -match '^WARNED\|(.+)$') {
     Emit-RateLimit -FiveHour 0.5 -SevenDay 0.2 -Status "allowed_warning"
+    $directive = $Matches[1]
+}
+
+# SETMODE: stands in for the Skill's `/foreman mode ...` rewriting the Run Mode file while this
+# Iteration is still running (ADR-027), then behaves as the following directive.
+if ($directive -match '^SETMODE:([A-Za-z]+)\|(.+)$') {
+    $gitDir = (& git rev-parse --absolute-git-dir 2>$null).Trim()
+    Set-Content -Path (Join-Path $gitDir "foreman-mode") -Value $Matches[1] -Encoding ascii
+    $directive = $Matches[2]
+}
+
+# COMMIT: stands in for the engine's Stable Checkpoint - stage everything and commit, exactly as a
+# real Iteration ends (ENGINE.md 6) - then behaves as the following directive.
+if ($directive -match '^COMMIT\|(.+)$') {
+    $directive = $Matches[1]
+    Set-Content -Path (Join-Path $RunDir "STATE.md") -Value "checkpointed by fake-claude"
+    & git add -A 2>$null | Out-Null
+    & git -c user.email=test@local -c user.name=LoopTest commit --quiet -m "loop(phase-0): fake checkpoint" 2>$null | Out-Null
+}
+
+# WARNED7: the CLI warns about the SEVEN-day window (from 75%) while five-hour is low - the exact
+# event that made a field run sleep until a five-hour reset that could never clear it.
+if ($directive -match '^WARNED7\|(.+)$') {
+    Emit-RateLimit -FiveHour 0.45 -SevenDay 0.88 -Status "allowed_warning" -Type "seven_day"
     $directive = $Matches[1]
 }
 
