@@ -127,14 +127,15 @@ The engine must end every successful invocation by producing exactly one **Execu
 | `DONE` | Goal verified complete by a fresh verifier | Stop — success (exit 0) |
 | `ESCALATE` | Engine healthy; a decision exceeds its authority | Stop — surface `.harness/run/ESCALATION.md` for the question, `.harness/run/DECISIONS.md` for the answer (exit 3) |
 | `FAILED` | Execution itself broken (environment, corruption, resources) | Stop — human repair (exit 4) |
-| *(none — Crash)* | Engine died without reporting | **Watchdog**: re-invoke, up to N consecutive crashes (default 3), then stop (exit 2) |
+| `DONE_PARTIAL` | Autonomous mode only: no work left, verified as far as it goes, but an abandoned task, unsigned `human` criterion or Tier-3 Assumption stops `DONE` | Stop — render the Run Report (exit 7) |
+| *(none — Crash)* | Engine died without reporting | **Watchdog**: re-invoke, up to N consecutive crashes (default 3), then stop (exit 2). Autonomous mode keeps re-invoking with exponential backoff instead |
 
 `ESCALATE` and `FAILED` both stop; they differ in what the human is asked to do — a **decision** vs a **repair**.
 
 The runtime owns exactly two safety bounds, both mechanical and judgment-free:
 
 - **Watchdog** — an engine cannot supervise its own death; the crash counter resets on any reported status.
-- **Iteration budget** (default 50/run) — stops an engine looping `CONTINUE` forever on an impossible goal. Budget exhaustion produces a deterministic report (exit 5), never an interpretation of task failure. Counted from commits already on the Loop Branch, not a process-local variable, so it survives a restart across `ESCALATE`, a Crash-limit, or a quota wait ([ADR-024](./adr/ADR-024-the-iteration-budget-is-counted-from-commits-not-a-process-variable.md)).
+- **Iteration budget** (default 50/run, plus an optional `-MaxHours` wall-clock bound) — stops an engine looping `CONTINUE` forever on an impossible goal. Budget exhaustion produces a deterministic report (exit 5), never an interpretation of task failure. Counted from commits already on the Loop Branch, not a process-local variable, so it survives a restart across `ESCALATE`, a Crash-limit, or a quota wait ([ADR-024](./adr/ADR-024-the-iteration-budget-is-counted-from-commits-not-a-process-variable.md)).
 
 ---
 
@@ -146,11 +147,13 @@ There is no conversation to reply to — each iteration is a fresh process. Huma
 
 V1 implementation, in **two files with one writer each** ([ADR-025](./adr/ADR-025-the-decision-queue-splits-into-an-engine-owned-and-a-human-owned-file.md)): `.harness/run/ESCALATION.md` — question, context, options considered, engine recommendation, structured capability proposals — is the engine's own log. `.harness/run/DECISIONS.md` — where the human writes the decision *and its rationale* (the rationale joins the audit trail) — is deny-listed against the engine, mechanically, the same as a Capability Ledger. A human should wait for the run to actually stop (`Status: ESCALATE`) before answering, never for `ESCALATION.md` merely appearing on disk — queuing a decision does not stop the run, so the engine may still be working, and writing to that file itself, well after it is written. The next iteration's first acts: consume any answered id from `DECISIONS.md`, log it to `AMENDMENTS.md`, archive the exchange, proceed. Unanswered escalation → re-emit `ESCALATE` and stop again — mechanically unambiguous.
 
-At most **one pending escalation at a time** (V1): the engine hard-stops on Tier 2, so parallel questions cannot arise.
+Escalation Requests **queue**: the engine marks the tasks a question blocks, keeps working on everything else, and stops only when no unblocked work remains ([ADR-007](./adr/ADR-007-non-blocking-progress.md)), so one stop can carry several questions. (Earlier versions of this page said "at most one pending escalation at a time"; that described the V1 hard stop, which ADR-007 replaced.)
 
 DoD approval is not a special mechanism — it is simply the first Escalation Request of every run. All policy changes cross the same boundary.
 
-**The Skill mediates this contract; it does not replace it.** When the Skill is the operating surface, it reads `.harness/run/ESCALATION.md` itself, presents the question (and the engine's own considered options) as ordinary conversation, and writes the human's decision — and rationale — into the same `## Decision` section a human editing the file by hand would have written. The artifact, the archival into `AMENDMENTS.md`, and the "at most one pending escalation" invariant are all unchanged; only the human-facing transport of the decision differs. A capability approval reached this way can still target either ledger — standing (`.harness/knowledge/capabilities.json`) or goal-scoped (`.harness/run/capabilities.json`) — exactly as a manual approval would.
+**Autonomous mode keeps only that first one** ([ADR-027](./adr/ADR-027-a-run-chooses-collaborative-or-autonomous-mode-at-launch.md)). The human chooses the **Run Mode** at launch and may switch it mid-run; it lives in `.git/foreman-mode`, outside the working tree and deny-listed against the engine. In Autonomous mode every later Tier-2 or Tier-3 question becomes a recorded **Assumption** in `.harness/run/ASSUMPTIONS.md` instead of an Escalation Request, `human` criteria are reported in `ISSUES.md` instead of queued, and the run ends `DONE` or `DONE_PARTIAL` with a Run Report the Runtime renders. A human Decision still outranks any Assumption.
+
+**The Skill mediates this contract; it does not replace it.** When the Skill is the operating surface, it reads `.harness/run/ESCALATION.md` itself, presents the question (and the engine's own considered options) as ordinary conversation, and writes the human's decision — and rationale — into `.harness/run/DECISIONS.md` under the entry's id, exactly where a human editing by hand would. The artifact and the archival into `AMENDMENTS.md` are unchanged; only the human-facing transport of the decision differs. A capability approval reached this way can still target either ledger — standing (`.harness/knowledge/capabilities.json`) or goal-scoped (`.harness/run/capabilities.json`) — exactly as a manual approval would.
 
 ---
 
@@ -160,6 +163,7 @@ There is no `GOAL.md` ([ADR-001](./adr/ADR-001-prd-and-dod-source-of-truth.md)).
 
 - The human approves (and may edit) the DoD at the single mandatory gate. Five minutes reviewing a DoD is the highest-leverage human act in the pipeline — it prevents a multi-hour autonomous run from building a verified-wrong feature.
 - After approval the DoD is **immutable to the engine**: propose changes (Tier 3), never apply them.
+- The DoD also names **what the PRD makes unnecessary** — its **Removals**: screens, permissions, services, dependencies and demo data the repository already ships, each as a `machine` criterion stating absence [ADR-028](./adr/ADR-028-the-definition-of-done-names-what-the-prd-makes-unnecessary.md). Bootstrap first classifies the repository as a *template* (propose removing every unused demo feature) or a *product* (remove only what the PRD replaces or leaves unreachable; ask about the rest). The human approves deletions at the same gate, so whether existing code stays is intent, never an engine judgement.
 - The **Plan** is deliberately *not* approved: execution strategy belongs to the engine. Human owns *what done means*; engine owns *how to get there*.
 
 ### Tiered Mutability
@@ -205,6 +209,8 @@ The trust chain:
 - The **engine requests**: structured proposal in an Escalation Request, including the exact permission rule string.
 - The **human decides**: approve as-is, narrow scope or lifetime, or reject. Approval may reduce a grant, never expand it. V1: the human physically writes the approved entry into the ledger (the boundary made visible); V2: a structured approval flow where the runtime transcribes the approved block *verbatim* — authority placement unchanged.
 - The **runtime enforces**: before every invocation it regenerates the permission settings from the ledgers — a **build artifact, never a source artifact** — concatenating the human-approved rule strings without translation, and always appending immutable deny rules protecting `.harness/loop/`, all ledgers, and the generated settings. A process that could write its own permission file would have all permissions; therefore the engine never can.
+
+**Autonomous mode inverts the model** ([ADR-027](./adr/ADR-027-a-run-chooses-collaborative-or-autonomous-mode-at-launch.md)): every tool is allowed, minus a **Deny List** shipped in `baseline.json` and extended per repository, with the immutable deny rules still on top. Destructive actions it may take go through **Recovery Wrappers** in `.harness/loop/bin/` that capture what is lost and record how to restore it in `.harness/run/RECOVERY.md`. The Trust Chain still holds — the human chose the mode and the list — but what the human approves becomes a list of what is refused rather than of what is allowed.
 
 **Documented limitation (deliberate honesty):** this is a guardrail against accidents and drift — the actual V1 threat — not a security boundary against an adversarial engine. Pattern-matching on shell commands is inherently porous. Hard containment is the VM/sandbox path, available via the runtime's explicit `-DangerouslySkipPermissions` flag for isolated environments.
 

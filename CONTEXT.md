@@ -21,12 +21,16 @@ One Runtime invocation of the Execution Engine: reconstruct context from durable
 _Avoid_: Task, step, turn
 
 **Execution Status**:
-The single value the engine must produce at the end of every successful invocation: CONTINUE, DONE, ESCALATE, or FAILED. The transport (status file, stdout, SDK response…) is an implementation detail, never part of the contract. V1 uses a status file.
+The single value the engine must produce at the end of every successful invocation: CONTINUE, DONE, ESCALATE, or FAILED — plus DONE_PARTIAL in Autonomous mode only. The transport (status file, stdout, SDK response…) is an implementation detail, never part of the contract. V1 uses a status file.
 _Avoid_: Exit code, result, verdict
 
 **ESCALATE**:
 Execution Status meaning the engine is healthy but a decision exceeds its authority (Tier 2, Tier 3, missing product information). Asks the human for a decision.
 _Avoid_: Blocked, paused
+
+**DONE_PARTIAL**:
+Execution Status, Autonomous mode only: no executable work remains and a fresh verifier has re-proved what can be proved, but an abandoned task, an unsigned `human` criterion, or a Tier-3 Assumption stops `DONE`. A clean finish, not a request — nothing waits on an answer. No Cleanup Commit, so `.harness/run/` survives ([ADR-027](./docs/adr/ADR-027-a-run-chooses-collaborative-or-autonomous-mode-at-launch.md)).
+_Avoid_: Partial success, mostly done
 
 **FAILED**:
 Execution Status meaning execution itself is broken (environment problems, repository corruption, exhausted resources). Asks the human for repair.
@@ -84,6 +88,10 @@ _Avoid_: Setup, init, onboarding
 The testable acceptance criteria derived from the PRD and approved by the human. The only human-owned artifact inside `.harness/run/` (`DoD.md`); immutable after approval — the engine may propose changes but never apply them.
 _Avoid_: Acceptance criteria file, goal, DoD checklist
 
+**Removals**:
+The DoD section naming what the repository already ships that the PRD makes unnecessary — screens, navigation entries, permissions, services, dependencies, demo data — each a `machine` criterion stating absence. Approved by the human with the rest of the DoD; afterwards, leaving one in place is a DoD violation. How far it reaches depends on whether Bootstrap classified the repository as a *template* (every demo feature the PRD does not use) or a *product* (only what the PRD replaces or leaves unreachable) ([ADR-028](./docs/adr/ADR-028-the-definition-of-done-names-what-the-prd-makes-unnecessary.md)).
+_Avoid_: Cleanup (the Cleanup Commit removes `.harness/run/`, not product code), dead-code pass
+
 **Plan**:
 The machine-owned execution strategy (`PLAN.md`, `TASKS/`). Fully owned by the engine; evolves through Tier 1 and Tier 2 mutations. The human never approves the plan — only the Definition of Done.
 _Avoid_: Roadmap, backlog
@@ -127,6 +135,26 @@ _Avoid_: Learning, self-improvement (both imply automatic promotion; promotion i
 **Roll-up Summary**:
 The Skill's end-of-run report, produced when a run reaches `DONE`: every Loop Branch in the repository — not only the one that just finished — with its status (done / in-progress / stuck on an unanswered escalation / stale), what it contains, and whether it is merge-ready. A repository can accumulate more than one Loop Branch across separate PRDs over time; the summary exists so the human always sees the full picture, not just the latest run.
 _Avoid_: Report, digest, changelog
+
+**Run Mode**:
+How much of a run's decision-making the human keeps. **Collaborative** (the default): Tier-2 and Tier-3 questions become Escalation Requests and stop the run once no unblocked work remains. **Autonomous**: after the DoD approval, the engine decides alone, records each decision as an Assumption, runs under a Deny List instead of Capability Ledgers, and ends with a Run Report. Chosen by the human at launch (`/foreman --auto` / `--collab`, `run.ps1 -Mode`) and switchable mid-run (`/foreman mode …`); stored in `.git/foreman-mode`, which the engine may never write, because a mode it could write is authority it could grant itself ([ADR-027](./docs/adr/ADR-027-a-run-chooses-collaborative-or-autonomous-mode-at-launch.md)).
+_Avoid_: YOLO mode, unattended mode (Collaborative runs are unattended too, between questions)
+
+**Assumption**:
+A decision the engine made alone in Autonomous mode where a Collaborative run would have raised an Escalation Request. Recorded in `.harness/run/ASSUMPTIONS.md` with its question, options, the option taken, the checkpoint that first depends on it and the `git revert` that undoes it. A Tier-3 Assumption marks the DoD criteria it touches as *assumed*, and an assumed criterion can never make a run `DONE`. A human Decision always outranks an Assumption.
+_Avoid_: Guess, default
+
+**Deny List**:
+Autonomous mode's permission model: every tool allowed, minus a list of denied command prefixes shipped in `baseline.json` and extended per repository. Denies both what no wrapper can make undoable (publishing, deploying, merging, messaging) and the raw forms of what a Recovery Wrapper makes undoable. It is prefix matching over command strings — it stops an engine that slips, not one that routes around it — and is not a security boundary.
+_Avoid_: Blocklist, sandbox
+
+**Recovery Wrapper**:
+A script under `.harness/loop/bin/` through which Autonomous mode performs a destructive action it may take: it captures what is about to be lost into `.harness/trash/`, then appends the capture and the exact restore command to `.harness/run/RECOVERY.md`. `foreman-trash` (delete), `foreman-snapshot` (before overwriting a data file), `foreman-push` (the Loop Branch, where push is granted).
+_Avoid_: Safe command, undo
+
+**Run Report**:
+`RUN-REPORT.html` at the repository root, rendered mechanically by the Runtime — never the engine — on every exit of an Autonomous run, including budget and crash-limit stops: outcome, Assumptions, Recovery entries, Open Issues, the DoD. Excluded from git through `.git/info/exclude`.
+_Avoid_: Summary (the Roll-up Summary is the Skill's cross-branch view)
 
 **Consumer repository**:
 Any repository that installs the loop — either via the Skill (`npx skills@latest add`, then `/foreman`) or by copying `.harness/loop/` directly — and provides a Goal. Foreman never knows the consumer's tech stack.

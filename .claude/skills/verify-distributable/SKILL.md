@@ -25,7 +25,7 @@ for p in "ENGINE.md:ENGINE.md"          "POLICIES.md:POLICIES.md"          "capa
   h2=$(git hash-object "skills/engineering/foreman/${p##*:}")
   [ "$h1" = "$h2" ] || echo "MISMATCH ${p%%:*}"
 done
-for f in .harness/loop/templates/* .harness/loop/agents/*; do
+for f in .harness/loop/templates/* .harness/loop/agents/* .harness/loop/bin/*; do
   t="skills/engineering/foreman/${f#.harness/loop/}"
   [ -f "$t" ] && [ "$(git hash-object "$f")" = "$(git hash-object "$t")" ] || echo "MISMATCH $f"
 done
@@ -47,7 +47,7 @@ no API calls and no real `claude` — the `-ClaudeCommand` seam drives a stub.
 Invoke-Pester -Script @{ Path = 'tests/run.Tests.ps1' } -PassThru
 ```
 
-Expected: **32 passed, 0 failed**. Several `Write-Error` blocks appear in the output — they are the
+Expected: **74 passed, 0 failed**. Several `Write-Error` blocks appear in the output — they are the
 prerequisite tests asserting those exact failures, not test failures. Read the `Passed:`/`Failed:`
 counts, not the presence of red text.
 

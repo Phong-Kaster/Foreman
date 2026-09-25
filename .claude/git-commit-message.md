@@ -14,7 +14,7 @@ have different things to name:
 | Where | Scope is | Written by |
 |---|---|---|
 | **This repository** | an area of the product — `engine`, `runtime`, `policies`, … (below) | you |
-| **A consumer repository** | a task id (`T-007`) or `bootstrap` / `decision` / `knowledge` / `infra` / `complete` | the engine, per `.loop/POLICIES.md` |
+| **A consumer repository** | a task id (`T-007`) or `bootstrap` / `decision` / `knowledge` / `infra` / `complete` | the engine, per `.harness/loop/POLICIES.md` |
 
 > **History note.** Commits before 2026-09-11 use a sentence style with no prefix
 > (`stratify knowledge by owner; domain truth outranks the codebase`). They are legible and are not
@@ -36,7 +36,7 @@ scopes.
 | `capabilities` | The permission model — baseline ledger, risk classes, the trust chain |
 | `knowledge` | The knowledge model — `PROJECT`/`ISSUES`/`DOMAIN`, stack packs under `skills/knowledge/` |
 | `skill` | The `/foreman` skill — `SKILL.md`, packaging, installation |
-| `templates` | `.loop/templates/` — the blueprints for `.ai/` and `knowledge/` |
+| `templates` | `.harness/loop/templates/` — the blueprints for `.harness/run/` and `.harness/knowledge/` |
 | `docs` | `README.md`, `docs/architecture.md`, `docs/consumer-guide.md`, `CONTEXT.md` |
 | `adr` | An ADR added or revised |
 | `tests` | `tests/` — the Pester suite and the `fake-claude` fixture |
@@ -207,7 +207,7 @@ merely cost tokens — it makes the earned lines matter less.
 
 # The two copies must move together
 
-`.loop/` and `skills/engineering/foreman/` are byte-identical copies of the same distributable. A
+`.harness/loop/` and `skills/engineering/foreman/` are byte-identical copies of the same distributable. A
 commit changing one and not the other is broken even though it builds and every test passes — see
 `.claude/distributable-parity.md`, and run `.claude/skills/verify-distributable` before committing.
 Never split the two across separate commits.

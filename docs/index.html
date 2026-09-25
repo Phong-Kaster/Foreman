@@ -261,6 +261,7 @@
           <li><a href="#before-you-start" data-lang="vi">Trước khi bắt đầu</a><a href="#before-you-start" data-lang="en">Before you start</a></li>
           <li><a href="#install" data-lang="vi">Cài đặt một lần</a><a href="#install" data-lang="en">Install once per repo</a></li>
           <li><a href="#start-a-run" data-lang="vi">Bắt đầu một lần chạy</a><a href="#start-a-run" data-lang="en">Then start a run</a></li>
+          <li><a href="#choose-a-mode" data-lang="vi">Chọn chế độ chạy</a><a href="#choose-a-mode" data-lang="en">Choosing a mode</a></li>
           <li><a href="#what-happens-next" data-lang="vi">Điều gì xảy ra tiếp theo</a><a href="#what-happens-next" data-lang="en">What happens next</a></li>
           <li><a href="#watching" data-lang="vi">Theo dõi khi nó chạy</a><a href="#watching" data-lang="en">Watching it work</a></li>
           <li><a href="#when-it-stops" data-lang="vi">Khi nó dừng lại</a><a href="#when-it-stops" data-lang="en">When it stops</a></li>
@@ -409,8 +410,8 @@
             <tr>
               <td data-lang="vi"><strong>Engine + runtime</strong></td>
               <td data-lang="en"><strong>The engine + runtime</strong></td>
-              <td data-lang="vi">Vòng lặp thực sự. Một script PowerShell cố tình "ngu" (<code>run.ps1</code>) chạy Claude Code lặp đi lặp lại, đọc lại <strong>một từ</strong> mỗi lần (<code>CONTINUE</code> / <code>DONE</code> / <code>ESCALATE</code> / <code>FAILED</code>), và phản ứng máy móc. Toàn bộ "suy nghĩ" nằm trong <code>ENGINE.md</code>, một spec được tiêm vào làm system prompt của AI — không bao giờ nằm trong script.</td>
-              <td data-lang="en">The actual loop. A deliberately dumb PowerShell script (<code>run.ps1</code>) that re-runs Claude Code over and over, reads back <strong>one word</strong> each time (<code>CONTINUE</code> / <code>DONE</code> / <code>ESCALATE</code> / <code>FAILED</code>), and reacts mechanically. All the thinking lives in <code>ENGINE.md</code>, a spec injected as the AI's system prompt — never in the script.</td>
+              <td data-lang="vi">Vòng lặp thực sự. Một script PowerShell cố tình "ngu" (<code>run.ps1</code>) chạy Claude Code lặp đi lặp lại, đọc lại <strong>một từ</strong> mỗi lần (<code>CONTINUE</code> / <code>DONE</code> / <code>ESCALATE</code> / <code>FAILED</code>, thêm <code>DONE_PARTIAL</code> ở chế độ Tự động), và phản ứng máy móc. Toàn bộ "suy nghĩ" nằm trong <code>ENGINE.md</code>, một spec được tiêm vào làm system prompt của AI — không bao giờ nằm trong script.</td>
+              <td data-lang="en">The actual loop. A deliberately dumb PowerShell script (<code>run.ps1</code>) that re-runs Claude Code over and over, reads back <strong>one word</strong> each time (<code>CONTINUE</code> / <code>DONE</code> / <code>ESCALATE</code> / <code>FAILED</code>, plus <code>DONE_PARTIAL</code> in Autonomous mode), and reacts mechanically. All the thinking lives in <code>ENGINE.md</code>, a spec injected as the AI's system prompt — never in the script.</td>
               <td><code>.harness/loop/</code></td>
             </tr>
           </tbody>
@@ -501,27 +502,118 @@
       </div>
     </section>
 
+    <section class="sec" id="choose-a-mode">
+      <h3 class="reveal" data-lang="vi">Chọn chế độ chạy: hợp tác hay tự động</h3>
+      <h3 class="reveal" data-lang="en">Choosing a mode: collaborative or autonomous</h3>
+
+      <div data-lang="vi">
+        <p class="reveal">Mỗi lần chạy ở một trong hai chế độ (<a href="https://github.com/Phong-Kaster/Foreman/blob/main/docs/adr/ADR-027-a-run-chooses-collaborative-or-autonomous-mode-at-launch.md" target="_blank" rel="noopener">ADR-027</a>):</p>
+        <ul>
+          <li class="reveal"><strong>Hợp tác</strong> (mặc định) — các quyết định quan trọng dừng lại chờ bạn. Bạn chốt, nó đi tiếp.</li>
+          <li class="reveal"><strong>Tự động</strong> — chỉ hỏi lúc bắt đầu (duyệt checklist), mọi quyết định khác nó tự làm, và cuối lần chạy đưa bạn một báo cáo HTML đầy đủ về mọi thứ nó đã quyết và đã làm.</li>
+        </ul>
+      </div>
+      <div data-lang="en">
+        <p class="reveal">A run is in one of two modes (<a href="https://github.com/Phong-Kaster/Foreman/blob/main/docs/adr/ADR-027-a-run-chooses-collaborative-or-autonomous-mode-at-launch.md" target="_blank" rel="noopener">ADR-027</a>):</p>
+        <ul>
+          <li class="reveal"><strong>Collaborative</strong> (the default) — important decisions stop and wait for you. You decide, it carries on.</li>
+          <li class="reveal"><strong>Autonomous</strong> — it asks only at the start (approving the checklist), makes every other decision itself, and at the end gives you one HTML report of everything it decided and did.</li>
+        </ul>
+      </div>
+
+      <div class="codewrap reveal" data-lang="vi">
+        <pre><code id="code-mode-vi">/foreman --auto Thêm màn hình cài đặt
+/foreman --collab Thêm màn hình cài đặt
+/foreman mode auto
+/foreman mode collab
+/foreman mode</code></pre>
+        <button class="copybtn" data-copy-target="code-mode-vi" aria-label="Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button>
+      </div>
+      <div class="codewrap reveal" data-lang="en">
+        <pre><code id="code-mode-en">/foreman --auto add a settings screen
+/foreman --collab add a settings screen
+/foreman mode auto
+/foreman mode collab
+/foreman mode</code></pre>
+        <button class="copybtn" data-copy-target="code-mode-en" aria-label="Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button>
+      </div>
+
+      <div class="tablewrap reveal">
+        <table>
+          <thead><tr data-lang="vi"><th>Lệnh</th><th>Làm gì</th></tr><tr data-lang="en"><th>Command</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td><code>/foreman --auto &lt;yêu cầu&gt;</code></td>
+              <td data-lang="vi">Bắt đầu một lần chạy mới ở chế độ Tự động. Flag được tách ra; phần sau nó là yêu cầu của bạn, như bình thường.</td>
+              <td data-lang="en">Starts a new run in Autonomous mode. The flag is stripped; everything after it is your requirement, as normal.</td></tr>
+            <tr><td><code>/foreman --collab &lt;yêu cầu&gt;</code></td>
+              <td data-lang="vi">Bắt đầu một lần chạy mới ở chế độ Hợp tác. Giống như không có flag với lần chạy mới, nhưng nói rõ ra.</td>
+              <td data-lang="en">Starts a new run in Collaborative mode. Same as no flag on a new run, but explicit.</td></tr>
+            <tr><td><code>/foreman mode auto</code></td>
+              <td data-lang="vi">Chuyển một lần chạy <strong>đang diễn ra</strong> sang Tự động. Có hiệu lực từ vòng kế tiếp; vòng đang chạy vẫn xong theo chế độ cũ, và log in ra <code>mode switched: Collaborative -&gt; Autonomous</code>.</td>
+              <td data-lang="en">Switches a run <strong>already in progress</strong> to Autonomous. It takes effect at the next cycle; the one running now finishes in the old mode, and the log prints <code>mode switched: Collaborative -&gt; Autonomous</code>.</td></tr>
+            <tr><td><code>/foreman mode collab</code></td>
+              <td data-lang="vi">Chuyển lần chạy đang diễn ra về Hợp tác. Những gì đã quyết thì giữ nguyên; chỉ câu hỏi mới sẽ dừng lại chờ bạn.</td>
+              <td data-lang="en">Switches a run in progress back to Collaborative. Decisions already made stay made; only new questions will stop for you again.</td></tr>
+            <tr><td><code>/foreman mode</code></td>
+              <td data-lang="vi">Cho biết chế độ hiện tại và có lần chạy nào đang diễn ra không.</td>
+              <td data-lang="en">Tells you the current mode and whether a run is in progress.</td></tr>
+            <tr><td><code>/foreman --auto --hours 12 --iterations 300 &lt;yêu cầu&gt;</code></td>
+              <td data-lang="vi">Tự động, kèm ngân sách. Lần chạy Tự động không bao giờ dừng lại hỏi, nên đây là thứ khiến nó dừng sớm: <code>--hours</code> là giới hạn thời gian thực, <code>--iterations</code> thay cho mức mặc định 50 vòng.</td>
+              <td data-lang="en">Autonomous, with budgets. An Autonomous run never stops to ask, so these are what end it early: <code>--hours</code> is a wall-clock limit, <code>--iterations</code> replaces the default 50 cycles.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div data-lang="vi">
+        <p class="reveal">Nên biết:</p>
+        <ul>
+          <li class="reveal"><strong>Lần chạy mới không có flag thì là Hợp tác.</strong> Lần chạy mới không bao giờ thừa hưởng chế độ của lần trước. Lần chạy đang dở, chạy lại không có flag, thì giữ chế độ của nó.</li>
+          <li class="reveal"><strong><code>mode auto</code> cần có lần chạy đang diễn ra.</strong> Không có gì để chuyển thì nó từ chối và bảo bạn bắt đầu bằng <code>--auto</code>.</li>
+          <li class="reveal"><strong>Bạn cũng có thể chuyển ngay lúc nó dừng lại hỏi.</strong> Khi lần chạy Hợp tác dừng với các câu hỏi, một trong các lựa chọn là "chuyển sang Tự động, để engine tự quyết phần còn lại". Việc duyệt checklist không bao giờ nằm trong lựa chọn đó — ở cả hai chế độ, bạn luôn tự duyệt "xong" nghĩa là gì.</li>
+          <li class="reveal"><strong>Cuối lần chạy Tự động bạn nhận được gì:</strong> <code>RUN-REPORT.html</code> ở gốc repo, và skill tóm tắt nó ngay trong chat. Nó liệt kê mọi quyết định engine tự đưa ra (mỗi cái kèm lệnh <code>git revert</code> để hoàn tác), mọi hành động phá huỷ nó đã làm (mỗi cái kèm lệnh khôi phục), những gì chưa xong, và các bước chỉ người mới kiểm tra được. File được tạo ở mọi kiểu kết thúc, kể cả khi hết ngân sách, và git không bao giờ thấy nó.</li>
+          <li class="reveal"><strong>Hành động phá huỷ thì khôi phục được, không bị cấm.</strong> Ở chế độ Tự động, xoá thứ gì ngoài repo, ghi đè file database cục bộ, hay push nhánh Loop (chỉ khi bạn đã cho phép push) đều đi qua một wrapper chép thứ bị mất vào <code>.harness/trash/</code> trước. Publish, deploy, merge và gửi tin nhắn vẫn bị cấm, vì không gì hoàn tác được chúng.</li>
+          <li class="reveal"><strong>Engine không tự đổi chế độ của mình được.</strong> Chế độ nằm ở <code>.git/foreman-mode</code>, ngoài working tree, và engine bị chặn quyền ghi vào đó. Chỉ bạn, qua <code>/foreman</code>, mới chuyển được.</li>
+        </ul>
+      </div>
+      <div data-lang="en">
+        <p class="reveal">Worth knowing:</p>
+        <ul>
+          <li class="reveal"><strong>No flag on a new run means Collaborative.</strong> A new run never inherits the previous run's mode. Without a flag, a run already in progress keeps its mode.</li>
+          <li class="reveal"><strong><code>mode auto</code> needs a run in progress.</strong> With nothing to switch, it refuses and tells you to start with <code>--auto</code> instead.</li>
+          <li class="reveal"><strong>You can also switch when it stops to ask.</strong> When a Collaborative run stops with questions, one of your choices is "switch to Autonomous and let the engine decide the rest". Approving the checklist is never covered by that choice. You always approve what "done" means yourself, in both modes.</li>
+          <li class="reveal"><strong>What you get at the end of an Autonomous run:</strong> <code>RUN-REPORT.html</code> at the repository root, which the skill also summarizes in chat. It lists every decision the engine made alone (each with the <code>git revert</code> that undoes it), every destructive action it took (each with a restore command), what's unfinished, and the checks only a person can do. It's written on every ending, including when a budget runs out, and git never sees it.</li>
+          <li class="reveal"><strong>Destructive actions are recoverable, not forbidden.</strong> In Autonomous mode, deleting outside the repo, overwriting a local database file or pushing the Loop Branch (only if you granted push) goes through a wrapper that copies what's lost into <code>.harness/trash/</code> first. Publishing, deploying, merging and sending messages stay forbidden, because nothing can undo them.</li>
+          <li class="reveal"><strong>The engine can't change its own mode.</strong> The mode lives in <code>.git/foreman-mode</code>, outside your working tree, and the engine is denied write access to it. Only you, through <code>/foreman</code>, can switch it.</li>
+        </ul>
+      </div>
+
+      <div class="callout reveal">
+        <p data-lang="vi"><strong>Nhìn chế độ Tự động cho tỉnh táo.</strong> Nó chạy với mọi công cụ được phép, trừ một danh sách cấm, và danh sách đó chỉ so khớp tiền tố của lệnh: nó chặn được engine lỡ tay, không chặn được engine cố tình lách. Nó cũng còn mới. Phần runtime đã có test, nhưng chưa có lần chạy dài thật nào đi qua nó. Với thứ gì bạn không chịu được việc bị đụng vào, hãy chạy trong VM hoặc container. Chi tiết: <a href="https://github.com/Phong-Kaster/Foreman/blob/main/docs/consumer-guide.md" target="_blank" rel="noopener">consumer guide</a> và <a href="https://github.com/Phong-Kaster/Foreman/blob/main/docs/adr/ADR-027-a-run-chooses-collaborative-or-autonomous-mode-at-launch.md" target="_blank" rel="noopener">ADR-027</a>.</p>
+        <p data-lang="en"><strong>Be clear-eyed about Autonomous mode.</strong> It runs with every tool allowed except a deny list, and that list matches command prefixes: it stops an engine that slips, not one that works around it. It's also new. The runtime side is tested, but no real long run has been through it yet. For anything you can't afford to have touched, run it inside a VM or container. Details: <a href="https://github.com/Phong-Kaster/Foreman/blob/main/docs/consumer-guide.md" target="_blank" rel="noopener">consumer guide</a> and <a href="https://github.com/Phong-Kaster/Foreman/blob/main/docs/adr/ADR-027-a-run-chooses-collaborative-or-autonomous-mode-at-launch.md" target="_blank" rel="noopener">ADR-027</a>.</p>
+      </div>
+    </section>
+
     <section class="sec" id="what-happens-next">
       <h3 class="reveal" data-lang="vi">Điều gì xảy ra tiếp theo</h3>
       <h3 class="reveal" data-lang="en">What happens next</h3>
 
       <div data-lang="vi">
         <div class="stepline reveal"><span class="num">1</span><div class="body"><p><strong>Nó nhìn xung quanh.</strong> Đọc yêu cầu của bạn, khảo sát repo (ngôn ngữ, build tool, quy ước), tạo nhánh, và ghi lại những gì nó tìm ra.</p></div></div>
-        <div class="stepline reveal"><span class="num">2</span><div class="body"><p><strong>Nó hỏi bạn câu hỏi quan trọng duy nhất.</strong> <em>"Đây là checklist của tôi về 'xong' nghĩa là gì — phê duyệt chứ? Và tôi có thể xin quyền chạy lệnh build/test của bạn không?"</em> Đây là điểm dừng <strong>duy nhất</strong> luôn xảy ra. Hãy đọc checklist cho kỹ. Năm phút ở đây là năm phút giá trị nhất của cả lần chạy — nó là thứ ngăn con robot tự tin xây sai thứ suốt ba tiếng đồng hồ.</p></div></div>
+        <div class="stepline reveal"><span class="num">2</span><div class="body"><p><strong>Nó hỏi bạn câu hỏi quan trọng duy nhất.</strong> <em>"Đây là checklist của tôi về 'xong' nghĩa là gì — phê duyệt chứ? Và tôi có thể xin quyền chạy lệnh build/test của bạn không?"</em> Checklist cũng liệt kê những gì nó định <strong>xoá</strong>: màn hình, quyền và thư viện mà yêu cầu của bạn làm cho thừa, ví dụ các màn demo của một khung app mẫu (<a href="https://github.com/Phong-Kaster/Foreman/blob/main/docs/adr/ADR-028-the-definition-of-done-names-what-the-prd-makes-unnecessary.md" target="_blank" rel="noopener">ADR-028</a>). Đây là điểm dừng <strong>duy nhất</strong> luôn xảy ra. Hãy đọc checklist cho kỹ. Năm phút ở đây là năm phút giá trị nhất của cả lần chạy — nó là thứ ngăn con robot tự tin xây sai thứ suốt ba tiếng đồng hồ.</p></div></div>
         <div class="stepline reveal"><span class="num">3</span><div class="body"><p><strong>Nó làm việc, còn bạn xem — hoặc không.</strong> Mọi dòng engine viết ra đều stream vào chat của bạn: file nào đang đụng tới, lệnh nào đang chạy, test có pass không. Đi pha cà phê đi. Nó không bao giờ chiếm terminal của bạn.</p></div></div>
         <div class="stepline reveal"><span class="num">4</span><div class="body"><p><strong>Nó chỉ làm phiền bạn vì lý do thật sự.</strong> Bất cứ điều gì vượt quá thẩm quyền của nó — đổi kiến trúc? yêu cầu mơ hồ? cần một chìa khoá rủi ro? — đến dưới dạng một câu hỏi chat bình thường, kèm các lựa chọn engine tự đề xuất. Bạn trả lời trong chat; nó ghi lại câu trả lời và tiếp tục. Bạn không bao giờ phải mở file để trả lời.</p></div></div>
         <div class="stepline reveal"><span class="num">5</span><div class="body"><p><strong>Nó chứng minh đã xong.</strong> Một lần chạy mới, không viết dòng code nào, kiểm tra lại từng mục checklist, xoá sạch ghi chú nháp khỏi đầu nhánh, và báo cáo <code>DONE</code>.</p></div></div>
         <div class="stepline reveal"><span class="num">6</span><div class="body"><p><strong>Bạn nhận được tóm tắt của mọi nhánh</strong> — không chỉ nhánh này. Cái nào merge được, cái nào vẫn đang chạy, cái nào đang kẹt chờ bạn.</p></div></div>
-        <div class="stepline reveal"><span class="num">7</span><div class="body"><p><strong>Bạn merge.</strong> Luôn là bạn. Engine không bao giờ push, không bao giờ merge, không bao giờ chạm vào nhánh mặc định của bạn.</p></div></div>
+        <div class="stepline reveal"><span class="num">7</span><div class="body"><p><strong>Bạn merge.</strong> Luôn là bạn. Engine không bao giờ merge và không bao giờ chạm vào nhánh mặc định của bạn. Nó chỉ push nhánh của chính nó, và chỉ khi bạn đã cho phép với repo đó.</p></div></div>
       </div>
       <div data-lang="en">
         <div class="stepline reveal"><span class="num">1</span><div class="body"><p><strong>It looks around.</strong> Reads your requirement, inspects the repo (language, build tool, conventions), creates a branch, and writes down what it worked out.</p></div></div>
-        <div class="stepline reveal"><span class="num">2</span><div class="body"><p><strong>It asks you the one important question.</strong> <em>"Here's my checklist of what 'done' means — approve it? And may I have permission to run your build and test commands?"</em> This is the <strong>only</strong> stop that always happens. Read the checklist properly. Five minutes here is the highest-value five minutes of the whole run — it's what stops the robot from confidently building the wrong thing for three hours.</p></div></div>
+        <div class="stepline reveal"><span class="num">2</span><div class="body"><p><strong>It asks you the one important question.</strong> <em>"Here's my checklist of what 'done' means — approve it? And may I have permission to run your build and test commands?"</em> The checklist also lists what it plans to <strong>delete</strong>: screens, permissions and libraries your requirement makes unnecessary, such as a starter template's demo screens (<a href="https://github.com/Phong-Kaster/Foreman/blob/main/docs/adr/ADR-028-the-definition-of-done-names-what-the-prd-makes-unnecessary.md" target="_blank" rel="noopener">ADR-028</a>). This is the <strong>only</strong> stop that always happens. Read the checklist properly. Five minutes here is the highest-value five minutes of the whole run — it's what stops the robot from confidently building the wrong thing for three hours.</p></div></div>
         <div class="stepline reveal"><span class="num">3</span><div class="body"><p><strong>It works, and you watch — or don't.</strong> Every line the engine writes streams into your chat: which files it's touching, which commands it's running, whether tests passed. Go make coffee. It never ties up your terminal.</p></div></div>
         <div class="stepline reveal"><span class="num">4</span><div class="body"><p><strong>It interrupts you only for real reasons.</strong> Anything above its pay grade — change the architecture? the requirement is ambiguous? needs a risky key? — arrives as a normal chat question, with the engine's own suggested options as your choices. You answer in chat; it records your answer and carries on. You never open a file to reply.</p></div></div>
         <div class="stepline reveal"><span class="num">5</span><div class="body"><p><strong>It proves it's finished.</strong> A fresh run that wrote none of the code re-tests every checklist item, wipes its scratch notes off the branch tip, and reports <code>DONE</code>.</p></div></div>
         <div class="stepline reveal"><span class="num">6</span><div class="body"><p><strong>You get a summary of every branch</strong> — not just this one. What's mergeable, what's still going, what's stuck waiting on you.</p></div></div>
-        <div class="stepline reveal"><span class="num">7</span><div class="body"><p><strong>You merge.</strong> Always you. The engine never pushes, never merges, never touches your default branch.</p></div></div>
+        <div class="stepline reveal"><span class="num">7</span><div class="body"><p><strong>You merge.</strong> Always you. The engine never merges and never touches your default branch. It pushes only its own branch, and only if you allowed that for the repo.</p></div></div>
       </div>
     </section>
 
@@ -558,8 +650,8 @@
     <section class="sec" id="when-it-stops">
       <h3 class="reveal" data-lang="vi">Khi nó dừng lại — và bạn nên làm gì</h3>
       <h3 class="reveal" data-lang="en">When it stops — and what to do</h3>
-      <p class="reveal" data-lang="vi">Năm cách một lần chạy kết thúc. Chỉ hai cái đầu cần bạn làm gì đó:</p>
-      <p class="reveal" data-lang="en">Five ways a run ends. Only the first two need anything from you:</p>
+      <p class="reveal" data-lang="vi">Sáu cách một lần chạy kết thúc. Chỉ hai cái đầu cần bạn làm gì đó:</p>
+      <p class="reveal" data-lang="en">Six ways a run ends. Only the first two need anything from you:</p>
 
       <div class="tablewrap reveal">
         <table>
@@ -580,14 +672,19 @@
               <td data-lang="en">A fresh verifier re-proved every checklist item.</td>
               <td data-lang="vi">Review và merge (xem bên dưới).</td>
               <td data-lang="en">Review and merge (below).</td></tr>
+            <tr><td><code>DONE_PARTIAL</code> (7)</td>
+              <td data-lang="vi">Chỉ ở chế độ Tự động. Không còn việc gì nó làm được và mọi thứ chứng minh được đã được chứng minh lại, nhưng có thứ chặn "xong": một task nó đã bỏ, một bước chỉ người mới kiểm tra được, hoặc một quyết định làm đổi ý nghĩa của yêu cầu.</td>
+              <td data-lang="en">Autonomous mode only. Nothing left it can do and everything provable is re-proved, but something blocks "done": a task it gave up on, a check only a person can do, or a decision that changed what the requirement means.</td>
+              <td data-lang="vi">Đọc <code>RUN-REPORT.html</code>. Lật lại một quyết định hoặc đánh dấu một bước kiểm tra bằng cách trả lời trong chat, rồi chạy tiếp.</td>
+              <td data-lang="en">Read <code>RUN-REPORT.html</code>. Overturn a decision or tick off a check by answering in chat, then continue.</td></tr>
             <tr><td data-lang="vi">Watchdog (2)</td><td data-lang="en">Watchdog (2)</td>
-              <td data-lang="vi">AI chết mà không báo cáo, 3 lần liên tiếp.</td>
-              <td data-lang="en">The AI died without reporting, 3 times in a row.</td>
+              <td data-lang="vi">AI chết mà không báo cáo, 3 lần liên tiếp. Ở chế độ Tự động nó không dừng; nó chờ lâu hơn rồi thử lại.</td>
+              <td data-lang="en">The AI died without reporting, 3 times in a row. In Autonomous mode it doesn't stop; it waits longer and tries again.</td>
               <td data-lang="vi">Thường là sự cố CLI hoặc mạng tạm thời. Chạy lại.</td>
               <td data-lang="en">Usually a transient CLI or network problem. Start it again.</td></tr>
             <tr><td data-lang="vi">Ngân sách (5)</td><td data-lang="en">Budget (5)</td>
-              <td data-lang="vi">Chạm trần 50 chu kỳ.</td>
-              <td data-lang="en">Hit the 50-cycle ceiling.</td>
+              <td data-lang="vi">Chạm trần 50 chu kỳ, hoặc giới hạn <code>--hours</code>.</td>
+              <td data-lang="en">Hit the 50-cycle ceiling, or the <code>--hours</code> limit.</td>
               <td data-lang="vi">Không phải phán quyết về chất lượng công việc — chỉ là điểm dừng xác định trước. Xem <code>.harness/run/STATE.md</code> để biết nó đang ở đâu, rồi tiếp tục.</td>
               <td data-lang="en">Not a verdict on the work — a deterministic stop. Check <code>.harness/run/STATE.md</code> to see where it got to, then continue.</td></tr>
           </tbody>

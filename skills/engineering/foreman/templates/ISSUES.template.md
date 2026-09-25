@@ -35,6 +35,14 @@ _Last updated: <timestamp> - branch `loop/...` - iteration N_
 
 <!-- Major/Minor findings recorded but not acted on. These would otherwise vanish with `.harness/run/`. -->
 
+## Awaiting a person
+
+<!-- Autonomous mode only (ENGINE.md 14.2): the Human Verification Request checklist, written here
+     instead of being queued. One row per unsigned `human` criterion, actionable without reading code. -->
+| # | DoD criterion | Open | Do | Expect |
+|---|---|---|---|---|
+
 ## Assumptions recorded
 
-<!-- Minor ambiguities the engine resolved by assumption rather than by asking. Reversible. -->
+<!-- Minor ambiguities the engine resolved by assumption rather than by asking. Reversible.
+     In Autonomous mode, point at .harness/run/ASSUMPTIONS.md instead of repeating its entries. -->

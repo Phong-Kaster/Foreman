@@ -10,14 +10,15 @@
       1. Compile human-approved Capability Ledgers into fresh permission settings (a build artifact).
       2. Invoke Claude Code once, with .harness/loop/ENGINE.md as appended system prompt.
       3. Read the Execution Status the engine persisted (.harness/run/STATUS.md).
-      4. React: CONTINUE -> invoke again | DONE/ESCALATE/FAILED -> stop | no status -> Watchdog.
+      4. React: CONTINUE -> invoke again | DONE/DONE_PARTIAL/ESCALATE/FAILED -> stop | no status -> Watchdog.
 
     Trust chain: Human -> Capability Ledger -> Runtime Compiler -> Permission Settings -> Engine.
     The engine can never modify .harness/loop/, the ledgers, or the generated settings (deny rules below).
 
 .NOTES
     Run from the consumer repository root. Requires: git, Claude Code CLI, PRD.md.
-    Exit codes: 0=DONE  2=crash limit  3=ESCALATE  4=FAILED  5=iteration budget  6=quota ceiling
+    Exit codes: 0=DONE  2=crash limit  3=ESCALATE  4=FAILED  5=budget (iterations or hours)
+                6=quota ceiling  7=DONE_PARTIAL (Autonomous mode only, ADR-027)
 #>
 
 param(
@@ -26,6 +27,12 @@ param(
     [int]$MaxConsecutiveCrashes = 3,
     # Seconds to wait before re-invoking after a Crash, multiplied by the consecutive crash count.
     [int]$CrashBackoffSeconds = 15,
+    # Wall-clock bound for this invocation of run.ps1, in hours. 0 = no bound (the default, as before).
+    # Meant for Autonomous runs, which never stop to ask and so need a limit the human set up front.
+    [double]$MaxHours = 0,
+    # Autonomous mode does not stop at MaxConsecutiveCrashes; it backs off exponentially instead, up
+    # to this many seconds between attempts (ADR-027).
+    [int]$MaxCrashBackoffSeconds = 1800,
     # Idle timeout: no stream event for this long means a hung invocation. Must exceed the longest
     # legitimate single tool call, because one Bash call emits no events while it runs.
     [int]$MaxIdleMinutes = 20,
@@ -49,6 +56,10 @@ param(
     # Accepts a path relative to the repo root or an absolute path. Leave empty (default) to use
     # whatever PRD.md already sits at the repo root - unchanged from prior behavior.
     [string]$PrdPath = "",
+    # Run Mode (ADR-027). Empty (default) keeps the mode this run already has, or Collaborative for a
+    # run that has not bootstrapped yet. Stored outside the working tree - see Resolve-ModeFile.
+    [ValidateSet("", "Collaborative", "Autonomous")]
+    [string]$Mode = "",
     # Suppress the live engine activity feed (feed is on by default for observability).
     [switch]$QuietEngine,
     # Consenting-adult fast path (ADR-004): full permission bypass, for sandboxed/VM runs only.
@@ -98,6 +109,37 @@ if ($PrdPath -ne "") {
 
 # The fixed, judgment-free user prompt. All intelligence lives in ENGINE.md and the repository.
 $IterationPrompt = "Execute exactly one Iteration according to your Execution Engine Specification, then stop."
+
+# ---------- Run Mode (ADR-027) ----------
+# The mode file lives in the git directory, not in .harness/run/. Two reasons, both mechanical:
+# a .harness/run/ that exists before bootstrap makes the engine skip bootstrap (ENGINE.md 5), and a
+# file the Skill rewrites mid-run inside the working tree is a dirty tree the engine is told to
+# treat as crash debris and revert (ENGINE.md 6.1). Nothing under the git directory is ever
+# committed or seen as debris. The Skill writes it to switch a live run; this script re-reads it
+# every Iteration and never overwrites it except when -Mode is passed explicitly.
+function Resolve-ModeFile {
+    $gitDir = & git rev-parse --absolute-git-dir 2>$null
+    if ($LASTEXITCODE -ne 0 -or -not $gitDir) { return $null }
+    return Join-Path $gitDir.Trim() "foreman-mode"
+}
+function Get-RunMode {
+    if ($ModeFile -and (Test-Path $ModeFile)) {
+        $value = (Get-Content $ModeFile -TotalCount 1)
+        if ($value) { $value = $value.Trim() }
+        if (@("Collaborative", "Autonomous") -contains $value) { return $value }
+    }
+    return "Collaborative"
+}
+$ModeFile = Resolve-ModeFile
+if ($ModeFile) {
+    if ($Mode -ne "") {
+        Set-Content -Path $ModeFile -Value $Mode -Encoding ascii
+    } elseif (-not (Test-Path $RunDir)) {
+        # A run that has not bootstrapped is a new run: it never inherits the previous run's mode.
+        Set-Content -Path $ModeFile -Value "Collaborative" -Encoding ascii
+    }
+}
+$script:RunMode = Get-RunMode
 
 # Run lock: at most ONE Foreman per repository. Two concurrent engines committing to the
 # same branch would corrupt the run - refuse to start if a live instance holds the lock.
@@ -186,6 +228,11 @@ function Compile-PermissionSettings {
         # writes it" true instead of merely documented (ADR-025).
         "Edit(.harness/run/DECISIONS.md)",
         "Write(.harness/run/DECISIONS.md)",
+        # The Run Mode is how much authority the engine holds. An engine able to write it could move
+        # itself from Collaborative to Autonomous - the self-granted expansion Invariant 3 forbids
+        # (ADR-027).
+        "Edit(.git/foreman-mode)",
+        "Write(.git/foreman-mode)",
         # Pushing is capability-gated (ADR-011) and scoped to the Loop Branch. These deny the
         # operations that would make the engine an author on shared history rather than a
         # contributor on its own branch - regardless of what any allow rule grants.
@@ -196,6 +243,31 @@ function Compile-PermissionSettings {
         "Bash(git merge*)",
         "Bash(git rebase*)"
     )
+
+    # Autonomous mode inverts the model (ADR-027): every tool allowed, minus the Deny List shipped in
+    # baseline.json's "autonomous" block, plus any "deny" arrays the human added to the repository or
+    # run ledgers. The immutable rules above still apply on top - deny always wins over allow.
+    if ($script:RunMode -eq "Autonomous") {
+        # Without the Deny List there is nothing to compile an Autonomous run from, and silently falling
+        # back to Collaborative permissions would run a mode the human did not choose. Stop, and say why.
+        $baselinePath = Join-Path $LoopDir "capabilities\baseline.json"
+        $baseline = $null
+        if (Test-Path $baselinePath) { $baseline = Get-Content $baselinePath -Raw | ConvertFrom-Json }
+        if ($null -eq $baseline -or $null -eq $baseline.autonomous) {
+            Write-Host "Autonomous mode needs the Deny List in .harness/loop/capabilities/baseline.json ('autonomous' block), and it is missing. Reinstall the runtime (/foreman re-syncs it), or run Collaborative." -ForegroundColor Red
+            Stop-Run 4 "FAILED" "Autonomous mode could not compile its permissions: baseline.json has no 'autonomous' Deny List."
+        }
+        $allowRules = @($baseline.autonomous.allow)
+        $denyRules += @($baseline.autonomous.deny)
+        foreach ($ledger in $ledgers[1..2]) {
+            if (Test-Path $ledger) {
+                $parsed = Get-Content $ledger -Raw | ConvertFrom-Json
+                foreach ($entry in $parsed.entries) {
+                    foreach ($rule in $entry.deny) { $denyRules += $rule }
+                }
+            }
+        }
+    }
 
     $settings = @{
         permissions = @{
@@ -216,7 +288,7 @@ function Read-ExecutionStatus {
     $lines = @(Get-Content $StatusFile)
     if ($lines.Count -eq 0) { return $null }
     $word = $lines[0].Trim().ToUpperInvariant()
-    if (@("CONTINUE", "DONE", "ESCALATE", "FAILED") -contains $word) {
+    if (@("CONTINUE", "DONE", "DONE_PARTIAL", "ESCALATE", "FAILED") -contains $word) {
         $reason = ""
         if ($lines.Count -gt 1) { $reason = ($lines[1..($lines.Count - 1)] -join "`n").Trim() }
         return @{ Word = $word; Reason = $reason }
@@ -393,7 +465,12 @@ function Open-EscalationQueue {
 #     STARTED making calls. A single iteration can consume a large share of a window, so a 90%
 #     ceiling on stale data does not stop the loop reaching 100% mid-iteration - observed going
 #     40% -> 100% inside one iteration. Therefore: track the PEAK seen mid-stream rather than the
-#     last value, and treat the CLI's own `allowed_warning` as a trip regardless of arithmetic.
+#     last value, and treat the CLI's own `allowed_warning` as a trip regardless of arithmetic -
+#     but only a warning ABOUT the five-hour window (its `rateLimitType`). The seven-day window
+#     cannot move 40% -> 100% inside one iteration, the same event reports its utilization fresh,
+#     and the CLI warns about it from 75% on. Treating that warning as a five-hour trip made a
+#     field run (Calendar-Note, loop/music-player, 2026-09-24) sleep until the five-hour reset
+#     with five_hour at 45% and seven_day at 88% - a wait that could never clear the warning.
 #     The ceiling remains a between-iteration guard; it cannot preempt a single expensive
 #     iteration, and no threshold can. Lower the ceiling when iterations are costly.
 $script:LatestRateLimit = $null
@@ -414,7 +491,12 @@ function Test-HasProperty($obj, [string]$name) {
 function Register-RateLimit($info) {
     $script:LatestRateLimit = $info
     if (Test-HasProperty $info "status") {
-        if ($info.status -eq "allowed_warning" -or $info.status -eq "rejected") { $script:QuotaWarned = $true }
+        if ($info.status -eq "allowed_warning" -or $info.status -eq "rejected") {
+            # A warning names its window; an event without one is read as five-hour, as before.
+            $warnedWindow = "five_hour"
+            if ((Test-HasProperty $info "rateLimitType") -and $info.rateLimitType) { $warnedWindow = "" + $info.rateLimitType }
+            if ($warnedWindow -eq "five_hour") { $script:QuotaWarned = $true }
+        }
     }
     if (Test-HasProperty $info "unifiedWindows") {
         foreach ($prop in $info.unifiedWindows.PSObject.Properties) {
@@ -477,7 +559,12 @@ function Wait-ForQuotaReset {
     param([datetime]$ResetsAt, [string]$Window)
 
     $target = $ResetsAt.AddSeconds(30)   # small buffer past the boundary
-    $msg = "Quota window '$Window' at/above $QuotaStopPercent%. Waiting until $($target.ToString('yyyy-MM-dd HH:mm:ss')) for reset."
+    # Sleeping past the hour budget only to stop on waking wastes the wait and hides the reason.
+    if ($MaxHours -gt 0 -and $target -gt $RunStart.AddHours($MaxHours)) {
+        Write-Host "The quota window '$Window' resets at $($target.ToString('HH:mm')), after the hour budget ($MaxHours h) ends. Stopping instead of waiting." -ForegroundColor Red
+        Stop-Run 5 "BUDGET" "The quota window '$Window' resets at $($target.ToString('yyyy-MM-dd HH:mm')), after the hour budget ($MaxHours h) ends."
+    }
+    $msg = "Quota window '$Window' tripped (ceiling $QuotaStopPercent%, or a five-hour warning from the CLI). Waiting until $($target.ToString('yyyy-MM-dd HH:mm:ss')) for reset."
     Write-Host $msg -ForegroundColor Yellow
     Write-RunLog $msg
 
@@ -795,6 +882,143 @@ function Get-PriorIterationCount {
     return [int]$countText.Trim()
 }
 
+# ---------- Stopping, and the Run Report (ADR-027) ----------
+# Every stop inside the loop goes through here so the finally block knows how the run ended.
+# `exit` inside a function still ends the script, and still runs the finally block.
+$script:Outcome = "INTERRUPTED"
+$script:OutcomeReason = "The Runtime was stopped before the run reached a status."
+function Stop-Run([int]$code, [string]$outcome, [string]$reason) {
+    $script:Outcome = $outcome
+    $script:OutcomeReason = $reason
+    exit $code
+}
+
+# A run artifact as it stood last: on disk, or - once the Cleanup Commit has removed .harness/run/ -
+# from the parent of the commit that deleted it. Returns "" when the file never existed.
+function Read-RunArtifact([string]$relativePath) {
+    $onDisk = Join-Path $RepoRoot $relativePath
+    if (Test-Path $onDisk) { return (Get-Content $onDisk -Raw -Encoding UTF8) }
+    $gitPath = $relativePath -replace '\\', '/'
+    $deletedIn = & git rev-list -1 HEAD -- $gitPath 2>$null
+    if ($LASTEXITCODE -ne 0 -or -not $deletedIn) { return "" }
+    $text = & git show "$($deletedIn.Trim())^:$gitPath" 2>$null
+    if ($LASTEXITCODE -ne 0) { return "" }
+    return ($text -join "`n")
+}
+
+function ConvertTo-HtmlText([string]$text) {
+    return [System.Net.WebUtility]::HtmlEncode($text)
+}
+function ConvertTo-InlineHtml([string]$text) {
+    $html = ConvertTo-HtmlText $text
+    $html = [regex]::Replace($html, '`([^`]+)`', '<code>$1</code>')
+    $html = [regex]::Replace($html, '\*\*([^*]+)\*\*', '<strong>$1</strong>')
+    return $html
+}
+
+# Mechanical Markdown to HTML for the engine's ledgers: headings, lists, tables, fences, quotes,
+# rules and paragraphs. No judgment and no reformatting - a line the converter does not recognise
+# stays a line of text. Template comments are dropped so an empty ledger renders as empty.
+function ConvertFrom-LedgerMarkdown([string]$markdown) {
+    if (-not $markdown) { return '<p class="empty">(nothing recorded)</p>' }
+    $markdown = [regex]::Replace($markdown, '(?s)<!--.*?-->', '')
+    $out = New-Object System.Collections.Generic.List[string]
+    $para = New-Object System.Collections.Generic.List[string]
+    $list = $null; $table = $null; $fence = $null
+    $flushPara = { if ($para.Count -gt 0) { $out.Add("<p>" + (($para | ForEach-Object { ConvertTo-InlineHtml $_ }) -join " ") + "</p>"); $para.Clear() } }
+    $flushList = { if ($null -ne $list) { $out.Add("</$list>"); Set-Variable -Name list -Value $null -Scope 1 } }
+    $flushTable = { if ($null -ne $table) { $out.Add('<div class="scroll"><table>' + ($table -join '') + '</table></div>'); Set-Variable -Name table -Value $null -Scope 1 } }
+    foreach ($raw in ($markdown -split "`r?`n")) {
+        $line = $raw.TrimEnd()
+        if ($null -ne $fence) {
+            if ($line -match '^\s*```') { $out.Add("<pre><code>" + (ConvertTo-HtmlText ($fence -join "`n")) + "</code></pre>"); $fence = $null }
+            else { $fence += $raw }
+            continue
+        }
+        if ($line -match '^\s*```') { & $flushPara; & $flushList; & $flushTable; $fence = @(); continue }
+        if ($line -match '^\s*\|.*\|\s*$') {
+            & $flushPara; & $flushList
+            if ($line -match '^\s*\|[\s:|-]+\|\s*$') { continue }
+            $cells = $line.Trim().Trim('|') -split '\|'
+            $tag = if ($null -eq $table) { "th" } else { "td" }
+            if ($null -eq $table) { $table = @() }
+            $table += "<tr>" + (($cells | ForEach-Object { "<$tag>" + (ConvertTo-InlineHtml $_.Trim()) + "</$tag>" }) -join '') + "</tr>"
+            continue
+        }
+        & $flushTable
+        if ($line -match '^(#{1,6})\s+(.*)$') {
+            & $flushPara; & $flushList
+            $level = [Math]::Min(6, $Matches[1].Length + 2)
+            $out.Add("<h$level>" + (ConvertTo-InlineHtml $Matches[2]) + "</h$level>")
+        } elseif ($line -match '^\s*[-*]\s+(.*)$' -or $line -match '^\s*\d+\.\s+(.*)$') {
+            & $flushPara
+            $want = if ($line -match '^\s*\d+\.') { "ol" } else { "ul" }
+            $item = if ($line -match '^\s*[-*]\s+(.*)$') { $Matches[1] } else { ($line -replace '^\s*\d+\.\s+', '') }
+            if ($list -ne $want) { & $flushList; $out.Add("<$want>"); $list = $want }
+            $out.Add("<li>" + (ConvertTo-InlineHtml $item) + "</li>")
+        } elseif ($line -match '^\s*>\s?(.*)$') {
+            & $flushPara; & $flushList
+            $out.Add("<blockquote>" + (ConvertTo-InlineHtml $Matches[1]) + "</blockquote>")
+        } elseif ($line -match '^\s*-{3,}\s*$') {
+            & $flushPara; & $flushList
+            $out.Add("<hr>")
+        } elseif ($line -eq '') {
+            & $flushPara; & $flushList
+        } else {
+            & $flushList
+            $para.Add($line.Trim())
+        }
+    }
+    if ($null -ne $fence) { $out.Add("<pre><code>" + (ConvertTo-HtmlText ($fence -join "`n")) + "</code></pre>") }
+    & $flushPara; & $flushList; & $flushTable
+    return ($out -join "`n")
+}
+
+function Add-GitExclude([string]$pattern) {
+    $gitDir = & git rev-parse --absolute-git-dir 2>$null
+    if ($LASTEXITCODE -ne 0 -or -not $gitDir) { return }
+    $exclude = Join-Path $gitDir.Trim() "info/exclude"
+    New-Item -ItemType Directory -Path (Split-Path $exclude) -Force | Out-Null
+    if ((Test-Path $exclude) -and (@(Get-Content $exclude) -contains $pattern)) { return }
+    Add-Content -Path $exclude -Value $pattern
+}
+
+# RUN-REPORT.html at the repository root. Excluded through .git/info/exclude so it is never
+# committed and never shows up as a dirty tree the next run's engine would treat as crash debris.
+function Write-RunReport {
+    $template = Join-Path $LoopDir "templates/RUN-REPORT.template.html"
+    if (-not (Test-Path $template)) { Write-Warning "No RUN-REPORT template at $template; skipping the report."; return }
+    $assumptions = Read-RunArtifact ".harness/run/ASSUMPTIONS.md"
+    $recovery = Read-RunArtifact ".harness/run/RECOVERY.md"
+    $outcomeClass = switch ($script:Outcome) { "DONE" { "ok" } "DONE_PARTIAL" { "partial" } default { "bad" } }
+    $branch = & git rev-parse --abbrev-ref HEAD 2>$null
+    $values = [ordered]@{
+        "{{REPO}}"                = ConvertTo-HtmlText (Split-Path $RepoRoot -Leaf)
+        "{{MODE}}"                = ConvertTo-HtmlText $script:RunMode
+        "{{BRANCH}}"              = ConvertTo-HtmlText ("" + $branch).Trim()
+        "{{OUTCOME}}"             = ConvertTo-HtmlText $script:Outcome
+        "{{OUTCOME_CLASS}}"       = $outcomeClass
+        "{{REASON}}"              = ConvertTo-InlineHtml $script:OutcomeReason
+        "{{ITERATIONS}}"          = "" + (Get-PriorIterationCount)
+        "{{ELAPSED}}"             = Format-Elapsed $RunStart
+        "{{GENERATED}}"           = Get-Date -Format "yyyy-MM-dd HH:mm"
+        "{{N_ASSUMPTIONS}}"       = "" + ([regex]::Matches($assumptions, '(?m)^## A-\d+')).Count
+        "{{N_RECOVERY}}"          = "" + ([regex]::Matches($recovery, '(?m)^## R-\d+')).Count
+        "{{SECTION_ASSUMPTIONS}}" = ConvertFrom-LedgerMarkdown $assumptions
+        "{{SECTION_RECOVERY}}"    = ConvertFrom-LedgerMarkdown $recovery
+        "{{SECTION_ISSUES}}"      = ConvertFrom-LedgerMarkdown (Read-RunArtifact ".harness/ISSUES.md")
+        "{{SECTION_DOD}}"         = ConvertFrom-LedgerMarkdown (Read-RunArtifact ".harness/run/DoD.md")
+        "{{SECTION_STATE}}"       = ConvertFrom-LedgerMarkdown (Read-RunArtifact ".harness/run/STATE.md")
+    }
+    $html = Get-Content $template -Raw -Encoding UTF8
+    foreach ($key in $values.Keys) { $html = $html.Replace($key, $values[$key]) }
+    $reportPath = Join-Path $RepoRoot "RUN-REPORT.html"
+    [System.IO.File]::WriteAllText($reportPath, $html, (New-Object System.Text.UTF8Encoding($false)))
+    Add-GitExclude "/RUN-REPORT.html"
+    Write-Host "Run Report: $reportPath" -ForegroundColor Cyan
+    Write-RunLog "run report: $reportPath"
+}
+
 # ---------- The loop ----------
 $consecutiveCrashes = 0
 $quotaWaits = 0
@@ -807,9 +1031,20 @@ if ($priorIterations -gt 0) {
 try {
 for ($iteration = $priorIterations + 1; $iteration -le $MaxIterations; $iteration++) {
     $IterStart = Get-Date
+    if ($MaxHours -gt 0 -and ((Get-Date) - $RunStart).TotalHours -ge $MaxHours) {
+        Write-Host "Hour budget ($MaxHours h) exhausted. Stopping deterministically." -ForegroundColor Red
+        Stop-Run 5 "BUDGET" "Hour budget ($MaxHours h) exhausted - a Runtime safety bound, not a judgment about the work."
+    }
+    # Re-read every Iteration: the Skill switches a live run by rewriting the mode file (ADR-027).
+    $modeNow = Get-RunMode
+    if ($modeNow -ne $script:RunMode) {
+        Write-Host "Mode switched: $($script:RunMode) -> $modeNow (takes effect this iteration)" -ForegroundColor Magenta
+        Write-RunLog "mode switched: $($script:RunMode) -> $modeNow"
+        $script:RunMode = $modeNow
+    }
     Write-Host ""
-    Write-Host "=== Iteration $iteration / $MaxIterations === started $(Get-Date -Format 'HH:mm:ss') | total elapsed $(Format-Elapsed $RunStart)" -ForegroundColor Cyan
-    Write-RunLog "=== Iteration $iteration / $MaxIterations === $(Get-Date -Format o)"
+    Write-Host "=== Iteration $iteration / $MaxIterations === started $(Get-Date -Format 'HH:mm:ss') | total elapsed $(Format-Elapsed $RunStart) | mode $($script:RunMode)" -ForegroundColor Cyan
+    Write-RunLog "=== Iteration $iteration / $MaxIterations === $(Get-Date -Format o) | mode $($script:RunMode)"
 
     # Status file is transport, not state: delete before invoking so absence-after = crash (mechanical detection).
     if (Test-Path $StatusFile) { Remove-Item $StatusFile -Force }
@@ -818,7 +1053,10 @@ for ($iteration = $priorIterations + 1; $iteration -le $MaxIterations; $iteratio
     # Fresh permission settings every iteration - build artifact, never a source artifact.
     # The engine spec goes in by FILE, not as an inline argument: it is ~13KB of multi-line text,
     # which cannot survive Start-Process argument quoting (needed for the timeout bounds).
-    $claudeArgs = @("-p", $IterationPrompt, "--append-system-prompt-file", $EngineSpecPath)
+    # The mode travels in the prompt, not the system prompt, so the cached spec prefix stays
+    # byte-identical whichever mode a run is in (ENGINE.md 14).
+    $prompt = "$IterationPrompt Run Mode: $($script:RunMode)."
+    $claudeArgs = @("-p", $prompt, "--append-system-prompt-file", $EngineSpecPath)
     if ($DangerouslySkipPermissions) {
         $claudeArgs += "--dangerously-skip-permissions"
     } else {
@@ -868,12 +1106,12 @@ for ($iteration = $priorIterations + 1; $iteration -le $MaxIterations; $iteratio
         Write-RunLog "=== Quota rejected === $(Get-Date -Format o)"
         if ($NoQuotaWait -or $null -eq $resetsAt) {
             Write-Host "Stopping at the usage limit. Re-run after it resets to continue from the last Stable Checkpoint." -ForegroundColor Yellow
-            exit 6
+            Stop-Run 6 "QUOTA" "Stopped at the usage limit before the quota window reset."
         }
         $quotaWaits++
         if ($quotaWaits -gt $MaxQuotaWaits) {
             Write-Host "Waited for a quota reset $MaxQuotaWaits times already. Stopping deterministically." -ForegroundColor Red
-            exit 6
+            Stop-Run 6 "QUOTA" "Waited for a quota reset $MaxQuotaWaits times already."
         }
         Wait-ForQuotaReset -ResetsAt $resetsAt -Window "rejected"
         $iteration--   # this iteration never executed; do not spend it from the budget
@@ -893,7 +1131,7 @@ for ($iteration = $priorIterations + 1; $iteration -le $MaxIterations; $iteratio
         Write-Host "Repair the environment, then start the run again. It resumes from the last Stable Checkpoint."
         Write-RunLog "=== Status: FAILED (launch) === $(Get-Date -Format o)"
         Write-RunLog "FAILED: engine could not be started: $script:LaunchError"
-        exit 4
+        Stop-Run 4 "FAILED" "The engine could not be started: $script:LaunchError"
     }
 
     if ($null -eq $status) {
@@ -905,13 +1143,20 @@ for ($iteration = $priorIterations + 1; $iteration -le $MaxIterations; $iteratio
         if ($timeoutKind -ne "") { $why = "$timeoutKind timeout" }
         Write-Telemetry -Iteration $iteration -Status "CRASH" -IterStart $IterStart -Tier $iterTier -Model $iterModel
         Write-Warning "Crash detected ($why). Consecutive crashes: $consecutiveCrashes / $MaxConsecutiveCrashes"
-        if ($consecutiveCrashes -ge $MaxConsecutiveCrashes) {
+        if ($consecutiveCrashes -ge $MaxConsecutiveCrashes -and $script:RunMode -ne "Autonomous") {
             Write-Host "Watchdog limit reached. Stopping. The next run's engine will recover from the last Stable Checkpoint." -ForegroundColor Red
-            exit 2
+            Stop-Run 2 "CRASH LIMIT" "The engine died without reporting $consecutiveCrashes times in a row."
         }
         # Give a transient fault room to clear. Retrying three times inside a few seconds spends the
         # budget before the condition it protects against has had any chance to pass.
         $wait = $CrashBackoffSeconds * $consecutiveCrashes
+        if ($script:RunMode -eq "Autonomous" -and $consecutiveCrashes -ge $MaxConsecutiveCrashes) {
+            # Nobody is there to restart an Autonomous run, so the Watchdog keeps going - doubling the
+            # wait each time, capped - and the iteration and hour budgets remain the hard stop (ADR-027).
+            $wait = [Math]::Min($MaxCrashBackoffSeconds, $CrashBackoffSeconds * [Math]::Pow(2, $consecutiveCrashes - 1))
+            Write-Host "Autonomous mode: backing off instead of stopping at the crash limit." -ForegroundColor DarkYellow
+            Write-RunLog "autonomous: crash $consecutiveCrashes past the limit - backing off, not stopping"
+        }
         if ($wait -gt 0) {
             Write-Host "Waiting $wait s before re-invoking (backoff)." -ForegroundColor DarkGray
             Write-RunLog "backoff $wait s after crash $consecutiveCrashes"
@@ -934,13 +1179,14 @@ for ($iteration = $priorIterations + 1; $iteration -le $MaxIterations; $iteratio
     Ensure-DecisionsFile
 
     switch ($status.Word) {
-        "DONE"     { Write-Host "Goal verified complete. Review and merge the Loop Branch." -ForegroundColor Green; exit 0 }
+        "DONE"     { Write-Host "Goal verified complete. Review and merge the Loop Branch." -ForegroundColor Green; Stop-Run 0 "DONE" $status.Reason }
+        "DONE_PARTIAL" { Write-Host "Run finished without every criterion met. See RUN-REPORT.html for what was decided, done, and left." -ForegroundColor Yellow; Stop-Run 7 "DONE_PARTIAL" $status.Reason }
         "ESCALATE" {
             Write-Host "Human decision required. See .harness/run/ESCALATION.md - answer the queued decisions, then re-run." -ForegroundColor Magenta
             Open-EscalationQueue
-            exit 3
+            Stop-Run 3 "ESCALATE" $status.Reason
         }
-        "FAILED"   { Write-Host "Execution broken. Human repair required. See .harness/run/STATE.md for the engine's last findings." -ForegroundColor Red; exit 4 }
+        "FAILED"   { Write-Host "Execution broken. Human repair required. See .harness/run/STATE.md for the engine's last findings." -ForegroundColor Red; Stop-Run 4 "FAILED" $status.Reason }
     }
 
     # ---- CONTINUE: check the resource bound before spending another iteration ----
@@ -951,12 +1197,12 @@ for ($iteration = $priorIterations + 1; $iteration -le $MaxIterations; $iteratio
         Write-RunLog "=== Quota ceiling: $($trip.Window) at $pct% === $(Get-Date -Format o)"
         if ($NoQuotaWait -or $null -eq $trip.ResetsAt) {
             Write-Host "Stopping to leave usage headroom. Re-run to continue from the last Stable Checkpoint." -ForegroundColor Yellow
-            exit 6
+            Stop-Run 6 "QUOTA" "Stopped at the quota ceiling to leave usage headroom."
         }
         $quotaWaits++
         if ($quotaWaits -gt $MaxQuotaWaits) {
             Write-Host "Waited for a quota reset $MaxQuotaWaits times already. Stopping deterministically." -ForegroundColor Red
-            exit 6
+            Stop-Run 6 "QUOTA" "Waited for a quota reset $MaxQuotaWaits times already."
         }
         Wait-ForQuotaReset -ResetsAt $trip.ResetsAt -Window $trip.Window
     }
@@ -965,8 +1211,13 @@ for ($iteration = $priorIterations + 1; $iteration -le $MaxIterations; $iteratio
 # Iteration budget exhausted: a deterministic safety stop, never an interpretation of task failure.
 Write-Host "Iteration budget ($MaxIterations) exhausted. Stopping deterministically." -ForegroundColor Red
 Write-Host "This is a Runtime safety bound, not a judgment about the work. Inspect .harness/run/STATE.md and re-run to continue from the last Stable Checkpoint."
-exit 5
+Stop-Run 5 "BUDGET" "Iteration budget ($MaxIterations) exhausted - a Runtime safety bound, not a judgment about the work."
 } finally {
+    # The Run Report is rendered here, on every exit path, because the exits the engine never sees
+    # coming - budget, crash limit, quota - are exactly when the human most needs it (ADR-027).
+    if ($script:RunMode -eq "Autonomous") {
+        try { Write-RunReport } catch { Write-Warning "Could not render RUN-REPORT.html ($_)." }
+    }
     # Cleanup always runs, even on exit: release the log writers and the run lock.
     if ($null -ne $script:LogWriter) { try { $script:LogWriter.Dispose() } catch {} }
     if ($null -ne $script:RawWriter) { try { $script:RawWriter.Dispose() } catch {} }

@@ -24,6 +24,24 @@
 1. [machine] …
 2. [human] … — open …, do …, expect …
 
+## Removals
+
+<!-- What the repository already ships that the PRD makes unnecessary. One [machine] criterion per
+     removal, stating ABSENCE, provable by command. The human approves these at the same gate as
+     everything else; after approval, leaving any of them in place is a DoD violation.
+
+     Repository class (from PROJECT.md): template | product
+     - template: propose removing every demo feature, screen, permission and dependency the PRD does
+       not use.
+     - product:  propose removing only what the PRD replaces or leaves unreachable; list anything else
+       that looks unused under "Questions" below, never as a removal.
+
+     If this section is empty, say why in one line. -->
+R1. [machine] … is gone — e.g. `HomeFragment` no longer appears in the navigation graph or the source tree
+R2. [machine] … — e.g. the merged debug manifest declares no `ACCESS_FINE_LOCATION`
+
+Questions (product repositories only): …
+
 ## Constraints
 
 <!-- Non-negotiable boundaries from the PRD: architecture rules, compatibility, performance floors. -->
@@ -39,3 +57,4 @@
 |---|---|---|---|
 | 1 | machine | `gradlew test` … | n/a |
 | 2 | human | open …, do …, expect … | ☐ |
+| R1 | machine | `grep -r HomeFragment app/src` finds nothing; navigation graph has no such destination | n/a |

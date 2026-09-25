@@ -43,7 +43,7 @@ Foreman is a **portable autonomous execution engine for Claude Code**. You hand 
 | Piece | What it is | Where |
 |---|---|---|
 | **The skill** (`/foreman`) | Your on-ramp. Installs the runtime, saves your requirement as `PRD.md`, launches the engine in the background, streams its work into your chat, and turns every decision point into a normal question. | `skills/engineering/foreman/` |
-| **The engine + runtime** | The actual loop. A deliberately dumb PowerShell script (`run.ps1`) that re-runs Claude Code over and over, reads back **one word** each time (`CONTINUE` / `DONE` / `ESCALATE` / `FAILED`), and reacts mechanically. All the thinking lives in `ENGINE.md`, a spec injected as the AI's system prompt — never in the script. | `.harness/loop/` |
+| **The engine + runtime** | The actual loop. A deliberately dumb PowerShell script (`run.ps1`) that re-runs Claude Code over and over, reads back **one word** each time (`CONTINUE` / `DONE` / `ESCALATE` / `FAILED`, plus `DONE_PARTIAL` in Autonomous mode), and reacts mechanically. All the thinking lives in `ENGINE.md`, a spec injected as the AI's system prompt — never in the script. | `.harness/loop/` |
 
 Day to day you only touch the skill. It exists precisely so you never have to open `.harness/loop/` yourself.
 
@@ -86,15 +86,50 @@ That drops the `foreman` skill into `.claude/skills/foreman/` (and `.agents/skil
 - **A file path** — `/foreman C:\reqs\dark-mode.md`. That document becomes the requirement instead.
 - **Nothing at all** — continues with whatever `PRD.md` is already there. (First run in a fresh repo? It'll ask you for one.)
 
+### Choosing a mode: collaborative or autonomous
+
+A run is in one of two modes ([ADR-027](./docs/adr/ADR-027-a-run-chooses-collaborative-or-autonomous-mode-at-launch.md)):
+
+- **Collaborative** (the default) — important decisions stop and wait for you. You decide, it carries on.
+- **Autonomous** — it asks only at the start (approving the checklist), makes every other decision itself, and at the end gives you one HTML report of everything it decided and did.
+
+```
+/foreman --auto add a settings screen
+/foreman --collab add a settings screen
+/foreman mode auto
+/foreman mode collab
+/foreman mode
+```
+
+| Command | What it does |
+|---|---|
+| `/foreman --auto <requirement>` | Starts a new run in Autonomous mode. The flag is stripped; everything after it is your requirement, as normal. |
+| `/foreman --collab <requirement>` | Starts a new run in Collaborative mode. Same as no flag on a new run, but explicit. |
+| `/foreman mode auto` | Switches a run **already in progress** to Autonomous. It takes effect at the next cycle; the one running now finishes in the old mode, and the log prints `mode switched: Collaborative -> Autonomous`. |
+| `/foreman mode collab` | Switches a run in progress back to Collaborative. Decisions already made stay made; only new questions will stop for you again. |
+| `/foreman mode` | Tells you the current mode and whether a run is in progress. |
+| `/foreman --auto --hours 12 --iterations 300 <requirement>` | Autonomous, with budgets. An Autonomous run never stops to ask, so these are what end it early: `--hours` is a wall-clock limit, `--iterations` replaces the default 50 cycles. |
+
+Worth knowing:
+
+- **No flag on a new run means Collaborative.** A new run never inherits the previous run's mode. Without a flag, a run already in progress keeps its mode.
+- **`mode auto` needs a run in progress.** With nothing to switch, it refuses and tells you to start with `--auto` instead.
+- **You can also switch when it stops to ask.** When a Collaborative run stops with questions, one of your choices is "switch to Autonomous and let the engine decide the rest". Approving the checklist is never covered by that choice. You always approve what "done" means yourself, in both modes.
+- **What you get at the end of an Autonomous run:** `RUN-REPORT.html` at the repository root, which the skill also summarizes in chat. It lists every decision the engine made alone (each with the `git revert` that undoes it), every destructive action it took (each with a restore command), what's unfinished, and the checks only a person can do. It's written on every ending, including when a budget runs out, and git never sees it.
+- **Destructive actions are recoverable, not forbidden.** In Autonomous mode, deleting outside the repo, overwriting a local database file or pushing the Loop Branch (only if you granted push) goes through a wrapper that copies what's lost into `.harness/trash/` first. Publishing, deploying, merging and sending messages stay forbidden, because nothing can undo them.
+- **The engine can't change its own mode.** The mode lives in `.git/foreman-mode`, outside your working tree, and the engine is denied write access to it. Only you, through `/foreman`, can switch it.
+
+> **Be clear-eyed about Autonomous mode.** It runs with every tool allowed except a deny list, and that list matches command prefixes: it stops an engine that slips, not one that works around it. It's also new. The runtime side is tested, but no real long run has been through it yet. For anything you can't afford to have touched, run it inside a VM or container. Details: [consumer guide](./docs/consumer-guide.md) and [ADR-027](./docs/adr/ADR-027-a-run-chooses-collaborative-or-autonomous-mode-at-launch.md).
+
 ### What happens next
 
 1. **It looks around.** Reads your requirement, inspects the repo (language, build tool, conventions), creates a branch, and writes down what it worked out.
-2. **It asks you the one important question.** *"Here's my checklist of what 'done' means — approve it? And may I have permission to run your build and test commands?"* This is the **only** stop that always happens. Read the checklist properly. Five minutes here is the highest-value five minutes of the whole run — it's what stops the robot from confidently building the wrong thing for three hours.
+2. **It asks you the one important question.** *"Here's my checklist of what 'done' means — approve it? And may I have permission to run your build and test commands?"* The checklist also lists what it plans to **delete**: screens, permissions and libraries your requirement makes unnecessary, such as a starter template's demo screens ([ADR-028](./docs/adr/ADR-028-the-definition-of-done-names-what-the-prd-makes-unnecessary.md)). This is the **only** stop that always happens. Read the checklist properly. Five minutes here is the highest-value five minutes of the whole run — it's what stops the robot from confidently building the wrong thing for three hours.
 3. **It works, and you watch — or don't.** Every line the engine writes streams into your chat: which files it's touching, which commands it's running, whether tests passed. Go make coffee. It never ties up your terminal.
 4. **It interrupts you only for real reasons.** Anything above its pay grade — change the architecture? the requirement is ambiguous? needs a risky key? — arrives as a normal chat question, with the engine's own suggested options as your choices. You answer in chat; it records your answer and carries on. You never open a file to reply.
 5. **It proves it's finished.** A fresh run that wrote none of the code re-tests every checklist item, wipes its scratch notes off the branch tip, and reports `DONE`.
 6. **You get a summary of every branch** — not just this one. What's mergeable, what's still going, what's stuck waiting on you.
-7. **You merge.** Always you. The engine never pushes, never merges, never touches your default branch.
+7. **You merge.** Always you. The engine never merges and never touches your default branch. It pushes only its own branch, and only if you allowed that for the repo.
 
 ### Watching it work
 
@@ -123,15 +158,16 @@ New lines appearing = it's alive. The console it was launched from shows the sam
 
 ### When it stops — and what to do
 
-Five ways a run ends. Only the first two need anything from you:
+Six ways a run ends. Only the first two need anything from you:
 
 | It stopped with | Meaning | What you do |
 |---|---|---|
 | `ESCALATE` (3) | A decision above its authority: approve the checklist, resolve an ambiguous requirement, grant a permission, or approve an architecture change. | Answer the question. That's it — the skill records your answer and restarts it. |
 | `FAILED` (4) | Execution itself is broken: build tool missing, disk full, repo corrupted. Not "the task was hard". | Fix the environment, then start it again. It resumes from the last commit. |
 | `DONE` (0) | A fresh verifier re-proved every checklist item. | Review and merge (below). |
-| Watchdog (2) | The AI died without reporting, 3 times in a row. | Usually a transient CLI or network problem. Start it again. |
-| Budget (5) | Hit the 50-cycle ceiling. | Not a verdict on the work — a deterministic stop. Check `.harness/run/STATE.md` to see where it got to, then continue. |
+| `DONE_PARTIAL` (7) | Autonomous mode only. Nothing left it can do and everything provable is re-proved, but something blocks "done": a task it gave up on, a check only a person can do, or a decision that changed what the requirement means. | Read `RUN-REPORT.html`. Overturn a decision or tick off a check by answering in chat, then continue. |
+| Watchdog (2) | The AI died without reporting, 3 times in a row. In Autonomous mode it doesn't stop; it waits longer and tries again. | Usually a transient CLI or network problem. Start it again. |
+| Budget (5) | Hit the 50-cycle ceiling, or the `--hours` limit. | Not a verdict on the work — a deterministic stop. Check `.harness/run/STATE.md` to see where it got to, then continue. |
 
 **What makes a good answer when it asks:** you may always **narrow** a request — tighten a vague checklist item, cut the permission down to a single command, say "console output, not a desktop notification". You can't accidentally widen anything; the engine can only ever get less than it asked for. And say *why* — your reason gets recorded in the audit trail alongside the decision, which is what makes the branch readable in three months.
 

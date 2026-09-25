@@ -64,6 +64,9 @@ Useful parameters:
 |---|---|---|
 | `-MaxIterations` | 50 | Iteration budget per run — deterministic safety stop, not a judgment |
 | `-MaxConsecutiveCrashes` | 3 | Watchdog bound for invocations that die without reporting |
+| `-Mode` | (keep) | `Collaborative` or `Autonomous` ([ADR-027](./adr/ADR-027-a-run-chooses-collaborative-or-autonomous-mode-at-launch.md)). Empty keeps a run-in-progress's mode; a new run starts Collaborative |
+| `-MaxHours` | 0 (none) | Wall-clock bound for this invocation — the limit an Autonomous run needs, since it never stops to ask |
+| `-MaxCrashBackoffSeconds` | 1800 | Autonomous mode only: the longest wait between re-invocations once past the crash limit |
 | `-PrdPath` | (empty) | Stage an external file as `PRD.md` before the first iteration — relative or absolute path |
 | `-Model` | (CLI default) | Model override for engine invocations |
 | `-QuietEngine` | off | Suppress the live engine activity feed |
@@ -146,21 +149,28 @@ Practically:
 
 ## 5. While the loop runs
 
-Nothing is required from you. There are exactly five ways a run ends, and `run.ps1` exits with a distinct code for each — the codes are the contract for scripted or CI invocation:
+Nothing is required from you. There are exactly six ways a run ends, and `run.ps1` exits with a distinct code for each — the codes are the contract for scripted or CI invocation:
 
 | Ending | Exit | Meaning | Your move |
 |---|---|---|---|
 | `DONE` | 0 | Goal verified complete by a fresh verifier iteration. | Review and merge — §6. |
-| `ESCALATE` | 3 | A decision above the engine's authority: an architecture change (Tier 2), an intent gap (Tier 3), a capability request, missing product information. | Skill path: answer in conversation, as in §4. Manual path: read `.harness/run/ESCALATION.md`, write decision + rationale into `.harness/run/DECISIONS.md` under the matching id, re-run. One pending escalation at a time, always. |
+| `ESCALATE` | 3 | A decision above the engine's authority: an architecture change (Tier 2), an intent gap (Tier 3), a capability request, missing product information. | Skill path: answer in conversation, as in §4. Manual path: read `.harness/run/ESCALATION.md`, write decision + rationale into `.harness/run/DECISIONS.md` under the matching id, re-run. Several questions can be pending at once; answer any subset. |
+| `DONE_PARTIAL` | 7 | Autonomous mode only. No work left and verified as far as it goes, but something stops `DONE`: an abandoned task, an unsigned `human` criterion, or a Tier-3 assumption. | Read `RUN-REPORT.html` (the skill summarizes it). Overturn an assumption or sign off a `human` criterion by answering its id in `DECISIONS.md`, then re-run. |
 | `FAILED` | 4 | Execution itself is broken — environment, repository corruption, exhausted resources. Not "the task was hard". | Repair the environment, re-run (or ask the skill to). The engine resumes from the last checkpoint. |
-| Watchdog | 2 | `MaxConsecutiveCrashes` (default 3) invocations died without producing any status. | Usually a transient CLI/network fault. Inspect `.harness/run/STATE.md`, re-run. |
-| Budget | 5 | `MaxIterations` (default 50) exhausted. A deterministic safety stop, never an interpretation of task failure. | Inspect `.harness/run/STATE.md` for actual progress, then re-run to continue — or raise `-MaxIterations`. |
+| Watchdog | 2 | `MaxConsecutiveCrashes` (default 3) invocations died without producing any status. Collaborative mode only — Autonomous mode backs off and keeps going. | Usually a transient CLI/network fault. Inspect `.harness/run/STATE.md`, re-run. |
+| Budget | 5 | `MaxIterations` (default 50) or `-MaxHours` exhausted. A deterministic safety stop, never an interpretation of task failure. | Inspect `.harness/run/STATE.md` for actual progress, then re-run to continue — or raise `-MaxIterations`. |
 
 Exit code `1` is a prerequisite failure before any engine invocation: `.harness/loop/ENGINE.md` missing (wrong working directory), a `-PrdPath` that does not resolve, or another runtime already holding the run lock.
 
 Interrupting is always safe: kill it whenever you like (or ask the skill to stop supervising). Every iteration ends at a Stable Checkpoint (one atomic commit of code + state); the next invocation recovers mechanically — even from a mid-iteration crash, which it detects as a dirty working tree.
 
 Watching progress: `git log --oneline` on the loop branch is the execution history; `.harness/run/STATE.md` is the engine's current memory; `.harness/run/AMENDMENTS.md` is the audited log of every plan mutation.
+
+### Autonomous mode
+
+Launch with `/foreman --auto <requirement>` (optionally `--hours <n>` and `--iterations <n>`), or `run.ps1 -Mode Autonomous`; switch a run in progress with `/foreman mode auto` / `/foreman mode collab`. You still approve the Definition of Done at the start. After that the engine asks nothing: every question a Collaborative run would have stopped for becomes an entry in `.harness/run/ASSUMPTIONS.md`, with the commit that depends on it and the `git revert` that undoes it. Every run ends with `RUN-REPORT.html` at the repository root — also after a budget, quota or crash-limit stop — which is excluded from git.
+
+**Security posture, bluntly.** Autonomous mode runs with **every tool allowed** except a Deny List (`baseline.json`'s `autonomous` block, plus any `deny` arrays you add to `.harness/knowledge/capabilities.json`). That list is prefix matching on command strings. It stops an engine that slips while following its rules; it does not stop one that writes a script to do what the list forbids. Destructive actions the engine may take — deleting outside the repository, overwriting a local database file, pushing the Loop Branch where you granted push — go through wrappers that copy what is lost into `.harness/trash/` and write the restore command into `.harness/run/RECOVERY.md`. Publishing, deploying, merging and sending messages are denied outright, because nothing can undo them. If that is not enough isolation for your repository, run Autonomous mode inside a VM or container.
 
 **Capability grants can be goal-scoped, not just standing.** A denied-but-needed action (e.g. a destructive git operation the engine isn't authorized for, even late in a run) escalates the same way — the request can propose either a standing capability (`.harness/knowledge/capabilities.json`, survives future runs) or a one-time, goal-scoped one (`.harness/run/capabilities.json`, expires automatically when `.harness/run/` is removed at completion). Prefer goal-scoped whenever the need is specific to this one run.
 
@@ -186,7 +196,7 @@ The three-dot form is deliberate: it diffs the branch against the point it diver
 
 Separately, `.harness/ISSUES.md` is the **Issues Report**: regenerated every iteration for you, not for the engine, listing what is stuck — abandoned tasks, queued decisions, and `human` criteria still unsigned. It survives the Cleanup Commit so a stopped run is legible when you come back to it.
 
-Either way: **merging is your act — the engine never merges, never pushes, never touches your default branch.**
+Either way: **merging is your act — the engine never merges and never touches your default branch.** It pushes only the Loop Branch, and only if you granted push for this repository (ADR-011).
 
 ## 7. The next feature
 
@@ -205,9 +215,10 @@ Enforced mechanically (runtime deny rules) or by hard-stop protocol — true reg
 - Modify `.harness/loop/`, any capability ledger, `.harness/knowledge/DOMAIN.md`, or its own permission settings
 - Modify `PRD.md` or the approved `DoD.md`
 - Widen a capability beyond what you approved
-- Touch your default branch, push, merge, or rewrite history
+- Touch your default branch, merge, or rewrite history; push anything but the Loop Branch, or push at all where you have not granted it
 - Declare `DONE` from the same invocation that implemented the final work
-- Proceed past an unanswered escalation
+- Proceed past an unanswered escalation (Collaborative mode; in Autonomous mode it records an Assumption instead, and your answer in `DECISIONS.md` always overrides it)
+- Change its own Run Mode
 
 The skill adds no authority of its own on top of this — it only stages input (PRD, capability ledger entries you already approved) and supervises/summarizes output. Every capability the engine ever exercises still traces back to a ledger entry you approved, standing or goal-scoped.
 
