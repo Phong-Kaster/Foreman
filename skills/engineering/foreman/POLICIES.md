@@ -212,7 +212,7 @@ failure.
 
 ## Verification Class Criteria
 
-Every DoD criterion declares one of **three** classes (ADR-015, ADR-025):
+Every DoD criterion declares one of **three** classes (ADR-015, ADR-030):
 
 | Class | Who produces the evidence | What closes it |
 |---|---|---|

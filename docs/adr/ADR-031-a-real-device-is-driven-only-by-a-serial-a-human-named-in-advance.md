@@ -1,13 +1,15 @@
 # A real device is driven only by a serial a human named in advance; a second agent's self-report is never evidence
 
+> **Renumbered from ADR-027 on 2026-09-25**, because `loop/autonomous-mode` already used ADR-027 for the Run Mode decision. Commits on `loop/fix-guide-language-toggle` made before that date still cite it as ADR-027.
+
 `skills/knowledge/android/device-verification`'s Tier 3 withholds every unrestricted-serial
 destructive command, because nothing about a bare `adb -s <serial>` tells the permission matcher
 whether it is about to wipe a scratch image or a person's phone
-([ADR-025](./ADR-025-a-machine-drives-a-human-criterion-before-a-person-signs-it.md)). That
+([ADR-030](./ADR-030-a-machine-drives-a-human-criterion-before-a-person-signs-it.md)). That
 withholding is correct and stays; but it leaves every criterion that genuinely needs a physical
 device paying a full live Escalation Request, every time, in every run — exactly the cost the
 Calendar-Note field trial measured directly (two escalations inside a 75-minute run,
-`docs/field-trial-2026-09-08.md`), and exactly the shape of ADR-025's own incident, where a human was
+`docs/field-trial-2026-09-08.md`), and exactly the shape of ADR-030's own incident, where a human was
 the first person to discover a "notification appears" criterion had never actually worked.
 
 This ADR closes the gap for the one case that does not need a live question at all: a human already
@@ -41,7 +43,7 @@ wall-clock cost this ADR exists to remove.
 **The grant is goal-scoped, not standing.** An emulator cannot silently change what it is; a real
 device can — repurposed, lent out, handed a personal account — with nothing in the repository to
 notice. Re-confirming the grant per goal keeps that drift bounded to one run, the same reasoning
-ADR-025 already gives for Tier 2 on emulators.
+ADR-030 already gives for Tier 2 on emulators.
 
 **Factory reset is not "clean state," and is never granted.** Wiping a real Android device typically
 revokes its own USB-debugging authorization, which only a human tapping the device screen can
@@ -64,11 +66,11 @@ iOS — nothing in this project has yet had: no PRD, no run, no evidence the mis
 **`android-agent` and `mobile-use` are the wrong idea, for the criteria that matter.** Both hand a
 natural-language goal to an autonomous agent and receive a natural-language report back. Tested
 directly against this project's own incident — a notification/permission criterion, the same shape
-ADR-025's false pass came from — the failure reproduces exactly: nothing stops the second agent from
+ADR-030's false pass came from — the failure reproduces exactly: nothing stops the second agent from
 quietly driving the easy path (permission already granted) and reporting the hard path (fresh
 install, grant when prompted) as proven, and Foreman has no way to tell, because it never receives a
 command's output — only prose. That prose is not `machine` evidence (no command ran that Foreman can
-point at) and not `machine-then-human` (no person signed it); it is a fourth, ungoverned class ADR-025
+point at) and not `machine-then-human` (no person signed it); it is a fourth, ungoverned class ADR-030
 never admitted, and admitting it now would reopen the exact failure that ADR wrote down.
 
 `android-agent` does carry two components that do not carry this risk, because neither asks Foreman to
@@ -106,7 +108,7 @@ not the live natural-language agent. It is not adopted in any capacity.
 - **Let an autonomous agent (`android-agent`'s live mode, or `mobile-use`) act as, or feed, the
   Verifier's pre-check** — rejected, and this was the closest call of this review, precisely because
   the scenario proposed and tested against real evidence — routing a permission/notification criterion
-  through such an agent — reproduces ADR-025's own incident exactly, with the failure now hidden
+  through such an agent — reproduces ADR-030's own incident exactly, with the failure now hidden
   behind a second opaque agent instead of visible in Foreman's own pre-check.
 - **Treat `android-agent`'s natural-language report as `machine-then-human` evidence, attached for a
   human to read alongside their own check** — rejected as evidence, though its screen recording and
@@ -116,11 +118,11 @@ not the live natural-language agent. It is not adopted in any capacity.
 
 ## Consequences
 
-- Tier 3's unrestricted-serial form stays withheld exactly as ADR-025 wrote it. This ADR adds a
+- Tier 3's unrestricted-serial form stays withheld exactly as ADR-030 wrote it. This ADR adds a
   named-serial form beside it, not a replacement, scoped identically to the existing emulator-only
   Tier 2.
 - A repository with no registered real-device serial behaves exactly as it does today — silent
-  fallback to an emulator, per ADR-025's "not driven... never a silent skip." No new escalation path
+  fallback to an emulator, per ADR-030's "not driven... never a silent skip." No new escalation path
   is introduced by this decision.
 - `android-agent`'s BFS explorer and Skill Creator gain a named, narrow place to be used — outside the
   evidence path, never invoked by the engine mid-run — rather than being an unwritten judgment call
@@ -141,7 +143,7 @@ not the live natural-language agent. It is not adopted in any capacity.
 
 **Decided by the human, 2026-09-18**, after a review that worked through the alternatives above in
 sequence rather than from a single incident; the incidents it cites (the notification-permission false
-pass, the Calendar-Note escalation count) are real and already recorded in ADR-025 and the field
+pass, the Calendar-Note escalation count) are real and already recorded in ADR-030 and the field
 trial, reused here rather than re-measured.
 
 _What would change this: a field run that actually exercises the named-serial grant and finds the

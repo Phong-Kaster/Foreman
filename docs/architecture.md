@@ -102,7 +102,7 @@ HUMAN: reviews the Loop Branch (tip = implementation + knowledge + completion su
 ```
 
 At that fresh-verification step a criterion belongs to one of three classes
-([ADR-025](./adr/ADR-025-a-machine-drives-a-human-criterion-before-a-person-signs-it.md)): `machine`,
+([ADR-030](./adr/ADR-030-a-machine-drives-a-human-criterion-before-a-person-signs-it.md)): `machine`,
 closed by a command; `machine-then-human`, **driven** by the verifier on an emulator or device and
 then signed by a person; and `human-only`, perception that nothing may claim. A machine never closes
 a criterion a person owns — it exists so that the person is not the first to find the defect. The

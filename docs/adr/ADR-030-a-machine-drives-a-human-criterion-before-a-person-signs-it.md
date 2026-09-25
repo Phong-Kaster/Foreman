@@ -1,5 +1,7 @@
 # A machine drives a `human` criterion before a person signs it, and never instead of them
 
+> **Renumbered from ADR-025 on 2026-09-25**, because `main` already had [ADR-025](./ADR-025-the-decision-queue-splits-into-an-engine-owned-and-a-human-owned-file.md). Commits on `loop/fix-guide-language-toggle` made before that date still cite it as ADR-025.
+
 Three runs in one repository ended the same way: all machine evidence green, and a person holding an
 unanswered checklist. One left sixteen criteria unsigned, one seven, one six. The second of those is
 still unsigned, because a later goal deleted `.harness/run/` and the page built for a human to read

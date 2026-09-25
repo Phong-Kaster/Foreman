@@ -114,5 +114,5 @@ Tier 3 is withheld deliberately. Read why before you decide you need it.
 
 A narrow, named-serial exception to that withholding — registered by a human before the run begins,
 never detected or self-granted by the engine — is designed in
-[ADR-027](../../../../docs/adr/ADR-027-a-real-device-is-driven-only-by-a-serial-a-human-named-in-advance.md).
+[ADR-031](../../../../docs/adr/ADR-031-a-real-device-is-driven-only-by-a-serial-a-human-named-in-advance.md).
 Not yet implemented in `capabilities.snippet.json`.

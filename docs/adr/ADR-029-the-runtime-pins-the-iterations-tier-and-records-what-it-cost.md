@@ -1,5 +1,7 @@
 # The Runtime pins the Iteration's Model Tier, and records what every iteration cost
 
+> **Renumbered from ADR-024 on 2026-09-25**, because `main` already had [ADR-024](./ADR-024-the-iteration-budget-is-counted-from-commits-not-a-process-variable.md). Commits on `loop/fix-guide-language-toggle` made before that date still cite it as ADR-024.
+
 A run that produced good work — 251 tests, 0 lint errors, no abandoned task, 36 DoD criteria — was
 reported by the human as taking far too long for what it built. Answering "why" turned out to be
 impossible from anything the product writes down, which is the first finding. `run.ps1` measured

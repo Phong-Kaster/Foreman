@@ -80,7 +80,7 @@ Where `<STATUS-WORD>` is exactly one of:
 | Status | Meaning |
 |---|---|
 | `CONTINUE` | Checkpoint persisted; executable work remains; invoke me again. |
-| `DONE` | Every `machine` criterion re-proved by a fresh verifier, every `machine-then-human` criterion driven by the Verifier **and** signed by a person, and every `human-only` criterion signed (ADR-015, ADR-025). Nothing abandoned, nothing deferred. The Loop Branch is the deliverable. |
+| `DONE` | Every `machine` criterion re-proved by a fresh verifier, every `machine-then-human` criterion driven by the Verifier **and** signed by a person, and every `human-only` criterion signed (ADR-015, ADR-030). Nothing abandoned, nothing deferred. The Loop Branch is the deliverable. |
 | `ESCALATE` | No executable task remains, and decisions are queued or tasks were abandoned. The human has a batch to answer. |
 | `FAILED` | Execution itself is broken (environment, repository corruption). Human repair needed. |
 
@@ -113,7 +113,7 @@ If `.harness/run/` does not exist, this invocation is the Bootstrap. Do not impl
 5. Create the Loop Branch: `loop/<prd-slug>` from current HEAD.
 6. Generate `.harness/run/` from `.harness/loop/templates/`:
    - `DoD.md` — testable acceptance criteria derived from the PRD. This is the exam the whole run will be
-     graded against. **Every criterion declares a Verification Class** (ADR-015, ADR-025): `machine` if a
+     graded against. **Every criterion declares a Verification Class** (ADR-015, ADR-030): `machine` if a
      command's output or a named file proves it; `machine-then-human` if something can drive it — an
      emulator, `adb`, an instrumented test, an injected clock — but a person must still look; `human-only`
      if nothing can drive it at all. Check what the repository can actually run before deciding: an
