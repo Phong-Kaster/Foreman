@@ -51,9 +51,11 @@
     color-scheme:dark;
   }
 
-  [data-lang="en"]{display:none}
-  :root[data-ui-lang="en"] [data-lang="en"]{display:revert}
-  :root[data-ui-lang="en"] [data-lang="vi"]{display:none}
+  /* Hide the inactive language only. Never set `display` on the active one: the
+     element keeps whatever display its own rules give it (.btn, .navgroup li a).
+     `!important` because these selectors must outrank any class rule, now or later. */
+  :root:not([data-ui-lang="en"]) [data-lang="en"]{display:none !important}
+  :root[data-ui-lang="en"] [data-lang="vi"]{display:none !important}
 
   *{box-sizing:border-box}
   html{scroll-behavior:smooth}
@@ -807,6 +809,7 @@ git merge loop/&lt;prd-slug&gt;               # your call, your hands</code></pr
 ├── .harness/loop/                    ← <span data-lang="vi">Y HỆT, độc lập — cho cài đặt thủ công</span><span data-lang="en">THE SAME THING, standalone — for manual installs</span>
 ├── tests/                            ← <span data-lang="vi">Pester test cho run.ps1, chạy bằng một `claude` giả</span><span data-lang="en">Pester tests for run.ps1, driven by a fake `claude` stub</span>
 ├── docs/
+│   ├── index.html                    <span data-lang="vi">chính trang này, dưới dạng site song ngữ (GitHub Pages)</span><span data-lang="en">the same page as a bilingual site (GitHub Pages)</span>
 │   ├── architecture.md               <span data-lang="vi">thiết kế đầy đủ</span><span data-lang="en">the complete design</span>
 │   ├── consumer-guide.md             <span data-lang="vi">sổ tay vận hành cài đặt thủ công</span><span data-lang="en">manual-install operating manual</span>
 │   └── adr/                          <span data-lang="vi">vì sao mỗi quyết định lớn được đưa ra</span><span data-lang="en">why each big decision was made</span>

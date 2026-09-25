@@ -36,6 +36,8 @@ param(
     [int]$QuotaStopPercent = 90,
     # By default the loop sleeps until the quota window resets and then continues. This stops instead.
     [switch]$NoQuotaWait,
+    # ESCALATE opens the decision queue in the default browser. Headless CI wants this off.
+    [switch]$NoOpenEscalation,
     [int]$MaxQuotaWaits = 6,
     # Keep the dynamic (per-machine, per-iteration) sections out of the system prompt so the
     # cacheable prefix stays byte-identical across iterations. This flag opts out.
@@ -60,6 +62,12 @@ $RepoRoot   = (Get-Location).Path
 $LoopDir    = Join-Path (Join-Path $RepoRoot ".harness") "loop"
 $RunDir      = Join-Path (Join-Path $RepoRoot ".harness") "run"
 $StatusFile = Join-Path $RunDir "STATUS.md"
+$StateFile  = Join-Path $RunDir "STATE.md"
+$ModelsPath = Join-Path $LoopDir "models.json"
+# Per-iteration measurements, one row per iteration. Deliberately NOT under .harness/run/, which the
+# Cleanup Commit deletes: the whole point is to still have the numbers after the run that produced
+# them has finished.
+$TelemetryFile = Join-Path (Join-Path $RepoRoot ".harness") "TELEMETRY.tsv"
 
 $EngineSpecPath = Join-Path $LoopDir "ENGINE.md"
 if (-not (Test-Path $EngineSpecPath)) { Write-Error ".harness/loop/ENGINE.md not found. Run from the consumer repository root."; exit 1 }
@@ -216,6 +224,157 @@ function Read-ExecutionStatus {
     return $null  # Malformed status = no status = crash.
 }
 
+# ---------- Model tier for the top-level Iteration (ADR-013) ----------
+# The tier map exists so the engine can dispatch a Worker at the right model. Nothing ever applied
+# it to the Iteration ITSELF: --model was passed only when a human supplied -Model, so the top-level
+# session silently ran at whatever the CLI defaults to. Measured on the Calendar-Note alarms run:
+# 979 of 1,215 Orchestrator messages ran on the default model while the Workers ran on the expensive
+# one - the tier system exactly inverted, and the Verifier (the one role POLICIES.md marks "Always
+# Capable, no exception") verified the whole run below Capable. One --model argument closes it.
+function Resolve-TierModel([string]$tier) {
+    if (-not (Test-Path $ModelsPath)) { return "" }
+    try {
+        $map = Get-Content $ModelsPath -Raw | ConvertFrom-Json
+        if (Test-HasProperty $map $tier) {
+            $entry = $map.$tier
+            if ((Test-HasProperty $entry "model") -and "$($entry.model)" -ne "") { return [string]$entry.model }
+        }
+    } catch { Write-Warning "models.json unreadable ($_). Falling back to the CLI default model." }
+    return ""
+}
+
+# One --model is fixed for a whole invocation, so the tier has to be chosen BEFORE the engine starts
+# - the engine cannot switch its own model at ENGINE.md 11. STATE.md's DONE-candidate is the only
+# mechanical signal available in advance that the next invocation verifies rather than builds, and it
+# is the same flag ENGINE.md 6.3 branches on, so the two cannot disagree.
+function Test-DoneCandidate {
+    if (-not (Test-Path $StateFile)) { return $false }
+    try {
+        foreach ($line in @(Get-Content $StateFile)) {
+            # Tolerates the bold/colon shapes STATE.md actually uses: "**DONE-candidate:** yes",
+            # "- DONE-candidate: yes". Only space, colon and asterisk may sit between the two words,
+            # so "DONE-candidate: no" cannot match.
+            if ($line -match '(?i)DONE-candidate[\s:*]*yes') { return $true }
+        }
+    } catch { }
+    return $false
+}
+
+# ---------- Per-iteration measurement ----------
+# The Runtime already saw every number below and threw all of them away: duration went to the console
+# via Write-Host and nowhere else. After the Calendar-Note run finished, nothing on disk could say
+# which iteration was slow or what any of them cost, so the first question asked of it - "why did this
+# take 13 hours" - had to be answered by parsing a debug log out of %TEMP% that only survived by luck.
+$script:IterCost = 0.0
+$script:IterTurns = 0
+$script:IterCacheRead = 0
+function Reset-IterationUsage {
+    $script:IterCost = 0.0
+    $script:IterTurns = 0
+    $script:IterCacheRead = 0
+}
+function Register-ResultUsage($evt) {
+    # An invocation can emit several `result` events and they are CUMULATIVE, not additive - four
+    # events carrying $15.26 each mean one $15.26 invocation. Taking the maximum is what stops this
+    # row reporting four times the real figure.
+    try {
+        if (Test-HasProperty $evt "total_cost_usd") {
+            $c = [double]$evt.total_cost_usd
+            if ($c -gt $script:IterCost) { $script:IterCost = $c }
+        }
+        if (Test-HasProperty $evt "num_turns") {
+            $t = [int]$evt.num_turns
+            if ($t -gt $script:IterTurns) { $script:IterTurns = $t }
+        }
+        if ((Test-HasProperty $evt "usage") -and (Test-HasProperty $evt.usage "cache_read_input_tokens")) {
+            $r = [long]$evt.usage.cache_read_input_tokens
+            if ($r -gt $script:IterCacheRead) { $script:IterCacheRead = $r }
+        }
+    } catch { }
+}
+function Write-Telemetry {
+    param([int]$Iteration, [string]$Status, [datetime]$IterStart, [string]$Tier, [string]$Model)
+    try {
+        if (-not (Test-Path $TelemetryFile)) {
+            $header = @("when","iteration","status","seconds","tier","model","turns","cache_read_tokens","cost_usd") -join "`t"
+            # -Encoding utf8 writes a BOM on PowerShell 5.1, which lands inside the first column name
+            # and breaks any strict TSV reader. The rows are ASCII; write them without one.
+            [System.IO.File]::WriteAllLines($TelemetryFile, @($header), (New-Object System.Text.UTF8Encoding($false)))
+        }
+        $row = @(
+            (Get-Date -Format o),
+            $Iteration,
+            $Status,
+            [int]((Get-Date) - $IterStart).TotalSeconds,
+            $Tier,
+            $Model,
+            $script:IterTurns,
+            $script:IterCacheRead,
+            ("{0:F4}" -f $script:IterCost)
+        ) -join "`t"
+        [System.IO.File]::AppendAllLines($TelemetryFile, [string[]]@($row), (New-Object System.Text.UTF8Encoding($false)))
+    } catch { }   # Measurement must never be able to stop execution.
+}
+
+# ---------- Escalation surfacing ----------
+# ESCALATE stops the loop dead and the run then waits on a human who has no idea they are being
+# waited on. On the Calendar-Note alarms run that cost about 46 minutes of pure idle across two
+# decisions - and the page built for exactly this, SUGGESTIONS.html's Escalate tab, was never
+# refreshed even once: the copy in that repository carried no D-0NN id at all and predated the tab.
+# ENGINE.md 9 already tells the engine to regenerate it. This is the check that the instruction was
+# actually carried out, because an instruction nothing verifies is a wish (ADR-002).
+function Get-PendingDecisionIds {
+    $escalation = Join-Path $RunDir "ESCALATION.md"
+    if (-not (Test-Path $escalation)) { return @() }
+    try {
+        $ids = [System.Collections.Generic.HashSet[string]]::new()
+        foreach ($m in [regex]::Matches((Get-Content $escalation -Raw), '(?m)^#{1,6}\s*(D-\d{3})(?![0-9])')) {
+            $null = $ids.Add($m.Groups[1].Value)
+        }
+        return @($ids)
+    } catch { return @() }
+}
+
+# Opens the decision queue and returns what was actually shown. A page missing any pending id is
+# STALE, and a stale page is never opened as though it were current: showing yesterday's questions
+# is worse than showing the raw file, because it looks answered.
+function Open-EscalationQueue {
+    $pending = Get-PendingDecisionIds
+    $page = Join-Path $RepoRoot "SUGGESTIONS.html"
+    $target = $null
+    if (Test-Path $page) {
+        $html = ""
+        try { $html = Get-Content $page -Raw } catch { }
+        $missing = @($pending | Where-Object { $html -notmatch [regex]::Escape($_) })
+        if ($pending.Count -gt 0 -and $missing.Count -eq 0) {
+            $target = $page
+        } else {
+            $why = if ($pending.Count -eq 0) { "ESCALATION.md names no D-0NN entry" }
+                   else { "SUGGESTIONS.html is missing $($missing -join ', ')" }
+            Write-Warning "The Escalate tab was not regenerated for this decision ($why)."
+            Write-Warning "Opening ESCALATION.md instead - a stale page would read as though it were answered."
+            Write-RunLog "escalate page STALE: $why"
+        }
+    }
+    if ($null -eq $target) {
+        $escalation = Join-Path $RunDir "ESCALATION.md"
+        if (Test-Path $escalation) { $target = $escalation }
+    }
+    if ($null -eq $target) { return }
+    # -NoOpenEscalation suppresses the BROWSER, never the check above: whether the engine regenerated
+    # the tab is a fact about this run, and a headless CI box is exactly where nobody would notice it.
+    if ($NoOpenEscalation) {
+        Write-Host "Decision queue: $target (not opening; -NoOpenEscalation)" -ForegroundColor Magenta
+        Write-RunLog "escalate target (not opened): $target"
+        return
+    }
+    Write-Host "Opening $([IO.Path]::GetFileName($target))" -ForegroundColor Magenta
+    Write-RunLog "opened for the human: $target"
+    # Fail-silent: no browser, no display, a locked-down desktop - none of that is a reason to fail a
+    # run whose engineering work already succeeded.
+    try { Start-Process $target | Out-Null } catch { Write-Warning "Could not open $target automatically: $_" }
+}
+
 # ---------- Quota reader (ADR-012) ----------
 # claude -p --output-format stream-json emits `rate_limit_event` carrying structured utilization:
 #   { "type":"rate_limit_event", "rate_limit_info": {
@@ -324,7 +483,7 @@ function Wait-ForQuotaReset {
 
     while ((Get-Date) -lt $target) {
         $remaining = $target - (Get-Date)
-        $beat = "[$(Get-Date -Format 'HH:mm:ss')] waiting for quota reset - {0:00}:{1:00}:{2:00} remaining" -f [int]$remaining.TotalHours, $remaining.Minutes, $remaining.Seconds
+        $beat = "[$(Get-Date -Format 'HH:mm:ss')] waiting for quota reset - {0:00}:{1:00}:{2:00} remaining" -f [int][Math]::Floor($remaining.TotalHours), $remaining.Minutes, $remaining.Seconds
         Write-Host $beat -ForegroundColor DarkGray
         Write-RunLog $beat
         $chunk = [Math]::Min(300, [Math]::Max(5, [int]$remaining.TotalSeconds))
@@ -566,6 +725,8 @@ function Read-EngineEvent {
     if ($evt.type -eq "rate_limit_event" -and (Test-HasProperty $evt "rate_limit_info")) {
         Register-RateLimit $evt.rate_limit_info
     }
+    # Same reasoning as quota: a measurement is not output, so -QuietEngine must not suppress it.
+    if ($evt.type -eq "result") { Register-ResultUsage $evt }
     if (-not $Stream) { return }
 
     $stamp = "$(Get-Date -Format 'HH:mm:ss') +$(Format-Elapsed $IterStart)"
@@ -599,7 +760,9 @@ function Read-EngineEvent {
 $RunStart = Get-Date
 function Format-Elapsed([datetime]$since) {
     $span = (Get-Date) - $since
-    return "{0:00}:{1:00}:{2:00}" -f [int]$span.TotalHours, $span.Minutes, $span.Seconds
+    # [int] ROUNDS. [int]3.95 is 4, so 3h57m rendered as "04:57" and the hours field jumped back and
+    # forth as the minutes crossed 30. Floor, always.
+    return "{0:00}:{1:00}:{2:00}" -f [int][Math]::Floor($span.TotalHours), $span.Minutes, $span.Seconds
 }
 
 # ---------- Iteration budget: counted from commits, not from this process's memory ----------
@@ -650,6 +813,7 @@ for ($iteration = $priorIterations + 1; $iteration -le $MaxIterations; $iteratio
 
     # Status file is transport, not state: delete before invoking so absence-after = crash (mechanical detection).
     if (Test-Path $StatusFile) { Remove-Item $StatusFile -Force }
+    Reset-IterationUsage
 
     # Fresh permission settings every iteration - build artifact, never a source artifact.
     # The engine spec goes in by FILE, not as an inline argument: it is ~13KB of multi-line text,
@@ -661,7 +825,20 @@ for ($iteration = $priorIterations + 1; $iteration -le $MaxIterations; $iteratio
         $settingsPath = Compile-PermissionSettings
         $claudeArgs += @("--settings", $settingsPath)
     }
-    if ($Model -ne "") { $claudeArgs += @("--model", $Model) }
+    # The Iteration is the Orchestrator, and at ENGINE.md 11 it is the Verifier. Pick its tier here:
+    # one --model is fixed for the whole invocation, so this is the last moment a choice exists.
+    # An explicit -Model still wins - a human overriding the map is not the map being ignored.
+    $iterModel = $Model
+    $iterTier  = "override"
+    if ($iterModel -eq "") {
+        $iterTier  = if (Test-DoneCandidate) { "capable" } else { "fast" }
+        $iterModel = Resolve-TierModel $iterTier
+        if ($iterModel -eq "") { $iterTier = "cli-default" }
+    }
+    if ($iterModel -ne "") {
+        $claudeArgs += @("--model", $iterModel)
+        Write-RunLog "iteration tier: $iterTier -> $iterModel"
+    }
     # Worker/Reviewer definitions come from .harness/loop/, which is deny-listed against the engine's own
     # edits: a Worker's tool restriction must be enforced by the harness, not by instruction the
     # engine could reason around. Omitting Bash from its tools is what makes "no git, no build,
@@ -726,6 +903,7 @@ for ($iteration = $priorIterations + 1; $iteration -le $MaxIterations; $iteratio
         $consecutiveCrashes++
         $why = "no Execution Status"
         if ($timeoutKind -ne "") { $why = "$timeoutKind timeout" }
+        Write-Telemetry -Iteration $iteration -Status "CRASH" -IterStart $IterStart -Tier $iterTier -Model $iterModel
         Write-Warning "Crash detected ($why). Consecutive crashes: $consecutiveCrashes / $MaxConsecutiveCrashes"
         if ($consecutiveCrashes -ge $MaxConsecutiveCrashes) {
             Write-Host "Watchdog limit reached. Stopping. The next run's engine will recover from the last Stable Checkpoint." -ForegroundColor Red
@@ -745,7 +923,8 @@ for ($iteration = $priorIterations + 1; $iteration -le $MaxIterations; $iteratio
     $consecutiveCrashes = 0
     Remove-Item $StatusFile -Force
     Write-RunLog "=== Status: $($status.Word) === $(Get-Date -Format o)"
-    Write-Host ("Status: {0} (iteration took {1}, total elapsed {2})" -f $status.Word, (Format-Elapsed $IterStart), (Format-Elapsed $RunStart)) -ForegroundColor Yellow
+    Write-Telemetry -Iteration $iteration -Status $status.Word -IterStart $IterStart -Tier $iterTier -Model $iterModel
+    Write-Host ("Status: {0} (iteration took {1}, total elapsed {2}, {3} turns, USD {4:F2})" -f $status.Word, (Format-Elapsed $IterStart), (Format-Elapsed $RunStart), $script:IterTurns, $script:IterCost) -ForegroundColor Yellow
     if ($status.Reason -ne "") { Write-Host $status.Reason }
 
     # Provisioned here too, not only before invoking: bootstrap is the Iteration that FIRST creates
@@ -756,7 +935,11 @@ for ($iteration = $priorIterations + 1; $iteration -le $MaxIterations; $iteratio
 
     switch ($status.Word) {
         "DONE"     { Write-Host "Goal verified complete. Review and merge the Loop Branch." -ForegroundColor Green; exit 0 }
-        "ESCALATE" { Write-Host "Human decision required. See .harness/run/ESCALATION.md - answer the queued decisions, then re-run." -ForegroundColor Magenta; exit 3 }
+        "ESCALATE" {
+            Write-Host "Human decision required. See .harness/run/ESCALATION.md - answer the queued decisions, then re-run." -ForegroundColor Magenta
+            Open-EscalationQueue
+            exit 3
+        }
         "FAILED"   { Write-Host "Execution broken. Human repair required. See .harness/run/STATE.md for the engine's last findings." -ForegroundColor Red; exit 4 }
     }
 

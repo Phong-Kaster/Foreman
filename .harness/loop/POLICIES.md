@@ -40,7 +40,11 @@
 
 Two tiers exist: **Fast** and **Capable**, mapped to concrete model identifiers in `.harness/loop/models.json` — the only place a vendor model name appears. `ENGINE.md` and this file never name one directly.
 
-**Always Capable, no exception:** the Reviewer, the Verifier, the Orchestrator (the top-level Iteration itself, in every capacity), and every bootstrap fan-out analysis role (ADR-009). These are judgment-heavy roles by definition; tiering applies only to Worker implementation.
+**Always Capable, no exception:** the Reviewer, the Verifier, and every bootstrap fan-out analysis role (ADR-009). These are the roles that decide whether work is *correct*, and none of them may run below Capable.
+
+**The Orchestrator runs at Fast in its ordinary capacity, and at Capable whenever it is the Verifier (§11).** The Runtime chooses this before the invocation starts and passes `--model` itself, because one model is fixed for a whole invocation and the Iteration cannot switch its own mid-session. `STATE.md`'s DONE-candidate is the signal, the same one §6.3 branches on.
+
+This line was earned, not reasoned: the Calendar-Note alarms run passed `--model` **never**, so the top-level session inherited the CLI default for the entire run. 979 of 1,215 Orchestrator messages ran below Capable, and the Verifier — this table's one "no exception" — re-proved all 36 DoD criteria on the cheaper model. Meanwhile the Workers, the only role tiering was supposed to touch, ran at Capable throughout. The tier system was not merely unenforced, it was inverted.
 
 **A Worker's task may be classified Fast only if all of the following hold**, assessed by the arm's-length planning roles at bootstrap or Phase re-grouping — never by the Worker itself, and never by the role that proposed the task:
 
@@ -49,6 +53,8 @@ Two tiers exist: **Fast** and **Capable**, mapped to concrete model identifiers 
 - it embeds no architecture decision, no new external dependency, no new cross-module contract.
 
 Everything else defaults to **Capable**. When genuinely uncertain, classify Capable — the cost of a wrong Fast classification is a wasted attempt at the wrong tier; the cost of a wrong Capable classification is a few cents.
+
+**If nothing is ever classified Fast, the tier is misconfigured, not the criteria.** Measured on the Calendar-Note alarms run: 7 of 7 tasks Capable, and the Fast model consumed 6,363 input tokens and one cent across the whole run. The criteria above are correctly cautious; a planning role that will not stake a Kotlin/Compose task on the Fast tier is behaving well. The fix belongs in `models.json` — raise what Fast maps to until a cautious planner can choose it — never in loosening these three conditions.
 
 **A failed Fast-tier attempt escalates the task to Capable for its remaining attempts** (`ENGINE.md` §8) — mechanical, not re-judged, and free: it does not consume an extra attempt beyond the normal three.
 
@@ -206,28 +212,65 @@ failure.
 
 ## Verification Class Criteria
 
-Every DoD criterion is either `machine` or `human` (ADR-015). The split is not usually a judgement call:
+Every DoD criterion declares one of **three** classes (ADR-015, ADR-030):
 
-| `machine` | `human` |
+| Class | Who produces the evidence | What closes it |
+|---|---|---|
+| `machine` | a command | the command's output |
+| `machine-then-human` | a command drives it **first**, then a person looks | **the person's signature** |
+| `human-only` | nothing can drive it — perception, judgement | the person's signature |
+
+**A machine pre-check never closes a `machine-then-human` criterion.** It exists to stop the human
+being the *first* person to find a defect, not to replace them. Earned on a real run: fourteen
+`machine` criteria were green, a fresh-context Verifier re-proved every one of them, a machine check
+of the criterion in question reported pass — and the human opened the app once and found it broken.
+
+Three rules keep the pre-check honest, and the third is the one that failed:
+
+- **A pre-check that fails is a defect**, reconciled into the run like any other failure, consuming
+  the normal attempt budget and abandonable at the third try. It does not become a note for the human.
+- **A pre-check that passes is written as "did not fail when driven from state X"**, never as "works".
+  The difference is not pedantry: a criterion labelled as machine-verified is read faster, so a
+  pre-check that oversells itself makes the human's look *worse* than no pre-check at all.
+- **A criterion any command will drive must name the state it is driven from.** The pass above was
+  false because the check ran on a device where the permission was already granted, while the
+  criterion said *install fresh, grant when asked, then open*. Two different paths; the automated one
+  was the one that worked. Name the starting state or automation will quietly pick the easy branch.
+
+The old split still decides which of the three a criterion lands in:
+
+| Closed by a command (`machine`) | Needs a signature (`machine-then-human`, or `human-only` when nothing can drive it) |
 |---|---|
 | Business logic: CRUD correctness, date arithmetic, validation, scoping rules | Appearance: colour, contrast, readability, spacing, alignment |
 | Behaviour and flow: an action reaches the intended screen, state transitions are correct, data survives a restart | Whether a control can actually be **seen and found** |
 | The app builds **and starts without crashing**, each screen opens without throwing | Whether the result looks like what was asked for |
 
 Building is not running. `assembleDebug` proves the code type-checks and says nothing about whether a
-screen renders. Where a device or emulator is available, launch-and-open-each-screen is `machine` and
-should be written that way; where it is not, that is a `human` item.
+screen renders.
 
-**A user-facing capability usually needs one criterion of each class.** "The user can delete a note"
-is two claims: the record is removed (`machine`), and the delete control is visible and reachable
-(`human`). Asserting only the first is how a correctly-wired button ships rendered invisible.
+**A user-facing capability usually needs one criterion of each kind**, and a DoD covering
+user-facing behaviour with **zero** criteria needing a signature is a defect. "The user can delete a
+note" is two claims: the record is removed, and the delete control is visible and reachable.
+Asserting only the first is how a correctly-wired button ships rendered invisible; a zero count does
+not mean the requirement was specified unusually well, it means the criteria are measuring a layer
+beneath the one the user experiences.
 
-**A DoD covering user-facing behaviour with zero `human` criteria is a defect.** Zero does not mean
-the requirement was specified unusually well; it means the criteria are measuring a layer beneath the
-one the user experiences.
+When uncertain, classify for a human signature — `machine-then-human` if anything can drive it,
+`human-only` otherwise. The costs are asymmetric: over-classifying costs one look, under-classifying
+ships something nobody can see.
 
-When uncertain, classify `human`. The costs are asymmetric: over-classifying costs one look,
-under-classifying ships something nobody can see.
+### What the environment can do is a fact, and facts go stale
+
+`knowledge/PROJECT.md` caches what this repository can run. **A claim there about the absence of a
+capability — no device, no emulator, no `adb`, no container — is re-checked before it is used to
+classify a criterion, not trusted because it is written down.** One command settles it.
+
+Earned: a repository's `PROJECT.md` stated "No emulator, no device, no `adb`, no Robolectric — there
+is no command here that can prove it", and every run dutifully classed anything needing a running app
+as `human`. The claim was false. `adb` was installed, a device was attached, and the project already
+had an `androidTest/` source set wired to a working instrumentation runner. Three runs inherited the
+note and none re-read the ground under it. An absence is the one kind of claim that rots silently,
+because nothing ever fails to remind you of it.
 
 ### A perceptual criterion may be `machine` only if it cites the reference image behind it
 
@@ -312,6 +355,23 @@ nothing about what a user sees — this is exactly how hardcoded colours survive
 ## Evidence Requirements
 
 A claim without evidence is not a fact. Task completion requires recorded evidence per ENGINE.md §6.7 and §6.10. "It should work" is never evidence. Evidence must be reproducible from the checkpoint: command + observed output.
+
+**Evidence is written to a file and read in summary; it is not pasted whole into the transcript.**
+Redirect a build, test or lint run to a file under the run directory, then read back only what
+decides the question: the exit code, the summary line, the failing cases. Cite the file so the
+Reviewer and the Verifier can open the whole thing.
+
+Nothing about the standard changes: the command still has to actually run, unpiped (see below), the
+output still has to exist on disk, and a claim still has to be reproducible from the checkpoint. What
+changes is how many times that output gets paid for. Every token placed in a transcript is re-read on
+every later turn of the same invocation, so a full Gradle log pasted at turn 20 is charged again at
+turns 21 through 146.
+
+Measured on the Calendar-Note alarms run: **143 million cache-read tokens across 645 turns, 222K of
+context carried per turn on average and 767K at the worst session — 55% of the entire bill.** The
+same growth is what makes a single iteration expensive enough to matter: one 33-minute iteration took
+the five-hour quota window to 97%, and the loop then sat idle for 2h38m waiting for it to reset. Over
+half the run's wall clock — 3.4 of 6.5 hours measured — was the engine not running at all.
 
 **Never take a piped command's exit code as evidence.** `./gradlew build 2>&1 | tail -20` exits **0
 when the build failed**, because the exit status belongs to `tail`. This is not hypothetical: a real

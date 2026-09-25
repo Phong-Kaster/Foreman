@@ -1,0 +1,62 @@
+{
+  "_comment": "Capability entries for driving an Android device or emulator, so that DoD criteria needing a running app can be classed `machine-then-human` instead of `human-only` (ADR-030). Split into three tiers by blast radius. Paste tier 1 into the repository's STANDING ledger (knowledge/capabilities.json) after reviewing it. Tier 2 belongs in a GOAL-SCOPED ledger (.harness/run/capabilities.json) and expires with the run. Tier 3 is withheld on purpose.",
+
+  "_why_the_serial_prefix_matters": "An emulator's adb serial always begins `emulator-`; a physical device's never does. That is a distinction the permission matcher CAN make, which is what lets a destructive command be allowed on a throwaway image and denied on the human's own phone by the same rule. Contrast the screenshot-reference case in android/compose-visual-testing, where create and overwrite are one command and no pattern separates them - there a wrapper script had to make the distinction instead.",
+
+  "entries": [
+    {
+      "_tier": "1 - STANDING. Reads state, or writes only inside the app under test. Nothing here can lose work that belongs to a person.",
+      "intent": "Observe what the app actually does when it runs: which notification was posted and on which channel, which permissions the installed package really holds, whether anything crashed, whether an activity reached the foreground",
+      "command": "adb devices / adb -s <serial> shell dumpsys <service> / adb -s <serial> logcat -d / adb -s <serial> install -r <apk>",
+      "scope": "read-only inspection, plus installing the build this run produced over the same package (app data is preserved by -r)",
+      "lifetime": "permanent",
+      "allow": [
+        "Bash(adb devices*)",
+        "Bash(adb -s * shell dumpsys *)",
+        "Bash(adb -s * shell pm list packages*)",
+        "Bash(adb -s * shell am start -n *)",
+        "Bash(adb -s * shell am force-stop *)",
+        "Bash(adb -s * logcat -d*)",
+        "Bash(adb -s * install -r *)"
+      ]
+    },
+    {
+      "_tier": "1 - STANDING. A managed emulator the build creates, drives and destroys. Nothing outside the build directory survives it.",
+      "intent": "Run instrumented tests on an emulator Gradle stands up and tears down itself, so that `machine-then-human` criteria can be driven at the DONE-candidate gate without a person plugging anything in",
+      "command": "./gradlew :app:<device>DebugAndroidTest (Gradle managed devices) or :app:connectedDebugAndroidTest",
+      "scope": "the instrumentation test source set and the emulator image the build owns",
+      "lifetime": "permanent",
+      "_note": "Prefer the managed-device task over connectedDebugAndroidTest. Managed devices start from a known image every time, which is exactly what a criterion that names its starting state needs; a connected device carries whatever the last run left behind.",
+      "allow": [
+        "Bash(*DebugAndroidTest*)",
+        "Bash(*connectedDebugAndroidTest*)",
+        "Bash(*managedDevice*)"
+      ]
+    },
+    {
+      "_tier": "2 - GOAL-SCOPED, EMULATOR ONLY. Destroys state. The `emulator-` serial in the pattern is the enforcement, not a convention: a physical device cannot match it.",
+      "intent": "Put the device into the exact starting state a criterion names - cleared app data for a fresh-install path, a revoked permission for a not-yet-granted path, a moved clock for a next-calendar-day path",
+      "command": "adb -s emulator-<port> shell pm clear|revoke|grant, and date/settings changes",
+      "scope": "an emulator instance only; never a serial without the `emulator-` prefix",
+      "lifetime": "goal",
+      "_why_goal_scoped_not_standing": "These are the commands that make a criterion's starting state reproducible, and they are also the commands that wipe a person's notes if they are ever pointed at the wrong serial. Granting them for one run keeps the blast radius inside the run that needed it.",
+      "allow": [
+        "Bash(adb -s emulator-* shell pm clear *)",
+        "Bash(adb -s emulator-* shell pm revoke *)",
+        "Bash(adb -s emulator-* shell pm grant *)",
+        "Bash(adb -s emulator-* shell settings put *)",
+        "Bash(adb -s emulator-* shell date *)"
+      ]
+    },
+    {
+      "_tier": "3 - WITHHELD. Do not add these to any ledger.",
+      "_withheld": "The same destructive commands with an unrestricted serial - `Bash(adb -s * shell pm clear*)` or a bare `Bash(adb shell pm clear*)`.",
+      "_why": "A pattern that does not pin the `emulator-` prefix will match the human's own phone, where `pm clear` deletes their data and a clock change affects every app on the device. The engine has no way to tell from a serial alone whether it is about to wipe a scratch image or somebody's notes, and there is no evidence in the run that would reveal the mistake afterwards. If a criterion genuinely can only be driven on a physical device, that is an Escalation Request naming the device and the command, answered by a person who is holding it.",
+      "intent": "(withheld)",
+      "command": "-",
+      "scope": "-",
+      "lifetime": "-",
+      "allow": []
+    }
+  ]
+}
