@@ -88,6 +88,10 @@ _Avoid_: Setup, init, onboarding
 The testable acceptance criteria derived from the PRD and approved by the human. The only human-owned artifact inside `.harness/run/` (`DoD.md`); immutable after approval — the engine may propose changes but never apply them.
 _Avoid_: Acceptance criteria file, goal, DoD checklist
 
+**Removals**:
+The DoD section naming what the repository already ships that the PRD makes unnecessary — screens, navigation entries, permissions, services, dependencies, demo data — each a `machine` criterion stating absence. Approved by the human with the rest of the DoD; afterwards, leaving one in place is a DoD violation. How far it reaches depends on whether Bootstrap classified the repository as a *template* (every demo feature the PRD does not use) or a *product* (only what the PRD replaces or leaves unreachable) ([ADR-028](./docs/adr/ADR-028-the-definition-of-done-names-what-the-prd-makes-unnecessary.md)).
+_Avoid_: Cleanup (the Cleanup Commit removes `.harness/run/`, not product code), dead-code pass
+
 **Plan**:
 The machine-owned execution strategy (`PLAN.md`, `TASKS/`). Fully owned by the engine; evolves through Tier 1 and Tier 2 mutations. The human never approves the plan — only the Definition of Done.
 _Avoid_: Roadmap, backlog

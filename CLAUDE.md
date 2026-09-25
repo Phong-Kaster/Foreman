@@ -80,6 +80,10 @@ Each of these cost a real run time or quota. They are here so the next change do
 - **Autonomous mode turns silent waits into lost hours.** A wrong stop or sleep that a person would
   notice in minutes goes unnoticed until the Run Report. Every path that waits must name what it is
   waiting for, and must never wait past a budget it will then stop on.
+- **A DoD that only asserts presence cannot catch what should be gone.** The music-player run kept
+  61 of 99 Kotlin files of skeleton demo code and five permissions an offline player never uses,
+  because all fifteen criteria said "X works" and none said "Y is gone" (ADR-028). When a guard has
+  only positive checks, ask what negative check would have failed on the last run's output.
 - **Test the fixture against the field event, not a tidy one.** The fake-claude `WARNED` directive
   always said `five_hour`, so the suite could not see the bug. When a real event breaks something,
   add it to the fixture verbatim (`WARNED7`) before fixing.

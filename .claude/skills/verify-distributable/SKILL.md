@@ -47,7 +47,7 @@ no API calls and no real `claude` — the `-ClaudeCommand` seam drives a stub.
 Invoke-Pester -Script @{ Path = 'tests/run.Tests.ps1' } -PassThru
 ```
 
-Expected: **60 passed, 0 failed**. Several `Write-Error` blocks appear in the output — they are the
+Expected: **64 passed, 0 failed**. Several `Write-Error` blocks appear in the output — they are the
 prerequisite tests asserting those exact failures, not test failures. Read the `Passed:`/`Failed:`
 counts, not the presence of red text.
 

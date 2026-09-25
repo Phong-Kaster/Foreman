@@ -1015,3 +1015,40 @@ Describe "run.ps1 in Autonomous mode (ADR-027)" {
         } finally { Remove-TestRepo -TestRepo $repo }
     }
 }
+
+Describe "The spec asks what the PRD makes unnecessary (ADR-028)" {
+
+    # Calendar-Note loop/music-player, 2026-09-24: a music player built on a pristine skeleton kept
+    # its Home and Setting screens, a posts API, a weather API and location / exact-alarm permissions -
+    # 61 of 99 Kotlin files unreachable from the feature - because every DoD criterion asserted that
+    # something existed and none asserted that something was gone. These pin the four places that
+    # now ask the question, so a later edit cannot quietly drop one.
+
+    $Spec = Get-Content (Join-Path $RepoRootDir ".harness/loop/ENGINE.md") -Raw
+    $Policies = Get-Content (Join-Path $RepoRootDir ".harness/loop/POLICIES.md") -Raw
+    $Reviewer = Get-Content (Join-Path $RepoRootDir ".harness/loop/agents/loop-reviewer.md") -Raw
+    $DodTemplate = Get-Content (Join-Path $RepoRootDir ".harness/loop/templates/DoD.template.md") -Raw
+
+    It "has bootstrap classify the repository as a template or a product" {
+        $bootstrap = ($Spec -split '# 5\. Bootstrap Iteration')[1].Split([string[]]@('# 6. The Iteration'), 'None')[0]
+        $bootstrap | Should Match '\*\*template\*\*'
+        $bootstrap | Should Match '\*\*product\*\*'
+    }
+
+    It "has bootstrap put a Removals section of absence criteria in the DoD" {
+        $bootstrap = ($Spec -split '# 5\. Bootstrap Iteration')[1].Split([string[]]@('# 6. The Iteration'), 'None')[0]
+        $bootstrap | Should Match 'Removals section'
+        $bootstrap | Should Match 'absence'
+        $DodTemplate | Should Match '## Removals'
+    }
+
+    It "never lets an Autonomous run settle whether a feature stays as an Assumption" {
+        $autonomous = ($Spec -split '## 14\.1 Decisions become assumptions')[1].Split([string[]]@('## 14.2'), 'None')[0]
+        $autonomous | Should Match 'never an Assumption'
+    }
+
+    It "treats dead code as a review finding, in the policy and in the reviewer it is handed to" {
+        $Policies | Should Match 'Dead code is a finding'
+        $Reviewer | Should Match 'Dead code'
+    }
+}

@@ -15,7 +15,13 @@ completion**, even where the code looks reasonable and satisfies its stated acce
 Constraint exists precisely because something reasonable-looking was wrong here before.
 
 Then review in this priority order: correctness, security, edge cases, architecture conformance,
-duplication, maintainability, testability, performance.
+dead code, duplication, maintainability, testability, performance.
+
+**Dead code:** name anything that, after this diff, nothing reachable from the app's entry points uses —
+a screen or navigation entry, a declared permission, a registered service, a dependency, a class. It is
+MAJOR, and CRITICAL when the Definition of Done's Removals section names it. Show the evidence (the
+manifest line, the dependency, the search that finds no caller), not an impression. A diff that adds a
+feature beside an old one it replaces, instead of removing the old one, is the case to look for.
 
 Classify every finding as exactly one of:
 

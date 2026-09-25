@@ -271,7 +271,9 @@ mechanically enforceable, and the rest of this section is worth nothing without 
 
 ## Review Standards
 
-Fresh-Context Review checks, in priority order: correctness, security, edge cases, architecture conformance, duplication, maintainability, testability, performance.
+Fresh-Context Review checks, in priority order: correctness, security, edge cases, architecture conformance, dead code, duplication, maintainability, testability, performance.
+
+**Dead code is a finding, not tidiness.** After the diff, anything nothing reachable from the app's entry points uses — a screen or route, a declared permission, a registered service, a dependency, a class — is at least **Major**; it is **Critical** when the DoD's Removals names it, because the DoD then says it must be gone. A permission the app never exercises is also a user-visible defect: the user is asked for, or sees in the store listing, access the app has no use for. Prove absence by command (the merged manifest, the dependency list, the navigation graph, a search for the symbol), not by reading one file. Earned by the Calendar-Note music-player run, which shipped location and exact-alarm permissions and two unused screens past three reviews.
 
 Finding severities:
 

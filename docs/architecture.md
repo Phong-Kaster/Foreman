@@ -155,6 +155,7 @@ There is no `GOAL.md` ([ADR-001](./adr/ADR-001-prd-and-dod-source-of-truth.md)).
 
 - The human approves (and may edit) the DoD at the single mandatory gate. Five minutes reviewing a DoD is the highest-leverage human act in the pipeline — it prevents a multi-hour autonomous run from building a verified-wrong feature.
 - After approval the DoD is **immutable to the engine**: propose changes (Tier 3), never apply them.
+- The DoD also names **what the PRD makes unnecessary** — its **Removals**: screens, permissions, services, dependencies and demo data the repository already ships, each as a `machine` criterion stating absence [ADR-028](./adr/ADR-028-the-definition-of-done-names-what-the-prd-makes-unnecessary.md). Bootstrap first classifies the repository as a *template* (propose removing every unused demo feature) or a *product* (remove only what the PRD replaces or leaves unreachable; ask about the rest). The human approves deletions at the same gate, so whether existing code stays is intent, never an engine judgement.
 - The **Plan** is deliberately *not* approved: execution strategy belongs to the engine. Human owns *what done means*; engine owns *how to get there*.
 
 ### Tiered Mutability
