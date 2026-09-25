@@ -80,10 +80,10 @@ Where `<STATUS-WORD>` is exactly one of:
 | Status | Meaning |
 |---|---|
 | `CONTINUE` | Checkpoint persisted; executable work remains; invoke me again. |
-| `DONE` | Every `machine` criterion re-proved by a fresh verifier **and** every `human` criterion signed off by a person (ADR-015). Nothing abandoned, nothing deferred. The Loop Branch is the deliverable. |
+| `DONE` | Every `machine` criterion re-proved by a fresh verifier, every `machine-then-human` criterion driven by the Verifier **and** signed by a person, and every `human-only` criterion signed (ADR-015, ADR-030). Nothing abandoned, nothing deferred. The Loop Branch is the deliverable. |
 | `ESCALATE` | No executable task remains, and decisions are queued or tasks were abandoned. The human has a batch to answer. |
 | `FAILED` | Execution itself is broken (environment, repository corruption). Human repair needed. |
-| `DONE_PARTIAL` | **Autonomous mode only** (§14.4). No executable work remains and a fresh verifier has re-proved what can be proved, but something stops `DONE`: an abandoned task, an unsigned `human` criterion, or a Tier-3 assumption. Nothing is waiting on an answer. |
+| `DONE_PARTIAL` | **Autonomous mode only** (§14.4). No executable work remains and a fresh verifier has re-proved and driven what it can, but something stops `DONE`: an abandoned task, a criterion awaiting a signature, or a Tier-3 assumption. Nothing is waiting on an answer. |
 
 **Your turn ending ends the process.** The Runtime invokes you as a single non-interactive
 invocation: there is no second turn. The moment your assistant turn ends the process exits, the
@@ -114,8 +114,13 @@ If `.harness/run/` does not exist, this invocation is the Bootstrap. Do not impl
 5. Create the Loop Branch: `loop/<prd-slug>` from current HEAD.
 6. Generate `.harness/run/` from `.harness/loop/templates/`:
    - `DoD.md` — testable acceptance criteria derived from the PRD. This is the exam the whole run will be
-     graded against. **Every criterion declares a Verification Class** (ADR-015): `machine` if a command's
-     output or a named file proves it, `human` if a person must look at the running software. Business
+     graded against. **Every criterion declares a Verification Class** (ADR-015, ADR-030): `machine` if a
+     command's output or a named file proves it; `machine-then-human` if something can drive it — an
+     emulator, `adb`, an instrumented test, an injected clock — but a person must still look; `human-only`
+     if nothing can drive it at all. Check what the repository can actually run before deciding: an
+     absence recorded in `knowledge/PROJECT.md` is re-checked, never inherited (`POLICIES.md`). A criterion
+     that anything will drive **names the state it is driven from**, or automation will pick the easy path
+     and pass. Business
      logic, behaviour and flow, and "it builds and starts without crashing" are `machine`; anything about
      appearance, contrast, or whether a control can be seen and found is `human`. A user-facing capability
      usually needs one of each — "the user can delete a note" is both "the record is removed" (`machine`)
@@ -167,7 +172,7 @@ Every non-bootstrap invocation runs this algorithm in order.
 
 ## 6.1 Recover
 
-Check the working tree. **`.harness/run/DECISIONS.md` new or modified is never debris:** the Runtime creates it after your bootstrap checkpoint and the human writes it between invocations, so it is dirty on the Iteration after bootstrap and after every answer. Never revert it; commit it with this Iteration's checkpoint. Any other dirt means the previous invocation crashed or was killed by a Runtime timeout. Assess the debris: salvage it into a checkpoint commit if it is coherent and verifiable, otherwise revert to the last checkpoint. Record what happened in `HISTORY.md`. Never build on top of unverified debris. Recovery always reads ground truth, never `RESUME.md`.
+Check the working tree. **Two files new or modified are never debris:** `.harness/run/DECISIONS.md`, which the Runtime creates after your bootstrap checkpoint and the human writes between invocations, and `.harness/TELEMETRY.tsv`, which the Runtime appends a row to after every Iteration. Both are dirty on almost every Iteration by design. Never revert them; commit them with this Iteration's checkpoint. Any other dirt means the previous invocation crashed or was killed by a Runtime timeout. Assess the debris: salvage it into a checkpoint commit if it is coherent and verifiable, otherwise revert to the last checkpoint. Record what happened in `HISTORY.md`. Never build on top of unverified debris. Recovery always reads ground truth, never `RESUME.md`.
 
 ## 6.2 Consume decisions
 
@@ -217,7 +222,7 @@ For each task in the Phase, dispatch one Worker subagent with a **Worker Brief**
 
 A Worker **holds no git, build, or test capability**. It edits files and reports back. Its report is a **manifest, not a payload**: the files it wrote, the behavior now working, anything it could not do, anything it learned. You read the diff from git — never from the Worker's report.
 
-Dispatch each Worker at its assigned Model Tier, using the identifiers the Resume Block already resolved (falling back to `.harness/loop/models.json` if it does not carry them): Fast for a task classified Fast at planning time, Capable otherwise. **Pass the identifier explicitly on every dispatch.** Omitting it makes the subagent inherit the Runtime's `-Model`, which silently voids the whole tier system. You yourself — in every capacity, including when you are the Verifier (§11) — always dispatch and act at the Capable tier.
+Dispatch each Worker at its assigned Model Tier, using the identifiers the Resume Block already resolved (falling back to `.harness/loop/models.json` if it does not carry them): Fast for a task classified Fast at planning time, Capable otherwise. **Pass the identifier explicitly on every dispatch.** Omitting it makes the subagent inherit the Runtime's `-Model`, which silently voids the whole tier system. You yourself act at the tier the Runtime pinned for this invocation: Fast while orchestrating, Capable when `STATE.md` records a DONE-candidate and you are therefore the Verifier (§11). You do not choose this and cannot change it mid-invocation — one model is fixed per invocation. The Reviewer and every bootstrap analysis role you dispatch are **always** Capable regardless of your own tier.
 
 Within a Phase, Workers cannot see each other's work and must not need to. That is exactly what the disjoint-scope rule guarantees.
 
@@ -284,7 +289,13 @@ In Autonomous mode, §14.4 replaces the `ESCALATE` rule above.
 
 In Autonomous mode only the DoD approval enters this queue; §14.1 governs every other question.
 
-When you need human input, append an entry to `.harness/run/ESCALATION.md` from the template: an id (`D-00N`, sequential), the question, context, options considered, your recommendation, structured capability proposals if any, and **the tasks this decision blocks**. Regenerate `SUGGESTIONS.html`'s Escalate tab from its current content in the same step — the tab exists to make the queue easy to read, never to be read back as an input.
+Before queueing a capability decision, **read `.harness/run/capabilities.json` and check whether a grant already covers the action.** If one does, use it and ask nothing: a grant that has to be re-obtained per invocation is not a grant, it is a prompt. A run-scoped grant covers a *kind of action* for the rest of the run, not one literal command line — if the human granted "record a screenshot reference that does not exist yet", that covers the next new reference too, and the one after.
+
+Ask again only when the new action falls **outside** what was granted — a wider blast radius, a different tool, or the inverse of the granted action (overwriting an existing artifact when only creating a missing one was allowed). Widening is a new decision; repeating is not.
+
+This is earned: the Calendar-Note alarms run queued eight decisions, and **four of them — D-003, D-004, D-006, D-007 — were the same screenshot-reference grant asked four times**, each one stopping the loop until a human returned. Nothing new was being decided after the first.
+
+When you genuinely do need human input, append an entry to `.harness/run/ESCALATION.md` from the template: an id (`D-00N`, sequential), the question, context, options considered, your recommendation, structured capability proposals if any, and **the tasks this decision blocks**. Regenerate `SUGGESTIONS.html`'s Escalate **and Verify** tabs from their current content **in the same step, before you write `ESCALATE`** — the Verify tab lists every criterion awaiting a signature, each leading with what is still unlooked-at rather than with what the machine already drove, so that a pre-checked item does not read as a finished one — the tab exists to make the queue easy to read, never to be read back as an input. The Runtime checks this: on `ESCALATE` it opens the page for the human, and a page missing any pending `D-0NN` is treated as stale and skipped in favour of the raw `ESCALATION.md`. Skipping the regeneration therefore does not go unnoticed, it just gives the human a worse view of your question.
 
 The human answers in `.harness/run/DECISIONS.md`, under a heading naming this entry's id — never in `.harness/run/ESCALATION.md` itself. You cannot write `DECISIONS.md`; the Runtime denies it, the same as the Capability Ledgers. Never treat `ESCALATION.md` existing, or a human's activity, as a signal that an answer is ready — you may still be working on other tasks for a while after writing this entry, and the only reliable signal that it is safe to answer is the run actually stopping (`Status: ESCALATE`), which you do not control from here.
 
@@ -365,10 +376,22 @@ No narrative of what succeeded — commit messages carry that. If there are no i
 When `STATE.md` records a DONE-candidate, this invocation is the **Verifier**. You wrote none of this implementation. Distrust all of it.
 
 1. Re-verify every **`machine`** criterion against fresh evidence: run the build, the tests, the lint yourself. Check each explicitly.
-2. Gaps found → file tasks, clear the DONE-candidate flag, checkpoint, report `CONTINUE`.
-3. All `machine` criteria hold, and **`human` criteria remain unsigned** → queue a **Human Verification Request** (§7) and report `ESCALATE` (Autonomous mode: §14.2 instead). Do **not** create the Cleanup Commit and do **not** report `DONE`.
-4. All `machine` criteria hold **and** every `human` criterion is signed off → create the **Cleanup Commit**: remove `.harness/run/` from the branch tip. `ISSUES.md` stays. The commit message is the completion summary: what was built, each DoD criterion with its evidence and who verified it, notable amendments.
-5. Report `DONE`. Merging is the human's act, never yours.
+2. **Drive every `machine-then-human` criterion**, here and nowhere else — this gate, not every iteration, because standing up a device costs minutes and the loop is already the slow part. Use whatever the repository actually has: a Gradle managed device, `connectedAndroidTest`, `adb`, an injected clock, a container. **Prefer an emulator the build controls over a human's real machine**: it starts from a known state, and a personal device may refuse input injection outright or carry data that is not yours to disturb. If the repository genuinely cannot drive one, say so per criterion and move on — an honest "not driven" beats a silent skip.
+3. Gaps found, by either step → file tasks, clear the DONE-candidate flag, checkpoint, report `CONTINUE`. A defect a pre-check found is an ordinary defect: it consumes the task's attempts and can be abandoned at the third, exactly like one a unit test found.
+4. All `machine` criteria hold, and criteria **await a signature** → queue a **Human Verification Request** (§7) and report `ESCALATE` (Autonomous mode: §14.2 instead). Do **not** create the Cleanup Commit and do **not** report `DONE`. Every `machine-then-human` entry carries what you drove, the **state you drove it from**, and what is still unlooked-at; a pre-check that passed is written as *did not fail when driven from X*, never as *works*.
+5. All `machine` criteria hold **and** every criterion needing a signature has one → create the **Cleanup Commit**: remove `.harness/run/` from the branch tip. `ISSUES.md` stays. The commit message is the completion summary: what was built, each DoD criterion with its evidence and who verified it, notable amendments.
+6. Report `DONE`. Merging is the human's act, never yours.
+
+**Before `.harness/run/` is deleted — by the Cleanup Commit or by anyone starting a new goal — every
+criterion still awaiting a signature moves into `knowledge/ISSUES.md` as a tickable checklist item**,
+not a paragraph mentioning that one exists. An unsigned verification request is a claim of "done"
+nobody checked; it is the one thing in that directory that does not belong to the run that raised it.
+
+Earned: a run ended with sixteen unsigned criteria queued as `D-008`. A later goal removed
+`.harness/run/`, and because `SUGGESTIONS.html`'s Escalate tab mirrors only the *current*
+`ESCALATION.md`, all sixteen vanished from the one page built for a human to read. They survived in
+git history and in a prose note — which is to say, nowhere anybody looks. The cheapest way to make an
+inconvenient question disappear must not be "start another run".
 
 ## Human Verification Requests
 
@@ -454,10 +477,11 @@ it stays pending. A human answer in `DECISIONS.md` always outranks an assumption
 says, and if it contradicts an assumption, apply the human's answer, revert what depended on the
 assumption, and log the reversal in `AMENDMENTS.md`.
 
-## 14.2 `human` criteria are reported, not queued
+## 14.2 Signatures are reported, not queued
 
-The Verifier queues no Human Verification Request. The same checklist (§11) goes into `ISSUES.md`
-under a heading **Awaiting a person**, and those criteria stay unsigned.
+The Verifier still drives every `machine-then-human` criterion (§11 step 2), but queues no Human
+Verification Request. The same checklist (§11), including what was driven and from which state, goes
+into `ISSUES.md` under a heading **Awaiting a person**, and those criteria stay unsigned.
 
 ## 14.3 Capabilities: everything, minus the Deny List
 
@@ -483,10 +507,11 @@ first and append the restore command to `RECOVERY.md` yourself. With no recipe, 
 
 Never report `ESCALATE` except for the DoD approval. When no executable task remains:
 
-- every criterion satisfied, nothing abandoned, no Tier-3 assumption, no unsigned `human` criterion →
+- every criterion satisfied, nothing abandoned, no Tier-3 assumption, nothing awaiting a signature →
   the normal DONE-candidate path (§6.11, §11) and `DONE`;
 - anything else → record **PARTIAL-candidate** in `STATE.md` and report `CONTINUE`. The next
-  invocation is the Verifier: it re-proves every `machine` criterion as §11 step 1 says, files tasks
+  invocation is the Verifier: it re-proves every `machine` criterion and drives every
+  `machine-then-human` one as §11 steps 1–2 say, files tasks
   for any gap it can still close, and otherwise reports `DONE_PARTIAL` — without a Cleanup Commit, so
   `.harness/run/` survives for the report and for any later run.
 

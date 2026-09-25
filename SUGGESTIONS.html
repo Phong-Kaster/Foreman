@@ -114,8 +114,8 @@
 </style>
 
 <div class="topbar"><div class="topbar-inner">
-  <span class="who" data-lang="vi">Calendar-Note · hòm thư góp ý</span>
-  <span class="who" data-lang="en">Calendar-Note · suggestion box</span>
+  <span class="who" data-lang="vi">Foreman · hòm thư góp ý</span>
+  <span class="who" data-lang="en">Foreman · suggestion box</span>
   <select id="lang" aria-label="Ngôn ngữ / Language">
     <option value="vi">Tiếng Việt</option>
     <option value="en">English</option>
@@ -125,12 +125,12 @@
 <div class="wrap">
 
 <header class="mast">
-  <p class="eyebrow" data-lang="vi">Cập nhật 11-09-2026 · nhánh loop/calendar-note-app</p>
-  <p class="eyebrow" data-lang="en">Updated 2026-09-11 · branch loop/calendar-note-app</p>
+  <p class="eyebrow" data-lang="vi">Cập nhật 16-09-2026 · nhánh loop/fix-guide-language-toggle</p>
+  <p class="eyebrow" data-lang="en">Updated 2026-09-16 · branch loop/fix-guide-language-toggle</p>
   <h1 data-lang="vi">Hòm thư góp ý</h1>
   <h1 data-lang="en">Suggestion Box</h1>
-  <p class="standfirst" data-lang="vi">Hai việc engine không được tự quyết trong lần chạy này: một câu hỏi đang chặn tiến độ, và một bài học có thể không thuộc về riêng repo này. Cả hai chỉ là đề nghị đọc — không có gì tự áp dụng.</p>
-  <p class="standfirst" data-lang="en">Two things the engine cannot decide for itself this run: a question blocking progress, and a lesson that may not belong to this repository alone. Both are read-only proposals — nothing here applies itself.</p>
+  <p class="standfirst" data-lang="vi">Sáu thẻ: bốn đã được quyết và đã làm, hai đang chờ. Mỗi thẻ nêu bằng chứng, các lựa chọn và đề xuất của tôi — không thẻ nào tự áp dụng.</p>
+  <p class="standfirst" data-lang="en">Six cards: four decided and carried out, two still open. Each carries the evidence, the options and my recommendation — and none of them applies itself.</p>
 
   <div class="tabs" role="tablist">
     <button role="tab" id="tab-btn-escalate" aria-controls="panel-escalate" data-tab="escalate">
@@ -165,56 +165,136 @@
 <details class="card esc">
   <summary>
     <div class="tagrow">
-      <span class="id">D-001</span>
-      <span class="tag pending" data-lang="vi">Đang chờ · lần lặp 4</span>
-      <span class="tag pending" data-lang="en">Pending · iteration 4</span>
+      <span class="id">Q-001</span>
+      <span class="tag answered" data-lang="vi">Đã quyết · đã làm</span>
+      <span class="tag answered" data-lang="en">Decided · done</span>
     </div>
-    <h3 data-lang="vi">Ví dụ: chọn thư viện cào ảnh nền cho màn hình Reading</h3>
-    <h3 data-lang="en">Example: pick the background-removal library for the Reading screen</h3>
+    <h3 data-lang="vi">Doctrine đã phình 5,4 KB mà chưa gỡ dòng nào — có làm một lượt dọn không?</h3>
+    <h3 data-lang="en">The spec grew 5.4 KB with nothing retired — do we make a retirement pass?</h3>
   </summary>
   <div class="card-body">
-    <p data-lang="vi">Loại: Tier 2 (kiến trúc). Chặn: T-014, T-015, T-017.</p>
-    <p data-lang="en">Type: Tier 2 (architecture). Blocks: T-014, T-015, T-017.</p>
-    <p data-lang="vi"><strong>Bối cảnh:</strong> PRD yêu cầu xoá phông ảnh bìa nhưng không nêu thư viện; hai lựa chọn có đánh đổi license khác nhau.</p>
-    <p data-lang="en"><strong>Context:</strong> the PRD asks for cover-image background removal but names no library; the two candidates carry different license trade-offs.</p>
-    <div class="ask esc"><span class="lbl" data-lang="vi">Đề xuất của engine</span><span class="lbl" data-lang="en">Engine's recommendation</span>
-      <p data-lang="vi">Dùng thư viện A vì license phù hợp bản thương mại; thư viện B nhanh hơn nhưng bắt buộc mã nguồn mở lại.</p>
-      <p data-lang="en">Library A, because its license fits the commercial build; library B is faster but forces the app open-source in return.</p></div>
-    <div class="blocks"><span class="lbl" data-lang="vi">Chặn</span><span class="lbl" data-lang="en">Blocks</span><span class="mono">T-014, T-015, T-017</span></div>
+    <p data-lang="vi">Hai commit trên nhánh này thêm 2.671 byte vào <span class="mono">ENGINE.md</span> và 2.755 byte vào <span class="mono">POLICIES.md</span>. Cả hai được nạp làm system prompt ở <strong>mọi</strong> lần gọi, của <strong>mọi</strong> run, trong <strong>mọi</strong> repo dùng Foreman.</p>
+    <p data-lang="en">Two commits on this branch added 2,671 bytes to <span class="mono">ENGINE.md</span> and 2,755 to <span class="mono">POLICIES.md</span>. Both are injected as system prompt on <strong>every</strong> invocation, of <strong>every</strong> run, in <strong>every</strong> consumer repository.</p>
+    <p data-lang="vi">Ratchet nói một dòng vào khi có thất bại thật, và <em>ra</em> khi model không còn cần nó. Vế thứ hai chưa được thực hiện lần nào trong phiên này.</p>
+    <p data-lang="en">The Ratchet says a line enters on a real failure and <em>leaves</em> when the model no longer needs it. The second half has not been exercised once this session.</p>
+    <div class="ask esc"><span class="lbl" data-lang="vi">Đề xuất của tôi</span><span class="lbl" data-lang="en">My recommendation</span>
+      <p data-lang="vi">Có — nhưng gỡ doctrine là hướng rủi ro hơn: không test nào bắt được hậu quả, và bằng chứng chỉ lộ ra ở run sau. Tôi đề nghị rà có chủ đích, nêu từng dòng kèm lý do model không còn cần nó, rồi cậu duyệt; tôi không tự cắt.</p>
+      <p data-lang="en">Yes, but retiring doctrine is the riskier direction: no test catches the consequence, and the evidence only shows up in a later run. I would do a deliberate pass, propose each line with the reason the model no longer needs it, and have you approve — not cut unilaterally.</p></div>
+    <div class="ask"><span class="lbl" data-lang="vi">Quyết định</span><span class="lbl" data-lang="en">Decision</span>
+      <p data-lang="vi">Làm lượt dọn. Kết quả: <strong>−57 byte</strong>. Hai lượt quét máy — chéo file và trong cùng file — tìm được <strong>0</strong> trùng lặp, nên chỉ có ba dòng bị ADR-030 thay thế là gỡ được, mà hai trong đó là gộp nên tốn gần bằng chữ tiết kiệm. Doctrine phình vì bài học thật sự mới, không phải vì béo. Commit <span class="mono">02e452f</span>.</p>
+      <p data-lang="en">Ran the pass. Result: <strong>−57 bytes</strong>. Two mechanical scans — cross-file and intra-file — found <strong>zero</strong> duplication, so only three lines superseded by ADR-030 could go, and two of those were merges costing nearly what they saved. The spec grew because the lessons were new, not because it was bloated. Commit <span class="mono">02e452f</span>.</p></div>
+  </div>
+</details>
+<details class="card esc">
+  <summary>
+    <div class="tagrow">
+      <span class="id">Q-002</span>
+      <span class="tag pending" data-lang="vi">Đang chờ · runtime</span>
+      <span class="tag pending" data-lang="en">Pending · runtime</span>
+    </div>
+    <h3 data-lang="vi">Lượt sửa lỗi sau khi verify hỏng đang chạy Capable và tốn gấp đôi</h3>
+    <h3 data-lang="en">A fix iteration after a failed verification runs at Capable and costs double</h3>
+  </summary>
+  <div class="card-body">
+    <p data-lang="vi">Đo được: iteration 41 của run vừa rồi là <strong>công việc thực thi thuần tuý</strong> — tiêu hoá một FAIL rồi sửa code — nhưng bị pin <span class="mono">capable/opus</span> và tốn <strong>$13,15</strong>. Runtime chọn model <em>trước khi</em> tiến trình chạy, dựa vào cờ <span class="mono">DONE-candidate</span> mà iteration 38 để lại.</p>
+    <p data-lang="en">Measured: iteration 41 of the last run was <strong>ordinary implementation work</strong> — consume a FAIL, fix the code — yet was pinned to <span class="mono">capable/opus</span> and cost <strong>$13.15</strong>. The Runtime picks the model <em>before</em> the process starts, from the <span class="mono">DONE-candidate</span> flag iteration 38 left behind.</p>
+    <p data-lang="vi">Cách sửa hiển nhiên là cho runtime ngó <span class="mono">DECISIONS.md</span>: có câu trả lời chưa tiêu hoá nghĩa là lượt này sẽ thực thi, không phải verify. Nhưng đó đúng là sự khôn lỏi mà ADR-002 tồn tại để từ chối — runtime cố ý ngu.</p>
+    <p data-lang="en">The obvious fix is to have the Runtime peek at <span class="mono">DECISIONS.md</span>: an unconsumed answer means this invocation will implement, not verify. That is exactly the cleverness ADR-002 exists to refuse — the Runtime is deliberately dumb.</p>
+    <div class="ask esc"><span class="lbl" data-lang="vi">Đề xuất của tôi</span><span class="lbl" data-lang="en">My recommendation</span>
+      <p data-lang="vi">Để nguyên và chấp nhận giá. Một lượt đắt sau mỗi lần verify hỏng rẻ hơn việc runtime bắt đầu đoán ý định của iteration. Nhưng đây là tiền của cậu.</p>
+      <p data-lang="en">Leave it and pay. One expensive iteration after each failed verification is cheaper than a Runtime that starts guessing an iteration&#39;s intent. But it is your money.</p></div>
+  </div>
+</details>
+<details class="card esc">
+  <summary>
+    <div class="tagrow">
+      <span class="id">Q-003</span>
+      <span class="tag answered" data-lang="vi">Đã quyết · đã làm</span>
+      <span class="tag answered" data-lang="en">Decided · done</span>
+    </div>
+    <h3 data-lang="vi">Mười sáu tiêu chí chưa ký của run alarms — khôi phục hay bỏ?</h3>
+    <h3 data-lang="en">The alarms run&#39;s sixteen unsigned criteria — restore them or let them go?</h3>
+  </summary>
+  <div class="card-body">
+    <p data-lang="vi"><span class="mono">D-008</span> treo mười sáu tiêu chí <span class="mono">human</span> chưa ai ký. Tôi xoá <span class="mono">.harness/run/</span> để bootstrap goal mới, nên giờ chúng chỉ còn trong git history: <span class="mono">git show fb4bf24:.harness/run/ESCALATION.md</span>.</p>
+    <p data-lang="en"><span class="mono">D-008</span> holds sixteen unsigned <span class="mono">human</span> criteria. I deleted <span class="mono">.harness/run/</span> to bootstrap the new goal, so they now exist only in git history: <span class="mono">git show fb4bf24:.harness/run/ESCALATION.md</span>.</p>
+    <p data-lang="vi">Doctrine mới (ADR-030) bắt buộc nợ đó chuyển vào <span class="mono">ISSUES.md</span> dạng tick được <em>trước khi</em> thư mục bị xoá. Luật giờ đã có, nhưng nó không tự áp dụng ngược cho mười sáu mục đã lỡ.</p>
+    <p data-lang="en">The new doctrine (ADR-030) requires that debt to move into <span class="mono">ISSUES.md</span> as tickable items <em>before</em> the directory is deleted. The rule exists now, but it does not retroactively apply itself to the sixteen already stranded.</p>
+    <div class="ask esc"><span class="lbl" data-lang="vi">Đề xuất của tôi</span><span class="lbl" data-lang="en">My recommendation</span>
+      <p data-lang="vi">Khôi phục. Tính năng alarms đang nằm trên nhánh với mười sáu lời tuyên bố &quot;đã xong&quot; mà chưa ai kiểm — đúng thứ ADR-030 nói không được để biến mất.</p>
+      <p data-lang="en">Restore them. The alarms feature sits on a branch carrying sixteen claims of &quot;done&quot; that nobody checked — precisely what ADR-030 says must not be allowed to disappear.</p></div>
+    <div class="ask"><span class="lbl" data-lang="vi">Quyết định</span><span class="lbl" data-lang="en">Decision</span>
+      <p data-lang="vi">Khôi phục. Con người xác nhận cả mười sáu tiêu chí đều đạt, ngày 16-09-2026. Ghi vào <span class="mono">.harness/ISSUES.md</span> nguyên văn lời xác nhận, kèm ghi chú rằng chữ ký dựa trên người cầm máy thật chứ không phải bằng chứng máy, và điều gì sẽ mở lại nó. Commit <span class="mono">690ad7b</span>.</p>
+      <p data-lang="en">Restored. The human confirmed all sixteen pass on 2026-09-16. Recorded verbatim in <span class="mono">.harness/ISSUES.md</span>, with a note that the signature rests on a person with a real device rather than on machine evidence, and what would reopen it. Commit <span class="mono">690ad7b</span>.</p></div>
+  </div>
+</details>
+<details class="card esc">
+  <summary>
+    <div class="tagrow">
+      <span class="id">Q-004</span>
+      <span class="tag answered" data-lang="vi">Đã quyết · đã làm</span>
+      <span class="tag answered" data-lang="en">Decided · done</span>
+    </div>
+    <h3 data-lang="vi">Sửa PROJECT.md của Calendar-Note ngay, hay đợi run hiện tại đóng?</h3>
+    <h3 data-lang="en">Correct Calendar-Note&#39;s PROJECT.md now, or wait for the current run to close?</h3>
+  </summary>
+  <div class="card-body">
+    <p data-lang="vi"><span class="mono">knowledge/PROJECT.md</span> dòng 488 vẫn ghi <em>&quot;No emulator, no device, no adb, no Robolectric&quot;</em> — câu đã sai, và là gốc rễ khiến ba run phân loại thừa vào <span class="mono">human</span>. Doctrine đã sửa bên Foreman; file trong Calendar-Note thì chưa.</p>
+    <p data-lang="en"><span class="mono">knowledge/PROJECT.md</span> line 488 still reads <em>&quot;No emulator, no device, no adb, no Robolectric&quot;</em> — the false claim that made three runs over-classify into <span class="mono">human</span>. The doctrine is fixed in Foreman; the file in Calendar-Note is not.</p>
+    <p data-lang="vi">Sửa ngay sẽ làm bẩn cây làm việc trong lúc <span class="mono">D-003</span> đang chờ chữ ký, và engine coi thay đổi chưa commit là mảnh vỡ của một lần crash.</p>
+    <p data-lang="en">Editing it now dirties the working tree while <span class="mono">D-003</span> waits for your signature, and the engine treats uncommitted changes as debris from a crash.</p>
+    <div class="ask esc"><span class="lbl" data-lang="vi">Đề xuất của tôi</span><span class="lbl" data-lang="en">My recommendation</span>
+      <p data-lang="vi">Đợi. Ký <span class="mono">D-003</span> trước để run đóng sạch bằng Cleanup Commit, rồi mới sửa <span class="mono">PROJECT.md</span> kèm dán quyền từ stack pack mới — như vậy run kế tiếp mới thật sự là run đầu tiên chạy theo doctrine mới.</p>
+      <p data-lang="en">Wait. Sign <span class="mono">D-003</span> first so the run closes cleanly with its Cleanup Commit, then correct <span class="mono">PROJECT.md</span> and paste in the new stack pack&#39;s capabilities — so the next run is the first one genuinely operating under the new doctrine.</p></div>
+    <div class="ask"><span class="lbl" data-lang="vi">Quyết định</span><span class="lbl" data-lang="en">Decision</span>
+      <p data-lang="vi">Sửa ngay, không đợi. <span class="mono">PROJECT.md</span> dòng 517 giờ ghi đúng: có <span class="mono">adb</span>, có thiết bị, <span class="mono">androidTest/</span> đã nối dây sẵn — kèm hai điều máy thật <em>không</em> làm được và lý do nên ưu tiên emulator. Commit <span class="mono">690ad7b</span>.</p>
+      <p data-lang="en">Corrected immediately rather than waiting. <span class="mono">PROJECT.md</span> line 517 now states the truth: <span class="mono">adb</span> is installed, a device is attached, <span class="mono">androidTest/</span> is already wired — plus the two things the physical device cannot do and why an emulator is preferred. Commit <span class="mono">690ad7b</span>.</p></div>
+  </div>
+</details>
+<details class="card esc">
+  <summary>
+    <div class="tagrow">
+      <span class="id">Q-005</span>
+      <span class="tag answered" data-lang="vi">Đã quyết · đã làm</span>
+      <span class="tag answered" data-lang="en">Decided · done</span>
+    </div>
+    <h3 data-lang="vi">Calendar-Note còn nhiều commit chưa push</h3>
+    <h3 data-lang="en">Calendar-Note has unpushed commits</h3>
+  </summary>
+  <div class="card-body">
+    <p data-lang="vi">Foreman đã push tới <span class="mono">e34e81c</span>. Calendar-Note chưa push lần nào trong phiên này — runtime mới, PRD, bootstrap, bản sửa lỗi và mọi checkpoint đều ở local trên <span class="mono">loop/calendar-note-app</span>.</p>
+    <p data-lang="en">Foreman is pushed through <span class="mono">e34e81c</span>. Calendar-Note has not been pushed at all this session — the new runtime, the PRD, the bootstrap, the bug fix and every checkpoint are local on <span class="mono">loop/calendar-note-app</span>.</p>
+    <div class="ask esc"><span class="lbl" data-lang="vi">Đề xuất của tôi</span><span class="lbl" data-lang="en">My recommendation</span>
+      <p data-lang="vi">Đợi run đóng rồi push một lần. Push bây giờ là công bố một nhánh còn treo sáu tiêu chí chưa ký, và bất biến của chính Foreman là engine không bao giờ push (ADR-003) — tôi giữ cùng chuẩn.</p>
+      <p data-lang="en">Push once, after the run closes. Pushing now publishes a branch still carrying six unsigned criteria, and Foreman&#39;s own invariant is that the engine never pushes (ADR-003) — I hold myself to the same rule.</p></div>
   </div>
 </details>
 
-<!-- ============================================================================
-     ONE CARD PER ESCALATION ENTRY. Copy the D-001 block above as the shape.
-     Each card is a <details> (closed by default — the reader opens the ones
-     they want): the <summary> holds the tag row and title, everything else
-     goes in a <div class="card-body"> below it.
-       id       matches the ESCALATION.md entry exactly (D-00N)
-       tag      "pending" (Status: pending) or "answered" (Status: answered, kept
-                 one regeneration so the human can confirm it registered, then
-                 dropped)
-       h3       the Question, in one line — this is the only thing visible
-                 before the card is opened, so it must stand alone
-       p        Type + Blocks, then Context in plain prose
-       .ask     the Engine Recommendation
-       .blocks  the task ids again, so the reader does not have to scroll back
-     Both languages on every element: data-lang="vi" and data-lang="en".
-     Delete this comment and the D-001 example once the queue has real entries,
-     or replace it with the empty-state paragraph below if the queue is empty.
-============================================================================ -->
-
-<!-- Empty state — use this instead of any card when ESCALATION.md has no pending entry, and set the tab count to 0:
-<p class="empty" data-lang="vi">Không có câu hỏi nào đang chờ.</p>
-<p class="empty" data-lang="en">No question is currently pending.</p>
--->
+<details class="card esc">
+  <summary>
+    <div class="tagrow">
+      <span class="id">Q-006</span>
+      <span class="tag pending" data-lang="vi">Đang chờ · runtime</span>
+      <span class="tag pending" data-lang="en">Pending · runtime</span>
+    </div>
+    <h3 data-lang="vi">Cleanup Commit dọn sạch, rồi runtime bẩn lại ngay lập tức</h3>
+    <h3 data-lang="en">The Cleanup Commit tidies up, and the Runtime dirties the tree again immediately</h3>
+  </summary>
+  <div class="card-body">
+    <p data-lang="vi">Tìm ra khi run greeting đóng. <span class="mono">b5691ce</span> xoá <span class="mono">.harness/run/</span> khỏi ngọn nhánh — đúng. Rồi <span class="mono">Ensure-DecisionsFile</span> trong <span class="mono">run.ps1</span> <strong>tạo lại ngay</strong> một <span class="mono">DECISIONS.md</span> rỗng, vì hàm đó chạy lần nữa sau khi đọc status.</p>
+    <p data-lang="en">Found as the greeting run closed. <span class="mono">b5691ce</span> removed <span class="mono">.harness/run/</span> from the branch tip — correct. Then <span class="mono">Ensure-DecisionsFile</span> in <span class="mono">run.ps1</span> <strong>recreated it at once</strong> as an empty <span class="mono">DECISIONS.md</span>, because that function runs again after the status is read.</p>
+    <p data-lang="vi">Việc chạy hai lần là <em>cố ý</em>, và lý do vẫn đúng: bootstrap có thể <span class="mono">ESCALATE</span> ngay ở iteration đầu tiên tạo ra thư mục đó, và để con người khỏi phải chạy runtime lần thứ hai cho không. Chỉ có điều nó cũng chạy sau <span class="mono">DONE</span>, nơi không còn gì để trả lời.</p>
+    <p data-lang="en">Running twice is <em>deliberate</em>, and the reason still holds: bootstrap can <span class="mono">ESCALATE</span> on the very iteration that first creates the directory, and a human should not have to run the Runtime a second time for nothing. It just also runs after <span class="mono">DONE</span>, where there is nothing left to answer.</p>
+    <p data-lang="vi"><strong>Hệ quả:</strong> một run kết thúc sạch vẫn để lại thư mục untracked chứa một file rỗng, nên <span class="mono">git status</span> trên nhánh đáng lẽ sẵn sàng merge lại không sạch. Tôi đã dọn tay ở <span class="mono">351d580</span>, nhưng lần chạy sau sẽ lặp lại y hệt.</p>
+    <p data-lang="en"><strong>Consequence:</strong> a run that finishes cleanly still leaves an untracked directory holding one empty file, so <span class="mono">git status</span> on a branch meant to be merge-ready is not clean. Tidied by hand in <span class="mono">351d580</span>, but the next run repeats it exactly.</p>
+    <div class="ask esc"><span class="lbl" data-lang="vi">Đề xuất của tôi</span><span class="lbl" data-lang="en">My recommendation</span>
+      <p data-lang="vi">Sửa một dòng: bỏ qua provisioning khi status là <span class="mono">DONE</span>. Provisioning đúng <em>trước</em> mỗi lần gọi và sau một status chưa kết thúc — sai sau <span class="mono">DONE</span>, vì lúc đó thư mục vừa bị xoá có chủ đích. Đây không phải runtime đoán ý định như Q-002; nó chỉ là đọc một từ đã nằm sẵn trong tay.</p>
+      <p data-lang="en">A one-line fix: skip provisioning when the status is <span class="mono">DONE</span>. Provisioning is right <em>before</em> each invocation and after a non-terminal status — wrong after <span class="mono">DONE</span>, where the directory has just been deliberately removed. This is not the Runtime guessing intent as in Q-002; it is reading a word already in its hand.</p></div>
+  </div>
+</details>
 
 </section>
 
-<!-- ============================================================================
-     SUGGESTIONS TAB — lessons this run learned that may be true beyond this
-     repository (ADR-019, POLICIES.md § "A lesson that is true beyond this
-     repository goes in the Suggestion Box").
-============================================================================ -->
 <!-- ============================================================================
      VERIFY TAB — one card per DoD criterion still awaiting a human signature:
      every `machine-then-human` and every `human-only` one. Regenerate whenever a
@@ -351,6 +431,9 @@ $ set -o pipefail; false | tail -1 ; echo $?
     <div class="ask"><span class="lbl" data-lang="vi">Vì sao thuộc tầng stack, và vì sao gắn nhãn android</span><span class="lbl" data-lang="en">Why the stack tier, and why tagged android</span>
       <p data-lang="vi">Đây là sự thật về nền tảng Android, không phải về bất kỳ module nào của repo này — nên nó thuộc gói kiến thức <code>skills/knowledge/android/</code>, không phải <code>backend/</code> hay <code>frontend/</code>. Gắn nhãn nền tảng để một bài học sau này về backend không bị trộn lẫn vào cùng một danh sách.</p>
       <p data-lang="en">This is a fact about the Android platform, not about any module in this repository — it belongs under the <code>skills/knowledge/android/</code> pack, not <code>backend/</code> or <code>frontend/</code>. Naming the platform keeps a future backend lesson from landing in the same undifferentiated pile.</p></div>
+    <div class="ask"><span class="lbl" data-lang="vi">Quyết định</span><span class="lbl" data-lang="en">Decision</span>
+      <p data-lang="vi">Push sau khi run đóng, đúng như đề xuất. Run kết thúc <span class="mono">DONE</span> ở iteration 44; nhánh <span class="mono">loop/calendar-note-app</span> đã push tới <span class="mono">351d580</span>. Merge vẫn là việc của con người.</p>
+      <p data-lang="en">Pushed after the run closed, as recommended. The run reported <span class="mono">DONE</span> at iteration 44; <span class="mono">loop/calendar-note-app</span> is pushed through <span class="mono">351d580</span>. Merging remains the human's act.</p></div>
   </div>
 </details>
 

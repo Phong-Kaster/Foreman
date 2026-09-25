@@ -20,3 +20,24 @@
 ## D-001
 
 <!-- Your decision and rationale. -->
+
+<!--
+A Human Verification Request is answered by ticking, not by prose. The engine writes the empty
+checklist under the entry's id; you change `[ ]` to `[x]` for each item you have confirmed, and add a
+line under any you are failing saying what you saw instead. Shape:
+
+## D-002
+
+- [ ] 15 - fresh install, grant when asked, open -> the greeting appears
+- [x] 16 - second open the same day -> no second greeting
+- [ ] 18 - next calendar day -> the greeting comes back
+
+The ticks live HERE and only here. `SUGGESTIONS.html` shows the same list with checkboxes so you can
+follow along with a phone in your hand, but that page is regenerated in full every time the engine
+queues a decision - anything ticked there is gone the next time it is written. This file is the one
+the Runtime denies the engine write access to, mechanically, which is the whole reason a tick in it
+cannot be lost.
+
+An item left unticked stays queued. Partial answers are fine and expected: answer what you have
+actually checked, and the rest waits.
+-->
