@@ -1,6 +1,6 @@
 ---
 name: library-docs
-description: Look up current, version-specific documentation for a third-party library through the Context7 CLI (ctx7) when a build, test, lint or review failure names that library's API. Opt-in pack; used only on failure, never on every task.
+description: Look up current, version-specific documentation for a third-party library through the Context7 CLI (ctx7) when a build, test, lint or review failure names that library's API. Granted by Foreman's baseline in every repository; used only on failure, never on every task.
 ---
 
 # Looking up a library's current documentation when it breaks the build
@@ -24,8 +24,9 @@ Use it when **all** of these hold:
   annotation, Gradle/npm/pip coordinate or configuration key;
 - the failure is not explained by the code written in this iteration alone (a typo, a missing import
   of the project's own class, a logic error);
-- the repository's standing ledger grants the capability in `capabilities.snippet.json` (in Autonomous
-  mode `Bash` is already allowed, and this pack is the guidance for using it well).
+- the repository has not switched it off. Foreman's baseline ledger grants the two `ctx7` commands in
+  every repository and in both Run Modes; a repository that must not send anything off the machine adds
+  a matching `deny` rule to its own `.harness/knowledge/capabilities.json` (see below).
 
 Do **not** use it for: device or OEM behaviour (it documents libraries, not phones), the project's own
 code, language syntax, or as a first step before any failure — the point is to spend nothing while the
@@ -80,6 +81,15 @@ Hand the Worker only what it needs — the relevant excerpt and its source URL �
 **Library documentation** section. A Worker has no network and does not run `ctx7` itself. In the
 task file's attempt record, write the library ID, the query and the source URLs next to the error
 tail, so the Issues Report and the next reader can see what the retry was based on.
+
+## Switching it off in one repository
+
+Add an entry with a `deny` array to `.harness/knowledge/capabilities.json`; deny always outranks allow,
+in both Run Modes:
+
+```json
+{ "intent": "No documentation lookups leave this machine", "deny": ["Bash(CTX7_TELEMETRY_DISABLED=1 npx -y ctx7 *)"] }
+```
 
 ## Rate limits and keys
 

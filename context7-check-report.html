@@ -189,12 +189,12 @@ CTX7_TELEMETRY_DISABLED=1 npx -y ctx7 docs /websites/developer_android_media_med
   <h2><span data-lang="en">5 · Next</span><span data-lang="vi">5 · Bước tiếp theo</span></h2>
   <ol data-lang="en">
     <li><s>Add the "query the failing symbol" sentence to <code>POLICIES.md</code> and the skill, on PR #5.</s> Done.</li>
-    <li>Merge PR #5, then install the skill in Calendar-Note: <code>npx skills@latest add Phong-Kaster/Foreman --skill library-docs</code>, and grant its capability entry.</li>
+    <li>Merge PR #5, then update Foreman in Calendar-Note (<code>npx skills@latest update foreman -p -y</code>). The lookup is now on by default in the baseline, so there is no capability entry to grant.</li>
     <li>Let the next real run's telemetry (ADR-029) show whether library-failure retries that consulted Context7 succeed more often.</li>
   </ol>
   <ol data-lang="vi">
     <li><s>Thêm câu "hỏi đúng ký hiệu bị lỗi" vào <code>POLICIES.md</code> và skill, trên PR #5.</s> Đã xong.</li>
-    <li>Merge PR #5, rồi cài skill vào Calendar-Note bằng <code>npx skills@latest add Phong-Kaster/Foreman --skill library-docs</code>, và cấp entry quyền của nó.</li>
+    <li>Merge PR #5, rồi cập nhật Foreman ở Calendar-Note (<code>npx skills@latest update foreman -p -y</code>). Giờ việc tra cứu đã bật mặc định trong baseline, nên không còn entry quyền nào phải cấp.</li>
     <li>Để telemetry (ADR-029) của run thật tiếp theo cho thấy những lần thử lại có tra Context7 có thành công thường xuyên hơn không.</li>
   </ol>
 </section>

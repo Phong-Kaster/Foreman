@@ -1302,24 +1302,55 @@ Describe "run.ps1 leaves no .harness/run/ behind a DONE" {
 Describe "The library-docs pack (ADR-032)" {
 
     # Context7 is reached through its CLI, by the engine only, and only after a failure names a
-    # library's API. These pin the three places that say so, and that the capability grants the two
-    # read commands and nothing that writes configuration or authenticates.
+    # library's API. By the human's decision it is on by default: the baseline grants the two read
+    # commands in every repository and both Run Modes, and a repository switches it off with a deny rule.
 
     $Pack = Join-Path $RepoRootDir "skills/knowledge/general/library-docs"
     $Policies = Get-Content (Join-Path $RepoRootDir ".harness/loop/POLICIES.md") -Raw
     $Brief = Get-Content (Join-Path $RepoRootDir ".harness/loop/templates/WORKER-BRIEF.template.md") -Raw
+    $CtxRules = @("Bash(CTX7_TELEMETRY_DISABLED=1 npx -y ctx7 library *)", "Bash(CTX7_TELEMETRY_DISABLED=1 npx -y ctx7 docs *)")
 
-    It "ships a SKILL.md and a capability snippet that is valid JSON" {
-        (Test-Path (Join-Path $Pack "SKILL.md")) | Should Be $true
-        { Get-Content (Join-Path $Pack "capabilities.snippet.json") -Raw | ConvertFrom-Json } | Should Not Throw
+    function Get-CompiledSettingsFor([string]$repo, [string[]]$extra) {
+        $argLog = Join-Path $repo "args.txt"
+        $env:FAKE_CLAUDE_ARGLOG = $argLog
+        New-Item -ItemType Directory -Path (Join-Path $repo ".harness/loop/capabilities") -Force | Out-Null
+        Copy-Item (Join-Path $RepoRootDir ".harness/loop/capabilities/baseline.json") (Join-Path $repo ".harness/loop/capabilities/")
+        Set-FakeClaudeQueue -TestRepo $repo -Directives @("DONE|ok")
+        Invoke-RunPs1 -TestRepo $repo -ExtraArgs (@("-MaxIterations", "2") + $extra) | Out-Null
+        Remove-Item Env:\FAKE_CLAUDE_ARGLOG -ErrorAction SilentlyContinue
+        $recorded = Get-Content $argLog -Raw
+        $settingsPath = ($recorded -split '--settings\s+')[1].Split(' ')[0].Trim()
+        return (Get-Content $settingsPath -Raw | ConvertFrom-Json)
     }
 
-    It "grants only ctx7 library and ctx7 docs, never setup, login or remove" {
-        $snippet = Get-Content (Join-Path $Pack "capabilities.snippet.json") -Raw | ConvertFrom-Json
-        $rules = @($snippet.entries | ForEach-Object { $_.allow })
-        $rules.Count | Should Be 2
-        ($rules | Where-Object { $_ -notmatch '^Bash\(CTX7_TELEMETRY_DISABLED=1 npx -y ctx7 (library|docs) \*\)$' }).Count | Should Be 0
-        ($rules | Where-Object { $_ -match 'setup|login|remove' }).Count | Should Be 0
+    It "ships a SKILL.md" {
+        (Test-Path (Join-Path $Pack "SKILL.md")) | Should Be $true
+    }
+
+    It "grants only ctx7 library and ctx7 docs in the baseline, never setup, login or remove" {
+        $baseline = Get-Content (Join-Path $RepoRootDir ".harness/loop/capabilities/baseline.json") -Raw | ConvertFrom-Json
+        $ctx = @($baseline.entries | ForEach-Object { $_.allow } | Where-Object { $_ -match 'ctx7' })
+        $ctx.Count | Should Be 2
+        ($ctx | Where-Object { $CtxRules -notcontains $_ }).Count | Should Be 0
+        ($ctx | Where-Object { $_ -match 'setup|login|remove' }).Count | Should Be 0
+    }
+
+    It "reaches a Collaborative run with no grant from the repository" {
+        $repo = New-TestRepo
+        try {
+            $settings = Get-CompiledSettingsFor $repo @()
+            foreach ($r in $CtxRules) { ($settings.permissions.allow -contains $r) | Should Be $true }
+        } finally { Remove-TestRepo -TestRepo $repo }
+    }
+
+    It "is switched off in a Collaborative run by a deny rule in the repository's own ledger" {
+        $repo = New-TestRepo
+        try {
+            New-Item -ItemType Directory -Path (Join-Path $repo ".harness/knowledge") -Force | Out-Null
+            Set-Content -Path (Join-Path $repo ".harness/knowledge/capabilities.json") -Value '{"entries":[{"intent":"no lookups leave this machine","deny":["Bash(CTX7_TELEMETRY_DISABLED=1 npx -y ctx7 *)"]}]}'
+            $settings = Get-CompiledSettingsFor $repo @()
+            ($settings.permissions.deny -contains "Bash(CTX7_TELEMETRY_DISABLED=1 npx -y ctx7 *)") | Should Be $true
+        } finally { Remove-TestRepo -TestRepo $repo }
     }
 
     It "is consulted from the retry policy, which carries the commands and names a skill that exists" {
@@ -1329,6 +1360,7 @@ Describe "The library-docs pack (ADR-032)" {
         # installed skill, not a path under skills/knowledge/, and may not be installed at all.
         $Policies | Should Match 'npx -y ctx7 library'
         $Policies | Should Match 'ctx7 docs'
+        $Policies | Should Match 'every repository and both Run Modes'
         # The first check (context7-check-report.html) found a task-shaped query reaching the fix only
         # by luck; the policy now says to ask about the symbol that failed.
         $Policies | Should Match 'symbol that failed'

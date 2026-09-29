@@ -1,5 +1,5 @@
 {
-  "description": "Baseline Capability Ledger - permanent, low-risk capabilities that ship with Foreman. Identical in every consumer repository. Higher-risk capabilities live in .harness/knowledge/capabilities.json (standing, per-repo) or .harness/run/capabilities.json (goal-scoped). Note: git push is NOT here - it is network access, a High-risk class under POLICIES.md, granted per repository and scoped to the Loop Branch (ADR-011). Worker subagents are restricted further still, by the tools array in .harness/loop/agents.json.",
+  "description": "Baseline Capability Ledger - permanent, low-risk capabilities that ship with Foreman. Identical in every consumer repository. Higher-risk capabilities live in .harness/knowledge/capabilities.json (standing, per-repo) or .harness/run/capabilities.json (goal-scoped). One entry reaches the network by the human's decision: the Context7 documentation lookup (ADR-032), which a repository can switch off with a 'deny' rule in its own ledger. Note: git push is NOT here - it is network access, a High-risk class under POLICIES.md, granted per repository and scoped to the Loop Branch (ADR-011). Worker subagents are restricted further still, by the tools array in .harness/loop/agents.json.",
   "entries": [
     {
       "intent": "Read repository files and search the codebase",
@@ -40,6 +40,16 @@
         "Bash(git rm --cached*)",
         "Bash(git rm -r .harness/run*)",
         "Bash(git clean -f .harness/run*)"
+      ]
+    },
+    {
+      "intent": "Look up a third-party library's current documentation through Context7 when a build, test, lint or review failure names that library's API, so a retry is based on new information (ADR-032). The one baseline entry that reaches the network: a query carries only a library's public name and a concept, never repository code. A repository opts out with a matching 'deny' rule in its own ledger.",
+      "command": "npx -y ctx7 library <name> <concept> --json / npx -y ctx7 docs <library-id> <concept> --json (telemetry off)",
+      "scope": "read-only queries to Context7's public index; setup, login and remove are not granted",
+      "lifetime": "permanent",
+      "allow": [
+        "Bash(CTX7_TELEMETRY_DISABLED=1 npx -y ctx7 library *)",
+        "Bash(CTX7_TELEMETRY_DISABLED=1 npx -y ctx7 docs *)"
       ]
     }
   ],

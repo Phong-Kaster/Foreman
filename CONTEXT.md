@@ -157,7 +157,7 @@ _Avoid_: Safe command, undo
 _Avoid_: Summary (the Roll-up Summary is the Skill's cross-branch view)
 
 **Library-docs pack**:
-An opt-in stack pack (`skills/knowledge/general/library-docs/`) that lets the engine look up a third-party library's current documentation through the Context7 CLI when a failure names that library's API — only then, at most three lookups, with queries holding only public names. The engine alone goes to the network and hands the excerpt to the Worker in its Brief ([ADR-032](./docs/adr/ADR-032-a-retry-may-look-up-current-library-documentation-through-context7.md)).
+A stack pack (`skills/knowledge/general/library-docs/`), granted by the baseline ledger in every repository and both Run Modes, that lets the engine look up a third-party library's current documentation through the Context7 CLI when a failure names that library's API — only then, at most three lookups, with queries holding only public names. The engine alone goes to the network and hands the excerpt to the Worker in its Brief; a repository switches it off with a `deny` rule ([ADR-032](./docs/adr/ADR-032-a-retry-may-look-up-current-library-documentation-through-context7.md)).
 _Avoid_: Web search, docs lookup step (it is not a step of every task)
 
 **Consumer repository**:

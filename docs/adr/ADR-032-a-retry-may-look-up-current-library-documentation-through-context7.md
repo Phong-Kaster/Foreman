@@ -35,9 +35,22 @@ permission matcher with `claude -p`: the command ran, zero permission denials.
 
 ## The decision
 
-**A stack-agnostic opt-in pack**, `skills/knowledge/general/library-docs/`, like the Android packs:
-a `SKILL.md` saying when and how, and a `capabilities.snippet.json` with one standing entry the human
-reviews and approves at the DoD gate.
+**On by default, in every repository and both Run Modes.** The first version of this ADR shipped the
+lookup as an opt-in grant a human copied into each repository's ledger. **Decided by the human,
+2026-09-29, the same day:** Foreman calls Context7 on its own whenever it is needed, in Collaborative
+and Autonomous runs alike, with no grant to approve. The two `ctx7` rules therefore live in
+`baseline.json` — the first baseline entry that reaches the network. A repository that must not send
+anything off the machine switches it off with a `deny` rule in its own ledger; to make that possible,
+`run.ps1` now compiles a ledger's `deny` arrays in Collaborative mode too, where before it did so only
+in Autonomous mode.
+
+**What would change this part.** A query found to have carried repository code or names off the
+machine, or a consumer whose policy forbids any outbound call by default — either argues for returning
+to the opt-in grant.
+
+**A stack-agnostic pack**, `skills/knowledge/general/library-docs/`, like the Android packs, carries the
+`SKILL.md` saying when and how; the policy line itself carries the commands, so the lookup works in a
+repository that has not installed the skill.
 
 **The CLI, not MCP.** `ctx7 library` and `ctx7 docs` run through `Bash`. The runtime has no MCP
 plumbing at all — no `--mcp-config`, no `mcp__*` rule in any ledger, no MCP tool in any agent — and
@@ -52,7 +65,7 @@ library knowledge, is what has actually stopped runs.
 Grep`) and get the excerpt through a new **Library documentation** section of the Worker Brief. The
 engine is the librarian; the Worker stays as contained as it was.
 
-**Only two commands.** The grant covers `library` and `docs`. `setup`, `login` and `remove` write
+**Only two commands.** The baseline grants `library` and `docs`. `setup`, `login` and `remove` write
 configuration or run OAuth, and are not granted; telemetry is switched off in the granted form.
 
 ## Considered Options
@@ -68,9 +81,15 @@ configuration or run OAuth, and are not granted; telemetry is switched off in th
   network-capable Worker is a wider blast radius than one engine call whose result is handed over.
 - **Leave it to the model's own judgement, with no pack** — rejected by the human; and in practice an
   engine that does not know a documented, granted route exists will not reliably find one.
+- **An opt-in grant per repository, approved at the DoD gate** — the first version of this ADR, and the
+  safer default: it followed ADR-011, which kept push off until a repository asked for it. Rejected by
+  the human, because a lookup that has to be granted repository by repository is not automatic, and the
+  point was for Foreman to reach for it whenever a failure calls for it.
 
 ## Consequences
 
+- **Every repository now reaches the network by default** for this one purpose, where before the
+  baseline held only local, low-risk grants. The consumer guide's security posture section says so.
 - Queries leave the machine for a service whose backend is private. The pack forbids repository code,
   paths and non-library names in a query, but that is guidance the engine follows, not a filter the
   Runtime enforces. **Not solved:** nothing mechanically inspects a query before it is sent.
