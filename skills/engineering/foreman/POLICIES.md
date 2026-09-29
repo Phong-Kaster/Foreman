@@ -347,6 +347,14 @@ requirement untrue while every automated check stays green.
 - **Text that can exceed its container needs a defined overflow behaviour** — wrap, expand, or an
   affordance to read the rest. Truncating to one line with no route to the full value loses data
   the user entered.
+- **A control at the bottom edge must clear the system navigation and gesture area.** Hiding the
+  navigation bar (immersive mode) makes its inset zero, so `navigationBarsPadding()` pads nothing and a
+  bar at the bottom sits in the system gesture zone: a tap summons the phone's own navigation instead of
+  the control. Keep system bars visible unless the PRD asks for immersive, and pad bottom controls by the
+  navigation-bar and bottom system-gesture insets. Earned by Calendar-Note `music-player-v3`
+  (2026-09-29): the skeleton's `hideNavigationBar` survived the Removals and the dead-code sweep because
+  it was still called, and the mini player passed every automated check until a person held the phone.
+  Behaviour a template imposes is a Removal candidate too, not only code nothing calls.
 - **Colour must come from the theme, never hardcoded.** Hardcoded values work only by coincidence
   with whatever background happens to sit underneath, and fail as soon as that changes. If a
   colour scheme is declared, fill in **every** role it defines: partial schemes leave components
