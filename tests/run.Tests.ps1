@@ -1329,6 +1329,9 @@ Describe "The library-docs pack (ADR-032)" {
         # installed skill, not a path under skills/knowledge/, and may not be installed at all.
         $Policies | Should Match 'npx -y ctx7 library'
         $Policies | Should Match 'ctx7 docs'
+        # The first check (context7-check-report.html) found a task-shaped query reaching the fix only
+        # by luck; the policy now says to ask about the symbol that failed.
+        $Policies | Should Match 'symbol that failed'
         (Test-Path (Join-Path $RepoRootDir "skills/knowledge/general/library-docs/SKILL.md")) | Should Be $true
     }
 

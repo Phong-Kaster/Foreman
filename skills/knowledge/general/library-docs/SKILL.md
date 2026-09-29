@@ -43,7 +43,11 @@ work is going well.
    a version (a Gradle version catalog, `package.json`, a lockfile) and the result lists versions, use
    the matching `/org/project/<version>` ID.
 
-2. **Ask one concept per query:**
+2. **Ask about the symbol that failed, one concept per query.** Name what broke and what replaced it —
+   "`SimpleExoPlayer` replacement", "`onPlaybackStateChanged` signature" — not what the task is for. In
+   the first check a query about the task ("MediaSessionService foreground playback") still returned the
+   fix, but only because the page it found happened to build a player; a query about the failing symbol
+   returns the migration itself.
 
    ```bash
    CTX7_TELEMETRY_DISABLED=1 npx -y ctx7 docs /websites/developer_android_media_media3 "MediaController release and reconnect when the session disconnects" --json
