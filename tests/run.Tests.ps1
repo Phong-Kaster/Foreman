@@ -553,7 +553,10 @@ Describe "run.ps1 protects the human's half of the Decision Queue" {
     It "provisions DECISIONS.md itself, since the engine that needs it cannot create what it cannot write" {
         $repo = New-TestRepo
         try {
-            Set-FakeClaudeQueue -TestRepo $repo -Directives @("DONE|ok")
+            # ESCALATE, not DONE: the bootstrap DoD gate is what this provisioning exists for. This
+            # test once used DONE for convenience, which pinned the defect of re-provisioning after
+            # a Cleanup Commit (see "leaves no .harness/run/ behind a DONE").
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("ESCALATE|approve the DoD")
             Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "2") | Out-Null
 
             $decisionsFile = Join-Path $repo ".harness/run/DECISIONS.md"
@@ -1256,6 +1259,43 @@ Describe "The spec asks what the PRD makes unnecessary (ADR-028)" {
     It "treats dead code as a review finding, in the policy and in the reviewer it is handed to" {
         $Policies | Should Match 'Dead code is a finding'
         $Reviewer | Should Match 'Dead code'
+    }
+}
+
+Describe "run.ps1 leaves no .harness/run/ behind a DONE" {
+
+    # Calendar-Note, twice: after b5691ce and after bb00487 (loop/music-player-v2, 2026-09-25) the
+    # Cleanup Commit removed .harness/run/, the engine then wrote STATUS.md - its last act, which
+    # recreates the directory - and the Runtime, having read DONE and deleted STATUS.md, called
+    # Ensure-DecisionsFile, found the directory and copied the template back in. The branch that
+    # should have been merge-ready had an untracked .harness/run/DECISIONS.md, and ENGINE.md 5 reads
+    # "no .harness/run/" as the signal to bootstrap, so the next goal on the branch was told the
+    # opposite. The fake engine below does exactly that last act: it writes STATUS.md into a
+    # .harness/run/ that did not exist until it wrote it.
+
+    It "does not re-provision DECISIONS.md, or leave the directory STATUS.md recreated, after DONE" {
+        $repo = New-TestRepo
+        try {
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("DONE|verified; Cleanup Commit written")
+            Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "2") | Out-Null
+            (Test-Path (Join-Path $repo ".harness/run/DECISIONS.md")) | Should Be $false
+            (Test-Path (Join-Path $repo ".harness/run")) | Should Be $false
+        } finally { Remove-TestRepo -TestRepo $repo }
+    }
+
+    It "leaves a .harness/run/ that still holds files alone after DONE" {
+        $repo = New-TestRepo
+        try {
+            # If the engine reported DONE without cleaning up, what is left is its to explain. The
+            # Runtime removes only the empty directory STATUS.md recreated, never files. (The directory
+            # existed before the invocation, so DECISIONS.md is provisioned before it, as for any run
+            # in progress - that is not what this checks.)
+            New-Item -ItemType Directory -Path (Join-Path $repo ".harness/run") -Force | Out-Null
+            Set-Content -Path (Join-Path $repo ".harness/run/STATE.md") -Value "left behind"
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("DONE|ok")
+            Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "2") | Out-Null
+            (Test-Path (Join-Path $repo ".harness/run/STATE.md")) | Should Be $true
+        } finally { Remove-TestRepo -TestRepo $repo }
     }
 }
 
