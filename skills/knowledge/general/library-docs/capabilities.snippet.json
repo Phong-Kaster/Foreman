@@ -1,0 +1,16 @@
+{
+  "_comment": "Capability entry for the library-docs pack (ADR-032). Paste the entry into the repository's STANDING ledger (.harness/knowledge/capabilities.json) after reviewing it - it is approved at the DoD gate like any standing capability. Network access: queries reach Context7's hosted service, so this is High-risk under POLICIES.md Capability Risk Classes. Only the two read commands are granted; `ctx7 setup`, `login` and `remove` write configuration or run OAuth and are deliberately absent. In Autonomous mode Bash is already allowed; this file is for Collaborative runs.",
+
+  "entries": [
+    {
+      "intent": "Fetch current, version-specific documentation for a third-party library when a build, test, lint or review failure names that library's API, so a retry is based on new information rather than the same guess",
+      "command": "npx -y ctx7 library <name> <concept> --json / npx -y ctx7 docs <library-id> <concept> --json (telemetry off)",
+      "scope": "read-only queries to Context7's public index; a query holds only a library's public name and a public concept, never repository code (see SKILL.md)",
+      "lifetime": "permanent",
+      "allow": [
+        "Bash(CTX7_TELEMETRY_DISABLED=1 npx -y ctx7 library *)",
+        "Bash(CTX7_TELEMETRY_DISABLED=1 npx -y ctx7 docs *)"
+      ]
+    }
+  ]
+}

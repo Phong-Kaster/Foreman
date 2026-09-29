@@ -1258,3 +1258,43 @@ Describe "The spec asks what the PRD makes unnecessary (ADR-028)" {
         $Reviewer | Should Match 'Dead code'
     }
 }
+
+Describe "The library-docs pack (ADR-032)" {
+
+    # Context7 is reached through its CLI, by the engine only, and only after a failure names a
+    # library's API. These pin the three places that say so, and that the capability grants the two
+    # read commands and nothing that writes configuration or authenticates.
+
+    $Pack = Join-Path $RepoRootDir "skills/knowledge/general/library-docs"
+    $Policies = Get-Content (Join-Path $RepoRootDir ".harness/loop/POLICIES.md") -Raw
+    $Brief = Get-Content (Join-Path $RepoRootDir ".harness/loop/templates/WORKER-BRIEF.template.md") -Raw
+
+    It "ships a SKILL.md and a capability snippet that is valid JSON" {
+        (Test-Path (Join-Path $Pack "SKILL.md")) | Should Be $true
+        { Get-Content (Join-Path $Pack "capabilities.snippet.json") -Raw | ConvertFrom-Json } | Should Not Throw
+    }
+
+    It "grants only ctx7 library and ctx7 docs, never setup, login or remove" {
+        $snippet = Get-Content (Join-Path $Pack "capabilities.snippet.json") -Raw | ConvertFrom-Json
+        $rules = @($snippet.entries | ForEach-Object { $_.allow })
+        $rules.Count | Should Be 2
+        ($rules | Where-Object { $_ -notmatch '^Bash\(CTX7_TELEMETRY_DISABLED=1 npx -y ctx7 (library|docs) \*\)$' }).Count | Should Be 0
+        ($rules | Where-Object { $_ -match 'setup|login|remove' }).Count | Should Be 0
+    }
+
+    It "is consulted from the retry policy, which carries the commands and names a skill that exists" {
+        $Policies | Should Match 'library-docs'
+        $Policies | Should Match 'third-party library'
+        # The command forms are in the policy itself: in a consumer repository the pack is an
+        # installed skill, not a path under skills/knowledge/, and may not be installed at all.
+        $Policies | Should Match 'npx -y ctx7 library'
+        $Policies | Should Match 'ctx7 docs'
+        (Test-Path (Join-Path $RepoRootDir "skills/knowledge/general/library-docs/SKILL.md")) | Should Be $true
+    }
+
+    It "reaches a Worker only through the Brief, since Workers have no network" {
+        $Brief | Should Match '## Library documentation'
+        $worker = Get-Content (Join-Path $RepoRootDir ".harness/loop/agents/loop-worker.md") -Raw
+        $worker | Should Not Match '(?m)^tools:.*Bash'
+    }
+}

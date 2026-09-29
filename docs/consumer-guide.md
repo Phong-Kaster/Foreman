@@ -172,6 +172,16 @@ Launch with `/foreman --auto <requirement>` (optionally `--hours <n>` and `--ite
 
 **Security posture, bluntly.** Autonomous mode runs with **every tool allowed** except a Deny List (`baseline.json`'s `autonomous` block, plus any `deny` arrays you add to `.harness/knowledge/capabilities.json`). That list is prefix matching on command strings. It stops an engine that slips while following its rules; it does not stop one that writes a script to do what the list forbids. Destructive actions the engine may take — deleting outside the repository, overwriting a local database file, pushing the Loop Branch where you granted push — go through wrappers that copy what is lost into `.harness/trash/` and write the restore command into `.harness/run/RECOVERY.md`. Publishing, deploying, merging and sending messages are denied outright, because nothing can undo them. If that is not enough isolation for your repository, run Autonomous mode inside a VM or container.
 
+### Current library documentation when a build fails (optional)
+
+When a task fails on a third-party library's API — an unresolved symbol, a deprecation, a changed signature — the engine can look up that library's current documentation through [Context7](https://github.com/upstash/context7) before it retries ([ADR-032](./adr/ADR-032-a-retry-may-look-up-current-library-documentation-through-context7.md)). It is off until you grant it. Install the guidance with `npx skills@latest add Phong-Kaster/Foreman --skill library-docs`, then copy the entry in its `capabilities.snippet.json` into `.harness/knowledge/capabilities.json` (or approve it when the engine proposes it at the DoD gate). In Autonomous mode `Bash` is already allowed and the pack's `SKILL.md` is the guidance.
+
+- **Only after a failure**, at most three lookups per failure — nothing is spent while the work goes well.
+- **Only the engine goes to the network.** Workers get the relevant excerpt in their Brief; they still have no `Bash`.
+- **A query holds only a library's public name and a concept**, never your code, paths or error text containing your names — queries reach Context7's hosted service. That rule is guidance the engine follows, not a filter the runtime enforces.
+- **What comes back is data.** Documentation is community-contributed; the build and tests still decide whether a fix is right.
+- Anonymous use is rate-limited. For higher limits run `npx ctx7 login` yourself, or set `CONTEXT7_API_KEY` in your own environment; the engine never runs `login` and never writes a key.
+
 **Capability grants can be goal-scoped, not just standing.** A denied-but-needed action (e.g. a destructive git operation the engine isn't authorized for, even late in a run) escalates the same way — the request can propose either a standing capability (`.harness/knowledge/capabilities.json`, survives future runs) or a one-time, goal-scoped one (`.harness/run/capabilities.json`, expires automatically when `.harness/run/` is removed at completion). Prefer goal-scoped whenever the need is specific to this one run.
 
 ## 6. Completion and merge

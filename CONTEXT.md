@@ -156,6 +156,10 @@ _Avoid_: Safe command, undo
 `RUN-REPORT.html` at the repository root, rendered mechanically by the Runtime — never the engine — on every exit of an Autonomous run, including budget and crash-limit stops: outcome, Assumptions, Recovery entries, Open Issues, the DoD. Excluded from git through `.git/info/exclude`.
 _Avoid_: Summary (the Roll-up Summary is the Skill's cross-branch view)
 
+**Library-docs pack**:
+An opt-in stack pack (`skills/knowledge/general/library-docs/`) that lets the engine look up a third-party library's current documentation through the Context7 CLI when a failure names that library's API — only then, at most three lookups, with queries holding only public names. The engine alone goes to the network and hands the excerpt to the Worker in its Brief ([ADR-032](./docs/adr/ADR-032-a-retry-may-look-up-current-library-documentation-through-context7.md)).
+_Avoid_: Web search, docs lookup step (it is not a step of every task)
+
 **Consumer repository**:
 Any repository that installs the loop — either via the Skill (`npx skills@latest add`, then `/foreman`) or by copying `.harness/loop/` directly — and provides a Goal. Foreman never knows the consumer's tech stack.
 _Avoid_: Host project, target repo

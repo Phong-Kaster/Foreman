@@ -900,8 +900,9 @@ git merge loop/&lt;prd-slug&gt;               # your call, your hands</code></pr
 │   └── scripts/run.ps1               <span data-lang="vi">script chạy loop</span><span data-lang="en">the loop script</span>
 │
 ├── skills/knowledge/                 ← <span data-lang="vi">STACK PACK TUỲ CHỌN — kiến thức nền tảng, do người curate,</span><span data-lang="en">OPT-IN STACK PACKS — platform knowledge, human-curated,</span>
-│   └── android/compose-visual-testing/  <span data-lang="vi">không bao giờ tự động promote vào .harness/loop/ (ADR-019)</span><span data-lang="en">never auto-promoted into .harness/loop/ (ADR-019)</span>
-│       <span data-lang="vi">(một thư mục con cho mỗi nền tảng: android/, backend/, frontend/, devops/, ...)</span><span data-lang="en">(one subfolder per platform: android/, backend/, frontend/, devops/, ...)</span>
+│   ├── android/compose-visual-testing/  <span data-lang="vi">không bao giờ tự động promote vào .harness/loop/ (ADR-019)</span><span data-lang="en">never auto-promoted into .harness/loop/ (ADR-019)</span>
+│   ├── general/library-docs/          <span data-lang="vi">tài liệu thư viện mới nhất qua Context7, dùng khi build hỏng (ADR-032)</span><span data-lang="en">current library docs via Context7, used when a build fails (ADR-032)</span>
+│       <span data-lang="vi">(một thư mục con cho mỗi nền tảng: android/, backend/, frontend/, devops/, general/, ...)</span><span data-lang="en">(one subfolder per platform: android/, backend/, frontend/, devops/, general/, ...)</span>
 │
 ├── .harness/loop/                    ← <span data-lang="vi">Y HỆT, độc lập — cho cài đặt thủ công</span><span data-lang="en">THE SAME THING, standalone — for manual installs</span>
 ├── tests/                            ← <span data-lang="vi">Pester test cho run.ps1, chạy bằng một `claude` giả</span><span data-lang="en">Pester tests for run.ps1, driven by a fake `claude` stub</span>
