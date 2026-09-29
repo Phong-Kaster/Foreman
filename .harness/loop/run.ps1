@@ -664,6 +664,14 @@ function Ensure-DecisionsFile {
     }
 }
 
+# After DONE: remove .harness/run/ only if it is empty - the directory the engine's STATUS.md
+# recreated after the Cleanup Commit, now that STATUS.md itself has been read and deleted.
+function Remove-EmptyRunDir {
+    if (-not (Test-Path $RunDir)) { return }
+    if (@(Get-ChildItem -LiteralPath $RunDir -Force).Count -gt 0) { return }
+    Remove-Item -LiteralPath $RunDir -Force
+}
+
 # ---------- Engine invocation with idle + hard timeout (ADR-012) ----------
 # Run as a tracked child process rather than a pipeline, so a hung invocation can actually be
 # killed. An engine doing work emits tool_use events continuously; silence is the hang signal -
@@ -1176,7 +1184,19 @@ for ($iteration = $priorIterations + 1; $iteration -le $MaxIterations; $iteratio
     # .harness/run/, and ESCALATE can fire on that very Iteration (the DoD approval gate always
     # does). Provisioning only before invocation would leave a human staring at an ESCALATION.md
     # with no DECISIONS.md to answer into until they ran the Runtime a second time for no reason.
-    Ensure-DecisionsFile
+    #
+    # Never after DONE. The Cleanup Commit has removed .harness/run/ by then, and the engine's last
+    # act - writing STATUS.md - recreates the directory, so provisioning here copied the template
+    # back into a run that had just finished. Calendar-Note hit it twice (after b5691ce and after
+    # bb00487): a merge-ready branch with an untracked .harness/run/DECISIONS.md, and ENGINE.md 5
+    # reads "no .harness/run/" as the signal to bootstrap, so the next goal on that branch was told
+    # the opposite. After DONE the only thing this does is drop the directory STATUS.md recreated,
+    # if that is all it holds; anything else in it is the engine's to explain, not ours to delete.
+    if ($status.Word -eq "DONE") {
+        Remove-EmptyRunDir
+    } else {
+        Ensure-DecisionsFile
+    }
 
     switch ($status.Word) {
         "DONE"     { Write-Host "Goal verified complete. Review and merge the Loop Branch." -ForegroundColor Green; Stop-Run 0 "DONE" $status.Reason }
