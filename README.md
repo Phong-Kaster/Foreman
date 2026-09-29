@@ -72,6 +72,8 @@ npx skills@latest add Phong-Kaster/Foreman
 
 That drops the `foreman` skill into `.claude/skills/foreman/` (and `.agents/skills/foreman/`) and records it in `skills-lock.json` — the same way you'd install any shared Claude Code skill. Nothing else to copy by hand.
 
+**It keeps itself up to date.** Every time you start a run with `/foreman`, it first checks whether a newer Foreman has been released and, if so, updates its own skills (only Foreman's — never your other skills) and commits that update, before the run begins. No network, or the check fails? It carries on with the version you have and tells you.
+
 > **Don't want the installer?** `.harness/loop/` is a self-contained folder. Copy it into any repo's root and run `powershell .harness/loop/run.ps1` from a terminal. Full instructions: [docs/consumer-guide.md](./docs/consumer-guide.md).
 
 ### Then start a run
@@ -299,8 +301,9 @@ Foreman/
 │   └── scripts/run.ps1               the loop script
 │
 ├── skills/knowledge/                 ← OPT-IN STACK PACKS — platform knowledge, human-curated,
-│   └── android/compose-visual-testing/  never auto-promoted into .harness/loop/ (ADR-019)
-│       (one subfolder per platform: android/, backend/, frontend/, devops/, ...)
+│   ├── android/compose-visual-testing/  never auto-promoted into .harness/loop/ (ADR-019)
+│   ├── general/library-docs/          current library docs via Context7, used when a build fails (ADR-032)
+│       (one subfolder per platform: android/, backend/, frontend/, devops/, general/, ...)
 │
 ├── .harness/loop/                            ← THE SAME THING, standalone — for manual installs
 ├── tests/                            ← Pester tests for run.ps1, driven by a fake `claude` stub

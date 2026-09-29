@@ -245,8 +245,8 @@ function Compile-PermissionSettings {
     )
 
     # Autonomous mode inverts the model (ADR-027): every tool allowed, minus the Deny List shipped in
-    # baseline.json's "autonomous" block, plus any "deny" arrays the human added to the repository or
-    # run ledgers. The immutable rules above still apply on top - deny always wins over allow.
+    # baseline.json's "autonomous" block. The immutable rules above still apply on top, and so do the
+    # ledgers' own "deny" arrays below - deny always wins over allow.
     if ($script:RunMode -eq "Autonomous") {
         # Without the Deny List there is nothing to compile an Autonomous run from, and silently falling
         # back to Collaborative permissions would run a mode the human did not choose. Stop, and say why.
@@ -259,12 +259,16 @@ function Compile-PermissionSettings {
         }
         $allowRules = @($baseline.autonomous.allow)
         $denyRules += @($baseline.autonomous.deny)
-        foreach ($ledger in $ledgers[1..2]) {
-            if (Test-Path $ledger) {
-                $parsed = Get-Content $ledger -Raw | ConvertFrom-Json
-                foreach ($entry in $parsed.entries) {
-                    foreach ($rule in $entry.deny) { $denyRules += $rule }
-                }
+    }
+
+    # A repository's own "deny" arrays apply in BOTH modes. They are how a repository switches off
+    # something the baseline grants everywhere - the Context7 lookup, which sends a library name and a
+    # concept to a hosted service, is the first such grant (ADR-032). Deny always wins over allow.
+    foreach ($ledger in $ledgers[1..2]) {
+        if (Test-Path $ledger) {
+            $parsed = Get-Content $ledger -Raw | ConvertFrom-Json
+            foreach ($entry in $parsed.entries) {
+                foreach ($rule in $entry.deny) { $denyRules += $rule }
             }
         }
     }

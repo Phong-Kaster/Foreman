@@ -7,6 +7,7 @@
 ## Retry and Abandonment Policy
 
 - Retry a failed approach only when the probability of success has increased: new information, a different strategy, a corrected assumption. Never retry identical work.
+- **When a failure names a third-party library's API** — an unresolved symbol, a deprecation, a changed signature, a coordinate or configuration key — current documentation is the new information a retry needs. It is granted in every repository and both Run Modes by the baseline ledger (ADR-032) unless the repository denies it, so look it up before the retry — the `library-docs` skill has the detail: `CTX7_TELEMETRY_DISABLED=1 npx -y ctx7 library "<name>" "<concept>" --json`, then `… ctx7 docs <library-id> "<concept>" --json`; at most three calls, a query holding only the library's public name and concept, never repository code. Ask about the symbol that failed and what replaced it ("SimpleExoPlayer replacement"), not about what the task does — a task-shaped query found the fix only by luck in the first check (`context7-check-report.html`). Put the excerpt and its source URL in the Worker Brief and the attempt record. Not for device behaviour, the project's own code, or before anything has failed.
 - Maximum 3 attempts per task across all iterations (attempts are counted in the task file).
 - **The third failure abandons the task.** Mark it abandoned, mark every task that transitively depends on it unreachable, and continue with unrelated work. This is what lets the loop keep progressing without a human present — but a run containing an abandoned task can never report `DONE`.
 - **Every failed attempt records its own evidence, at the moment it fails**: the command run and the tail of its error output, written into the task file. Successful work carries its evidence in the checkpoint commit; failed work is reverted and enters no commit, so this is the only place its detail survives. Cap the captured output (about 40 lines) so the Issues Report stays readable.
@@ -346,6 +347,14 @@ requirement untrue while every automated check stays green.
 - **Text that can exceed its container needs a defined overflow behaviour** — wrap, expand, or an
   affordance to read the rest. Truncating to one line with no route to the full value loses data
   the user entered.
+- **A control at the bottom edge must clear the system navigation and gesture area.** Hiding the
+  navigation bar (immersive mode) makes its inset zero, so `navigationBarsPadding()` pads nothing and a
+  bar at the bottom sits in the system gesture zone: a tap summons the phone's own navigation instead of
+  the control. Keep system bars visible unless the PRD asks for immersive, and pad bottom controls by the
+  navigation-bar and bottom system-gesture insets. Earned by Calendar-Note `music-player-v3`
+  (2026-09-29): the skeleton's `hideNavigationBar` survived the Removals and the dead-code sweep because
+  it was still called, and the mini player passed every automated check until a person held the phone.
+  Behaviour a template imposes is a Removal candidate too, not only code nothing calls.
 - **Colour must come from the theme, never hardcoded.** Hardcoded values work only by coincidence
   with whatever background happens to sit underneath, and fail as soon as that changes. If a
   colour scheme is declared, fill in **every** role it defines: partial schemes leave components

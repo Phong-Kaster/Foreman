@@ -38,15 +38,46 @@ Trim $ARGUMENTS and check, in this order:
   - `--hours <n>` → remember an hour budget (a positive number) for `-MaxHours`;
   - `--iterations <n>` → remember an iteration budget (a positive whole number) for `-MaxIterations`.
 
-  Stop at the first token that is none of these. The remainder is the input for step 3 —
+  Stop at the first token that is none of these, and continue to step 0b. The remainder is the input for step 3 —
   requirement text or a path, exactly as if the flags were not there. A budget flag without a valid
   number is an error: stop and tell the user which flag was malformed.
-- **Anything else** → no flags. Continue to step 1. The runtime keeps a run-in-progress's mode, and
+- **Anything else** → no flags. Continue to step 0b. The runtime keeps a run-in-progress's mode, and
   starts a new run Collaborative.
 
 An Autonomous run never stops to ask after the DoD approval, so its budgets are the only thing that
 ends it early. When a new run is launched with `--auto` and no `--hours`, tell the user the run is
 bounded only by the default 50 iterations, and that `--hours <n>` adds a wall-clock limit.
+
+## 0b. Bring Foreman's skills up to date — every launch
+
+Before anything is synced or launched, make sure this repository runs the newest Foreman. A stale
+skill copy silently reverts `.harness/loop/` to an older runtime on every `/foreman` — including
+older permission rules — so checking first is cheap insurance. Skip this step for the `mode`
+commands of step 0: they switch a run in progress and must not change its runtime.
+
+1. **Find Foreman's skills.** Read `skills-lock.json` and take every skill whose `source` is
+   `Phong-Kaster/Foreman` (`foreman` itself, and any pack such as `library-docs` or the
+   `android-*` packs). Update only those — never the repository's other skills. No lock file, or no
+   Foreman entry: skip to step 1.
+2. **Refuse to mix in local edits.** If `git status --porcelain` already shows changes under those
+   skills' directories (`.agents/skills/<name>`, `.claude/skills/<name>`) or `skills-lock.json`,
+   do not update: tell the user their installed skill has local changes, and continue with it.
+3. **Update:** `npx -y skills@latest update <name> <name> … -p -y`, with a timeout of a few minutes.
+   Its output says "Updated" whether or not anything changed, so **ignore the output**.
+4. **Decide from git**, not from the updater: `git status --porcelain --` those directories and
+   `skills-lock.json`.
+   - **Nothing changed** → already the latest. Say so in one line and continue.
+   - **Something changed** → commit exactly those paths on the current branch, before step 2
+     copies anything: `chore(foreman): update Foreman skills to the latest release`, naming the
+     skills in the body. Committing is what keeps the next iteration from finding them as a dirty
+     tree it would treat as crash debris (ENGINE.md §6.1). On a new run the commit lands before the
+     Loop Branch exists; on a run in progress it lands on the Loop Branch and counts once against
+     its iteration budget (ADR-024) — say so. Tell the user which skills changed, and whether
+     `ENGINE.md` or `POLICIES.md` did, since a run in progress picks those up at its next iteration.
+5. **If this file itself changed**, re-read it now and follow the new version from step 0 — once;
+   do not update again on the second pass.
+6. **If the update fails** — offline, registry down, a timeout — continue with the installed
+   version and tell the user in one line. Never block a run on an update check.
 
 ## 1. Locate the installed runtime files
 

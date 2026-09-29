@@ -1298,3 +1298,112 @@ Describe "run.ps1 leaves no .harness/run/ behind a DONE" {
         } finally { Remove-TestRepo -TestRepo $repo }
     }
 }
+
+Describe "The library-docs pack (ADR-032)" {
+
+    # Context7 is reached through its CLI, by the engine only, and only after a failure names a
+    # library's API. By the human's decision it is on by default: the baseline grants the two read
+    # commands in every repository and both Run Modes, and a repository switches it off with a deny rule.
+
+    $Pack = Join-Path $RepoRootDir "skills/knowledge/general/library-docs"
+    $Policies = Get-Content (Join-Path $RepoRootDir ".harness/loop/POLICIES.md") -Raw
+    $Brief = Get-Content (Join-Path $RepoRootDir ".harness/loop/templates/WORKER-BRIEF.template.md") -Raw
+    $CtxRules = @("Bash(CTX7_TELEMETRY_DISABLED=1 npx -y ctx7 library *)", "Bash(CTX7_TELEMETRY_DISABLED=1 npx -y ctx7 docs *)")
+
+    function Get-CompiledSettingsFor([string]$repo, [string[]]$extra) {
+        $argLog = Join-Path $repo "args.txt"
+        $env:FAKE_CLAUDE_ARGLOG = $argLog
+        New-Item -ItemType Directory -Path (Join-Path $repo ".harness/loop/capabilities") -Force | Out-Null
+        Copy-Item (Join-Path $RepoRootDir ".harness/loop/capabilities/baseline.json") (Join-Path $repo ".harness/loop/capabilities/")
+        Set-FakeClaudeQueue -TestRepo $repo -Directives @("DONE|ok")
+        Invoke-RunPs1 -TestRepo $repo -ExtraArgs (@("-MaxIterations", "2") + $extra) | Out-Null
+        Remove-Item Env:\FAKE_CLAUDE_ARGLOG -ErrorAction SilentlyContinue
+        $recorded = Get-Content $argLog -Raw
+        $settingsPath = ($recorded -split '--settings\s+')[1].Split(' ')[0].Trim()
+        return (Get-Content $settingsPath -Raw | ConvertFrom-Json)
+    }
+
+    It "ships a SKILL.md" {
+        (Test-Path (Join-Path $Pack "SKILL.md")) | Should Be $true
+    }
+
+    It "grants only ctx7 library and ctx7 docs in the baseline, never setup, login or remove" {
+        $baseline = Get-Content (Join-Path $RepoRootDir ".harness/loop/capabilities/baseline.json") -Raw | ConvertFrom-Json
+        $ctx = @($baseline.entries | ForEach-Object { $_.allow } | Where-Object { $_ -match 'ctx7' })
+        $ctx.Count | Should Be 2
+        ($ctx | Where-Object { $CtxRules -notcontains $_ }).Count | Should Be 0
+        ($ctx | Where-Object { $_ -match 'setup|login|remove' }).Count | Should Be 0
+    }
+
+    It "reaches a Collaborative run with no grant from the repository" {
+        $repo = New-TestRepo
+        try {
+            $settings = Get-CompiledSettingsFor $repo @()
+            foreach ($r in $CtxRules) { ($settings.permissions.allow -contains $r) | Should Be $true }
+        } finally { Remove-TestRepo -TestRepo $repo }
+    }
+
+    It "is switched off in a Collaborative run by a deny rule in the repository's own ledger" {
+        $repo = New-TestRepo
+        try {
+            New-Item -ItemType Directory -Path (Join-Path $repo ".harness/knowledge") -Force | Out-Null
+            Set-Content -Path (Join-Path $repo ".harness/knowledge/capabilities.json") -Value '{"entries":[{"intent":"no lookups leave this machine","deny":["Bash(CTX7_TELEMETRY_DISABLED=1 npx -y ctx7 *)"]}]}'
+            $settings = Get-CompiledSettingsFor $repo @()
+            ($settings.permissions.deny -contains "Bash(CTX7_TELEMETRY_DISABLED=1 npx -y ctx7 *)") | Should Be $true
+        } finally { Remove-TestRepo -TestRepo $repo }
+    }
+
+    It "is consulted from the retry policy, which carries the commands and names a skill that exists" {
+        $Policies | Should Match 'library-docs'
+        $Policies | Should Match 'third-party library'
+        # The command forms are in the policy itself: in a consumer repository the pack is an
+        # installed skill, not a path under skills/knowledge/, and may not be installed at all.
+        $Policies | Should Match 'npx -y ctx7 library'
+        $Policies | Should Match 'ctx7 docs'
+        $Policies | Should Match 'every repository and both Run Modes'
+        # The first check (context7-check-report.html) found a task-shaped query reaching the fix only
+        # by luck; the policy now says to ask about the symbol that failed.
+        $Policies | Should Match 'symbol that failed'
+        (Test-Path (Join-Path $RepoRootDir "skills/knowledge/general/library-docs/SKILL.md")) | Should Be $true
+    }
+
+    It "reaches a Worker only through the Brief, since Workers have no network" {
+        $Brief | Should Match '## Library documentation'
+        $worker = Get-Content (Join-Path $RepoRootDir ".harness/loop/agents/loop-worker.md") -Raw
+        $worker | Should Not Match '(?m)^tools:.*Bash'
+    }
+}
+
+Describe "The /foreman skill brings Foreman's skills up to date before every launch" {
+
+    # A stale installed skill reverts a consumer's .harness/loop/ to an older runtime on every /foreman
+    # (distributable-parity.md). The skill now updates Foreman's own skills first. The updater prints
+    # "Updated" even when nothing changed - measured 2026-09-29 - so the decision must come from git.
+
+    $Skill = Get-Content (Join-Path $RepoRootDir "skills/engineering/foreman/SKILL.md") -Raw
+
+    It "updates only skills whose source is Phong-Kaster/Foreman, found in skills-lock.json" {
+        $Skill | Should Match '## 0b\. Bring Foreman''s skills up to date'
+        $Skill | Should Match 'skills-lock\.json'
+        $Skill | Should Match 'Phong-Kaster/Foreman'
+        $Skill | Should Match 'never the repository''s other skills'
+    }
+
+    It "decides from git, not from the updater's output, and commits a change before syncing" {
+        $Skill | Should Match 'ignore the output'
+        $Skill | Should Match 'Decide from git'
+        $Skill | Should Match 'chore\(foreman\): update Foreman skills'
+    }
+
+    It "never blocks a run on the check, and skips it for mode switches" {
+        $Skill | Should Match 'Never block a run on an update check'
+        $Skill | Should Match 'Skip this step for the `mode`'
+    }
+
+    It "is reached from step 0 before the runtime is synced" {
+        $zeroB = $Skill.IndexOf('## 0b.')
+        $one = $Skill.IndexOf('## 1. Locate the installed runtime files')
+        ($zeroB -gt 0 -and $zeroB -lt $one) | Should Be $true
+        $Skill | Should Match 'Continue to step 0b'
+    }
+}

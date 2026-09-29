@@ -468,6 +468,8 @@
 
       <div data-lang="vi"><p class="reveal">Lệnh đó thả skill <code>foreman</code> vào <code>.claude/skills/foreman/</code> (và <code>.agents/skills/foreman/</code>) và ghi lại trong <code>skills-lock.json</code> — giống hệt cách bạn cài bất kỳ skill Claude Code chia sẻ nào. Không cần copy gì thêm bằng tay.</p></div>
       <div data-lang="en"><p class="reveal">That drops the <code>foreman</code> skill into <code>.claude/skills/foreman/</code> (and <code>.agents/skills/foreman/</code>) and records it in <code>skills-lock.json</code> — the same way you'd install any shared Claude Code skill. Nothing else to copy by hand.</p></div>
+      <div data-lang="vi"><p class="reveal"><strong>Nó tự cập nhật.</strong> Mỗi lần bạn bắt đầu một lần chạy bằng <code>/foreman</code>, nó kiểm tra trước xem Foreman đã có bản mới chưa; nếu có, nó cập nhật các skill của chính nó (chỉ của Foreman, không bao giờ đụng skill khác của bạn) và commit bản cập nhật đó, trước khi lần chạy bắt đầu. Không có mạng, hoặc kiểm tra thất bại? Nó tiếp tục với bản bạn đang có và báo cho bạn.</p></div>
+      <div data-lang="en"><p class="reveal"><strong>It keeps itself up to date.</strong> Every time you start a run with <code>/foreman</code>, it first checks whether a newer Foreman has been released and, if so, updates its own skills (only Foreman's — never your other skills) and commits that update, before the run begins. No network, or the check fails? It carries on with the version you have and tells you.</p></div>
 
       <div class="callout reveal">
         <p data-lang="vi"><strong>Không muốn dùng installer?</strong> <code>.harness/loop/</code> là một thư mục độc lập. Copy nó vào root của bất kỳ repo nào và chạy <code>powershell .harness/loop/run.ps1</code> từ terminal. Hướng dẫn đầy đủ: <a href="https://github.com/Phong-Kaster/Foreman/blob/main/docs/consumer-guide.md" target="_blank" rel="noopener">docs/consumer-guide.md</a>.</p>
@@ -900,8 +902,9 @@ git merge loop/&lt;prd-slug&gt;               # your call, your hands</code></pr
 │   └── scripts/run.ps1               <span data-lang="vi">script chạy loop</span><span data-lang="en">the loop script</span>
 │
 ├── skills/knowledge/                 ← <span data-lang="vi">STACK PACK TUỲ CHỌN — kiến thức nền tảng, do người curate,</span><span data-lang="en">OPT-IN STACK PACKS — platform knowledge, human-curated,</span>
-│   └── android/compose-visual-testing/  <span data-lang="vi">không bao giờ tự động promote vào .harness/loop/ (ADR-019)</span><span data-lang="en">never auto-promoted into .harness/loop/ (ADR-019)</span>
-│       <span data-lang="vi">(một thư mục con cho mỗi nền tảng: android/, backend/, frontend/, devops/, ...)</span><span data-lang="en">(one subfolder per platform: android/, backend/, frontend/, devops/, ...)</span>
+│   ├── android/compose-visual-testing/  <span data-lang="vi">không bao giờ tự động promote vào .harness/loop/ (ADR-019)</span><span data-lang="en">never auto-promoted into .harness/loop/ (ADR-019)</span>
+│   ├── general/library-docs/          <span data-lang="vi">tài liệu thư viện mới nhất qua Context7, dùng khi build hỏng (ADR-032)</span><span data-lang="en">current library docs via Context7, used when a build fails (ADR-032)</span>
+│       <span data-lang="vi">(một thư mục con cho mỗi nền tảng: android/, backend/, frontend/, devops/, general/, ...)</span><span data-lang="en">(one subfolder per platform: android/, backend/, frontend/, devops/, general/, ...)</span>
 │
 ├── .harness/loop/                    ← <span data-lang="vi">Y HỆT, độc lập — cho cài đặt thủ công</span><span data-lang="en">THE SAME THING, standalone — for manual installs</span>
 ├── tests/                            ← <span data-lang="vi">Pester test cho run.ps1, chạy bằng một `claude` giả</span><span data-lang="en">Pester tests for run.ps1, driven by a fake `claude` stub</span>
