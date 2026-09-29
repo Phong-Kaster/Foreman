@@ -1373,3 +1373,37 @@ Describe "The library-docs pack (ADR-032)" {
         $worker | Should Not Match '(?m)^tools:.*Bash'
     }
 }
+
+Describe "The /foreman skill brings Foreman's skills up to date before every launch" {
+
+    # A stale installed skill reverts a consumer's .harness/loop/ to an older runtime on every /foreman
+    # (distributable-parity.md). The skill now updates Foreman's own skills first. The updater prints
+    # "Updated" even when nothing changed - measured 2026-09-29 - so the decision must come from git.
+
+    $Skill = Get-Content (Join-Path $RepoRootDir "skills/engineering/foreman/SKILL.md") -Raw
+
+    It "updates only skills whose source is Phong-Kaster/Foreman, found in skills-lock.json" {
+        $Skill | Should Match '## 0b\. Bring Foreman''s skills up to date'
+        $Skill | Should Match 'skills-lock\.json'
+        $Skill | Should Match 'Phong-Kaster/Foreman'
+        $Skill | Should Match 'never the repository''s other skills'
+    }
+
+    It "decides from git, not from the updater's output, and commits a change before syncing" {
+        $Skill | Should Match 'ignore the output'
+        $Skill | Should Match 'Decide from git'
+        $Skill | Should Match 'chore\(foreman\): update Foreman skills'
+    }
+
+    It "never blocks a run on the check, and skips it for mode switches" {
+        $Skill | Should Match 'Never block a run on an update check'
+        $Skill | Should Match 'Skip this step for the `mode`'
+    }
+
+    It "is reached from step 0 before the runtime is synced" {
+        $zeroB = $Skill.IndexOf('## 0b.')
+        $one = $Skill.IndexOf('## 1. Locate the installed runtime files')
+        ($zeroB -gt 0 -and $zeroB -lt $one) | Should Be $true
+        $Skill | Should Match 'Continue to step 0b'
+    }
+}

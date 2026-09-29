@@ -28,6 +28,8 @@ npx skills@latest add Phong-Kaster/Foreman
 
 Installs `foreman` into `.claude/skills/foreman/` and `.agents/skills/foreman/` in the current repo. Nothing else to copy — the skill carries its own copy of `ENGINE.md`, `POLICIES.md`, the capability baseline, the templates, and `run.ps1`, and materializes `.harness/loop/` at your repo root itself the first time you invoke it.
 
+**Every launch checks for a newer Foreman first.** Before syncing `.harness/loop/`, `/foreman` reads `skills-lock.json`, runs `npx skills@latest update` for the skills whose source is `Phong-Kaster/Foreman` (never your other skills), and decides from `git status` — not from the updater, whose output says "Updated" either way — whether anything changed. A change is committed on the current branch (`chore(foreman): update Foreman skills to the latest release`) so the engine never meets it as a dirty tree; on a run in progress that commit counts once against the iteration budget. Local edits to an installed Foreman skill block the update rather than being overwritten, and an offline or failed check never blocks the run. The manual `run.ps1` path does not update itself.
+
 ## 1b. Install manually
 
 Copy the `.harness/loop/` directory into your repository root by hand. That is the entire installation — never edit its contents per-project (repository-specific truth belongs in `.harness/knowledge/PROJECT.md`, which the loop maintains itself; domain rules belong in `.harness/knowledge/DOMAIN.md`, which only you write). Use this path if you're not working inside Claude Code, or want to invoke `run.ps1` from a script/CI job instead of a conversation.
