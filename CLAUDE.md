@@ -84,6 +84,11 @@ Each of these cost a real run time or quota. They are here so the next change do
   61 of 99 Kotlin files of skeleton demo code and five permissions an offline player never uses,
   because all fifteen criteria said "X works" and none said "Y is gone" (ADR-028). When a guard has
   only positive checks, ask what negative check would have failed on the last run's output.
+- **A device may already be somebody else's run.** Checking the device wrapper on 2026-09-30, an
+  `adb kill-server` dropped every adb connection on the machine while another project's harness was
+  driving the same `astronex_test` emulator, and the check then took that emulator's screen for a few
+  seconds (ADR-033). Before touching a device from here, ask whether a run is using it and read what
+  holds its screen (`adb shell dumpsys window | grep mCurrentFocus`); never restart the adb server.
 - **Test the fixture against the field event, not a tidy one.** The fake-claude `WARNED` directive
   always said `five_hour`, so the suite could not see the bug. When a real event breaks something,
   add it to the fixture verbatim (`WARNED7`) before fixing.

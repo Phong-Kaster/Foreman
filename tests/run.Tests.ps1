@@ -1407,3 +1407,238 @@ Describe "The /foreman skill brings Foreman's skills up to date before every lau
         $Skill | Should Match 'Continue to step 0b'
     }
 }
+
+Describe "The device wrapper acts only on the debug build of this repository (ADR-033)" {
+
+    # adb is denied to the engine in both Run Modes; foreman-device.ps1 is the only route to a device.
+    # Decided by the human, 2026-09-30: the engine may clear, grant, revoke and drive the app it is
+    # building, and nothing else - no other app, no device setting. These tests run the wrapper against
+    # tests/fixtures/fake-adb.ps1 and read its call log, so "refused" means the device never heard of it.
+
+    $Device = Join-Path $RepoRootDir ".harness/loop/bin/foreman-device.ps1"
+    $FakeAdb = Join-Path $PSScriptRoot "fixtures\fake-adb.ps1"
+
+    $OwnScreen = @'
+<?xml version='1.0' encoding='UTF-8' standalone='yes' ?><hierarchy rotation="0"><node index="0" text="" resource-id="" class="android.widget.FrameLayout" package="com.example.app" content-desc="" focused="false" bounds="[0,0][1080,2400]"><node index="0" text="Play" resource-id="com.example.app:id/play" class="android.widget.Button" package="com.example.app" content-desc="" focused="false" bounds="[440,1100][640,1300]" /><node index="1" text="" resource-id="com.example.app:id/list" class="android.view.View" package="com.example.app" content-desc="" focused="false" bounds="[0,200][1080,1000]" /></node><node index="1" text="" resource-id="com.android.systemui:id/home_button" class="android.widget.ImageView" package="com.android.systemui" content-desc="Home" focused="false" bounds="[480,2300][600,2400]" /></hierarchy>
+'@
+    $DialogScreen = @'
+<?xml version='1.0' encoding='UTF-8' standalone='yes' ?><hierarchy rotation="0"><node index="0" text="Allow Music to send you notifications?" resource-id="com.android.permissioncontroller:id/permission_message" class="android.widget.TextView" package="com.android.permissioncontroller" content-desc="" focused="false" bounds="[100,1300][980,1400]" /><node index="1" text="Allow" resource-id="com.android.permissioncontroller:id/permission_allow_button" class="android.widget.Button" package="com.android.permissioncontroller" content-desc="" focused="false" bounds="[100,1500][980,1600]" /></hierarchy>
+'@
+    $ForeignScreen = @'
+<?xml version='1.0' encoding='UTF-8' standalone='yes' ?><hierarchy rotation="0"><node index="0" text="Secret message from Bob" resource-id="com.whatsapp:id/message" class="android.widget.TextView" package="com.whatsapp" content-desc="" focused="false" bounds="[0,0][1080,2400]" /></hierarchy>
+'@
+
+    function New-AppRepo([switch]$Unbuilt) {
+        $repo = New-TestRepo
+        # What a Gradle debug build leaves behind, plus the test APK, which is not the app.
+        $testDir = Join-Path $repo "app/build/outputs/apk/androidTest/debug"
+        New-Item -ItemType Directory -Path $testDir -Force | Out-Null
+        Set-Content -Path (Join-Path $testDir "output-metadata.json") -Value '{"applicationId":"com.example.app.test","variantName":"debugAndroidTest","elements":[{"outputFile":"app-debug-androidTest.apk"}]}'
+        if (-not $Unbuilt) {
+            $debugDir = Join-Path $repo "app/build/outputs/apk/debug"
+            New-Item -ItemType Directory -Path $debugDir -Force | Out-Null
+            Set-Content -Path (Join-Path $debugDir "output-metadata.json") -Value '{"applicationId":"com.example.app","variantName":"debug","elements":[{"outputFile":"app-debug.apk"}]}'
+            Set-Content -Path (Join-Path $debugDir "app-debug.apk") -Value "apk"
+        }
+        $bin = Join-Path $repo "fakebin"
+        New-Item -ItemType Directory -Path $bin -Force | Out-Null
+        Set-Content -Path (Join-Path $bin "adb.cmd") -Value "@echo off`r`npowershell -NoProfile -ExecutionPolicy Bypass -File `"$FakeAdb`" %*`r`nexit /b %ERRORLEVEL%" -Encoding ASCII
+        $env:FAKE_ADB_LOG = Join-Path $repo "adb-calls.txt"
+        return $repo
+    }
+    function Invoke-Device([string]$repo, [string[]]$deviceArgs) {
+        $savedPath = $env:PATH
+        $env:PATH = (Join-Path $repo "fakebin") + ";" + $env:PATH
+        Push-Location $repo
+        try {
+            $out = & powershell -NoProfile -ExecutionPolicy Bypass -File $Device @deviceArgs 2>$null | Out-String
+            return @{ Code = $LASTEXITCODE; Out = $out }
+        } finally { Pop-Location; $env:PATH = $savedPath }
+    }
+    function Get-AdbCalls([string]$repo) {
+        $log = Join-Path $repo "adb-calls.txt"
+        if (-not (Test-Path $log)) { return "" }
+        return (Get-Content $log) -join "`n"
+    }
+    function Set-Screen([string]$repo, [string]$xml, [string]$focus = "com.example.app") {
+        $path = Join-Path $repo "screen.xml"
+        Set-Content -Path $path -Value $xml -Encoding UTF8
+        $env:FAKE_ADB_UIXML = $path
+        $env:FAKE_ADB_FOCUS = $focus
+    }
+    function Clear-FakeAdb([string]$repo) {
+        foreach ($v in @("FAKE_ADB_LOG", "FAKE_ADB_DEVICES", "FAKE_ADB_INSTALLED", "FAKE_ADB_DEBUGGABLE", "FAKE_ADB_FOCUS", "FAKE_ADB_UIXML", "FAKE_ADB_NOTIF", "FAKE_ADB_MEDIA")) {
+            Remove-Item "Env:\$v" -ErrorAction SilentlyContinue
+        }
+        Remove-TestRepo -TestRepo $repo
+    }
+
+    It "clears the data of the debug package this repository built, and of nothing else" {
+        $repo = New-AppRepo
+        try {
+            (Invoke-Device $repo @("-Op", "clear")).Code | Should Be 0
+            (Get-AdbCalls $repo) | Should Match '(?m)^-s FAKE123 shell pm clear com\.example\.app$'
+
+            (Invoke-Device $repo @("-Op", "clear", "-Package", "com.android.settings")).Code | Should Be 3
+            (Invoke-Device $repo @("-Op", "grant", "-Package", "com.whatsapp", "-Permission", "android.permission.CAMERA")).Code | Should Be 3
+            (Get-AdbCalls $repo) | Should Not Match 'settings|whatsapp'
+        } finally { Clear-FakeAdb $repo }
+    }
+
+    It "refuses a package the device does not report as an installed debug build" {
+        $repo = New-AppRepo
+        try {
+            $env:FAKE_ADB_DEBUGGABLE = "0"
+            (Invoke-Device $repo @("-Op", "clear")).Code | Should Be 3
+            $env:FAKE_ADB_DEBUGGABLE = "1"; $env:FAKE_ADB_INSTALLED = "0"
+            (Invoke-Device $repo @("-Op", "uninstall")).Code | Should Be 3
+            (Get-AdbCalls $repo) | Should Not Match 'pm clear|uninstall'
+        } finally { Clear-FakeAdb $repo }
+    }
+
+    It "refuses everything until a debug APK exists, and never takes the test APK for the app" {
+        $repo = New-AppRepo -Unbuilt
+        try {
+            (Invoke-Device $repo @("-Op", "clear")).Code | Should Be 3
+            (Invoke-Device $repo @("-Op", "clear", "-Package", "com.example.app.test")).Code | Should Be 3
+            (Get-AdbCalls $repo) | Should Not Match 'pm clear'
+        } finally { Clear-FakeAdb $repo }
+    }
+
+    It "has no operation that changes a device setting, the clock or the shade" {
+        $repo = New-AppRepo
+        try {
+            foreach ($op in @("settings", "date", "shell", "statusbar")) {
+                (Invoke-Device $repo @("-Op", $op)).Code | Should Not Be 0
+            }
+            (Get-AdbCalls $repo) | Should Not Match 'settings put|date|statusbar'
+        } finally { Clear-FakeAdb $repo }
+    }
+
+    It "taps a control of the app, found by id, at the centre of its bounds" {
+        $repo = New-AppRepo
+        try {
+            Set-Screen $repo $OwnScreen
+            (Invoke-Device $repo @("-Op", "tap", "-ResourceId", "com.example.app:id/play")).Code | Should Be 0
+            (Get-AdbCalls $repo) | Should Match '(?m)^-s FAKE123 shell input tap 540 1200$'
+        } finally { Clear-FakeAdb $repo }
+    }
+
+    It "refuses to tap the navigation bar, or anything another package owns, and takes no coordinates" {
+        $repo = New-AppRepo
+        try {
+            Set-Screen $repo $OwnScreen
+            (Invoke-Device $repo @("-Op", "tap", "-ContentDesc", "Home")).Code | Should Be 3
+            (Invoke-Device $repo @("-Op", "tap")).Code | Should Be 3
+            (Get-AdbCalls $repo) | Should Not Match 'input tap'
+        } finally { Clear-FakeAdb $repo }
+    }
+
+    It "taps the system permission dialog the app raised" {
+        $repo = New-AppRepo
+        try {
+            Set-Screen $repo $DialogScreen "com.android.permissioncontroller"
+            (Invoke-Device $repo @("-Op", "tap", "-ResourceId", "com.android.permissioncontroller:id/permission_allow_button")).Code | Should Be 0
+            (Get-AdbCalls $repo) | Should Match 'shell input tap 540 1550'
+        } finally { Clear-FakeAdb $repo }
+    }
+
+    It "reads nothing while another app holds the screen, and drops a dump that caught one" {
+        $repo = New-AppRepo
+        try {
+            Set-Screen $repo $ForeignScreen "com.whatsapp"
+            (Invoke-Device $repo @("-Op", "dump")).Code | Should Be 3
+            (Invoke-Device $repo @("-Op", "key", "-Key", "BACK")).Code | Should Be 3
+            (Get-AdbCalls $repo) | Should Not Match 'uiautomator|keyevent'
+
+            # Focus says the app; the screen changed before the dump was read.
+            Set-Screen $repo $ForeignScreen "com.example.app"
+            $r = Invoke-Device $repo @("-Op", "dump")
+            $r.Code | Should Be 3
+            $r.Out | Should Not Match 'Secret message'
+        } finally { Clear-FakeAdb $repo }
+    }
+
+    It "keeps only the app's own notifications and media sessions" {
+        $repo = New-AppRepo
+        try {
+            $notif = Join-Path $repo "notif.txt"
+            Set-Content -Path $notif -Value @(
+                "  Notification List:",
+                "    NotificationRecord(0x0a1 : pkg=com.example.app user=UserHandle{0} id=1 tag=null importance=2 key=0|com.example.app|1|null|10123: Notification(channel=playback))",
+                "      uid=10123 userId=0",
+                "      android.title=String (Song One)",
+                "    NotificationRecord(0x0b2 : pkg=com.whatsapp user=UserHandle{0} id=7 tag=null importance=4 key=0|com.whatsapp|7|null|10200: Notification(channel=msg))",
+                "      uid=10200 userId=0",
+                "      android.title=String (Secret message from Bob)")
+            $media = Join-Path $repo "media.txt"
+            Set-Content -Path $media -Value @(
+                "  Sessions Stack - have 2 sessions:",
+                "    MusicService com.example.app/MusicService (userId=0)",
+                "      ownerPid=123, ownerUid=10123, userId=0",
+                "      package=com.example.app",
+                "      state=PlaybackState {state=PLAYING(3), position=0}",
+                "    Spotify com.spotify.music/spotify (userId=0)",
+                "      ownerPid=456, ownerUid=10300, userId=0",
+                "      package=com.spotify.music",
+                "      state=PlaybackState {state=PAUSED(2)}")
+            $env:FAKE_ADB_NOTIF = $notif; $env:FAKE_ADB_MEDIA = $media
+
+            $n = Invoke-Device $repo @("-Op", "notifications")
+            $n.Out | Should Match 'Song One'
+            $n.Out | Should Not Match 'Secret message'
+            $m = Invoke-Device $repo @("-Op", "media-session")
+            $m.Out | Should Match 'PLAYING\(3\)'
+            $m.Out | Should Not Match 'spotify'
+        } finally { Clear-FakeAdb $repo }
+    }
+
+    It "refuses shell syntax in a permission name or in typed text" {
+        $repo = New-AppRepo
+        try {
+            Set-Screen $repo $OwnScreen
+            (Invoke-Device $repo @("-Op", "grant", "-Permission", "android.permission.CAMERA;pm clear com.whatsapp")).Code | Should Be 3
+            (Invoke-Device $repo @("-Op", "text", "-Value", "hi;settings put global adb_enabled 0")).Code | Should Be 3
+            (Get-AdbCalls $repo) | Should Not Match 'pm grant|input text'
+        } finally { Clear-FakeAdb $repo }
+    }
+
+    It "installs only an APK this repository built for the app" {
+        $repo = New-AppRepo
+        try {
+            $stray = Join-Path $repo "other.apk"
+            Set-Content -Path $stray -Value "apk"
+            (Invoke-Device $repo @("-Op", "install", "-Apk", $stray)).Code | Should Be 3
+            (Get-AdbCalls $repo) | Should Not Match '(?m)^-s \S+ install'
+
+            (Invoke-Device $repo @("-Op", "install")).Code | Should Be 0
+            (Get-AdbCalls $repo) | Should Match 'install -r -t .*app-debug\.apk'
+        } finally { Clear-FakeAdb $repo }
+    }
+
+    It "run.ps1 denies adb itself in both Run Modes and grants the wrapper" {
+        foreach ($mode in @("Collaborative", "Autonomous")) {
+            $repo = New-TestRepo
+            try {
+                $argLog = Join-Path $repo "args.txt"
+                $env:FAKE_CLAUDE_ARGLOG = $argLog
+                New-Item -ItemType Directory -Path (Join-Path $repo ".harness/loop/capabilities") -Force | Out-Null
+                Copy-Item (Join-Path $RepoRootDir ".harness/loop/capabilities/baseline.json") (Join-Path $repo ".harness/loop/capabilities/baseline.json")
+                Set-FakeClaudeQueue -TestRepo $repo -Directives @("DONE|ok")
+                Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "2", "-Mode", $mode) | Out-Null
+
+                $settingsPath = ((Get-Content $argLog -Raw) -split '--settings\s+')[1].Split(' ')[0].Trim()
+                $settings = Get-Content $settingsPath -Raw | ConvertFrom-Json
+                foreach ($rule in @("Bash(adb *)", "Bash(*/adb *)", "Bash(*adb.exe *)", "Bash(*platform-tools*)", "Bash(bash -c*adb*)", "Bash(powershell*adb *)", "mcp__android-agent")) {
+                    ($settings.permissions.deny -contains $rule) | Should Be $true
+                }
+                if ($mode -eq "Collaborative") {
+                    ($settings.permissions.allow -contains "Bash(powershell -NoProfile -File .harness/loop/bin/foreman-device.ps1 *)") | Should Be $true
+                }
+            } finally {
+                Remove-Item Env:\FAKE_CLAUDE_ARGLOG -ErrorAction SilentlyContinue
+                Remove-TestRepo -TestRepo $repo
+            }
+        }
+    }
+}

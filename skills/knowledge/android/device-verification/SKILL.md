@@ -39,7 +39,7 @@ no Robolectric, there is no command here that can prove it" while `adb` was inst
 attached, and the project already had a wired `androidTest/` source set. Three runs inherited it.
 
 ```bash
-adb devices                                    # is anything attached?
+powershell -NoProfile -File .harness/loop/bin/foreman-device.ps1 -Op devices   # is anything attached?
 ls app/src/androidTest 2>/dev/null              # is the instrumentation source set there?
 grep -n 'testInstrumentationRunner\|androidTestImplementation\|managedDevices' app/build.gradle.kts
 ```
@@ -76,18 +76,47 @@ Three reasons this beats a physical device, all of them learned the hard way:
 - **It accepts input.** A real phone may refuse injected events outright — a MIUI device answered
   every `adb shell input` with `SecurityException: INJECT_EVENTS`, so no tap could be performed at
   all, and half the checklist was undriveable.
-- **Its data is nobody's.** `pm clear` on an emulator costs nothing. On the human's phone it deletes
-  their notes.
+- **Its data is nobody's.** The wrapper already confines `pm clear` to the debug build this repository
+  produced, but a device is not always yours alone: on 2026-09-30 the shared `astronex_test` emulator
+  was being driven by another project's harness at the same time, and every read and tap of this one
+  was refused because that app held the screen. A managed device is created for the run and shares
+  with nobody.
 
 ## What to check, and how
 
+`adb` itself is denied to the engine in both Run Modes (ADR-033). Every device action goes through the
+wrapper, `powershell -NoProfile -File .harness/loop/bin/foreman-device.ps1 -Op <operation>`, which acts only on the debug
+build this repository produced: it reads that package from the build's own output metadata and checks
+that the device reports it installed and `DEBUGGABLE` before touching anything. There is no `-Package`
+that reaches another app, and no operation at all for a device setting, the clock or the notification
+shade. It echoes every adb command it runs to stderr as `+ adb …`, which is the evidence line to record.
+
 | Criterion shape | How to drive it | What it still cannot tell you |
 |---|---|---|
-| A notification appears, with this text, on this channel | `adb shell dumpsys notification` → read `android.title`, `android.text`, `channel=`, `importance=` | whether the icon renders as a flat glyph or a white blob, whether the text is clipped |
-| Something happens once per day / survives a restart | an injected `Clock` in a JVM test for the decision; `am force-stop` then relaunch for the persistence | nothing — this one is fully machine-checkable |
-| The installed package holds exactly these permissions | `adb shell dumpsys package <pkg>` → `requested permissions:` | nothing |
-| The app installs, opens, and does not crash | `adb install -r`, `am start -n`, then `logcat -b crash` | whether the screen it opened is the right one to look at |
-| A control is on screen and reachable | UI Automator / Compose test assertions | **whether it can be seen** — contrast, overlap, colour |
+| A notification appears, with this text, on this channel | `-Op notifications` — `dumpsys notification`, filtered to this app's own records: read `android.title`, `android.text`, `channel=`, `importance=` | whether the icon renders as a flat glyph or a white blob, whether the text is clipped |
+| Something happens once per day / survives a restart | an injected `Clock` in a JVM test for the decision; `-Op stop` then `-Op start` for the persistence | nothing — this one is fully machine-checkable |
+| The installed package holds exactly these permissions | `-Op package-info` → `requested permissions:` | nothing |
+| The app installs, opens, and does not crash | `-Op install`, `-Op start`, then `-Op logcat` (crash buffer lines naming the app, and its own log) | whether the screen it opened is the right one to look at |
+| A fresh-install or not-yet-granted path | `-Op clear`, `-Op revoke -Permission …`; then `-Op tap -ResourceId …:id/permission_allow_button` on the system dialog the app raised | whether the app's own explanation before the dialog makes sense |
+| A control is on screen and reachable | `-Op dump`, then `-Op tap -ResourceId …` / `-Text …` / `-ContentDesc …`, or UI Automator / Compose test assertions | **whether it can be seen** — contrast, overlap, colour — and whether it sits clear of the system gesture zone |
+| Playback or another state reached | `-Op media-session` (this app's sessions only) | whether it sounds right |
+
+The wrapper reads and taps only while this app — or the permission dialog it raised — holds the screen.
+A tap names its target; raw coordinates are refused, because they cannot be checked against the app
+that owns them, and that refusal is also what keeps a tap off the navigation bar. Exit code 3 is a
+refusal by the human's rule: do not look for another way to do the same thing.
+
+What this rules out, and how to live with it:
+
+- **Changing animation scales** (`settings put global animator_duration_scale 0`) — a device setting. A
+  screen that never goes idle cannot be dumped; pause the animation in the app's debug build, or report
+  the criterion not driven.
+- **Opening or tapping the notification shade** — it shows every app's notifications. Prove the
+  notification with `-Op notifications`; tapping it stays with a person.
+- **Reading another app's content provider** (`content query` on the media store) or **pushing files
+  into shared storage** — both reach outside the app. Test data belongs in the app's debug build or its
+  instrumented tests.
+- **Moving the clock** — inject a `Clock` instead.
 
 That last row is the line. A view-tree assertion says the delete button is present; it said so on the
 run where the button shipped rendered invisible against its own background. Screenshot tests catch a
@@ -105,14 +134,13 @@ called the criterion proved. Name the starting state or it will happen again.
 
 ## Capabilities
 
-`capabilities.snippet.json` in this directory, in three tiers by blast radius. The mechanism worth
-understanding: an emulator's adb serial always begins `emulator-` and a physical device's never
-does, so `Bash(adb -s emulator-* shell pm clear *)` is a rule the permission matcher can actually
-enforce — destructive on a throwaway image, denied on somebody's phone, one pattern.
+The wrapper needs no grant: `baseline.json` allows it in every repository, and `run.ps1` denies `adb`
+in every form the permission matcher was measured to catch (ADR-033). What this pack's
+`capabilities.snippet.json` still carries is the instrumented-test route — Gradle managed devices and
+`connectedDebugAndroidTest` — for a repository's standing ledger.
 
-Tier 3 is withheld deliberately. Read why before you decide you need it.
-
-A narrow, named-serial exception to that withholding — registered by a human before the run begins,
-never detected or self-granted by the engine — is designed in
+The earlier design scoped destructive commands by serial: allowed on `emulator-*`, withheld on a
+physical device, with a named-serial exception in
 [ADR-031](../../../../docs/adr/ADR-031-a-real-device-is-driven-only-by-a-serial-a-human-named-in-advance.md).
-Not yet implemented in `capabilities.snippet.json`.
+ADR-033 replaces that with a scope by package, which holds on any device: the app under development is
+the one thing Foreman may clear, and it may do so wherever that app is installed.

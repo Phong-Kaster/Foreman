@@ -212,6 +212,8 @@ The trust chain:
 
 **Autonomous mode inverts the model** ([ADR-027](./adr/ADR-027-a-run-chooses-collaborative-or-autonomous-mode-at-launch.md)): every tool is allowed, minus a **Deny List** shipped in `baseline.json` and extended per repository, with the immutable deny rules still on top. Destructive actions it may take go through **Recovery Wrappers** in `.harness/loop/bin/` that capture what is lost and record how to restore it in `.harness/run/RECOVERY.md`. The Trust Chain still holds — the human chose the mode and the list — but what the human approves becomes a list of what is refused rather than of what is allowed.
 
+**A device is driven only on the debug build being written, in both modes** ([ADR-033](./adr/ADR-033-a-device-is-driven-only-on-the-debug-build-foreman-is-writing.md)). `adb` is among `run.ps1`'s immutable deny rules; the one route to a phone or emulator is `.harness/loop/bin/foreman-device.ps1`, granted in the baseline. It resolves the package from the build's own output metadata, requires the device to report it `DEBUGGABLE`, taps only nodes that package owns (never raw coordinates), reads the screen only while that app holds it, filters notifications, media sessions and logs to its own records, and has no operation for another app, a device setting, the clock or the notification shade.
+
 **Documented limitation (deliberate honesty):** this is a guardrail against accidents and drift — the actual V1 threat — not a security boundary against an adversarial engine. Pattern-matching on shell commands is inherently porous. Hard containment is the VM/sandbox path, available via the runtime's explicit `-DangerouslySkipPermissions` flag for isolated environments.
 
 ---

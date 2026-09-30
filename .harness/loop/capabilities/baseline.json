@@ -51,6 +51,16 @@
         "Bash(CTX7_TELEMETRY_DISABLED=1 npx -y ctx7 library *)",
         "Bash(CTX7_TELEMETRY_DISABLED=1 npx -y ctx7 docs *)"
       ]
+    },
+    {
+      "intent": "Drive the app this repository is building on an attached device or emulator - install it, clear its data, grant or revoke its permissions, start it, read its screen, tap its controls, read its own notifications and logs - so criteria that need a running app are driven before a person looks (ADR-030, ADR-033). adb itself is denied in both Run Modes; this wrapper is the only route, and it refuses any other package and has no operation that changes a device setting.",
+      "command": "powershell -NoProfile -File .harness/loop/bin/foreman-device.ps1 -Op <operation> [...]",
+      "scope": "the debug build of this repository, identified by the build's own output metadata and confirmed DEBUGGABLE on the device; never another app, the device's settings, its clock or its notification shade",
+      "lifetime": "permanent",
+      "allow": [
+        "Bash(powershell -NoProfile -File .harness/loop/bin/foreman-device.ps1 *)",
+        "Bash(powershell -NoProfile -ExecutionPolicy Bypass -File .harness/loop/bin/foreman-device.ps1 *)"
+      ]
     }
   ],
   "autonomous": {
