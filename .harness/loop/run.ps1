@@ -241,7 +241,29 @@ function Compile-PermissionSettings {
         "Bash(git push --force*)",
         "Bash(git push -f*)",
         "Bash(git merge*)",
-        "Bash(git rebase*)"
+        "Bash(git rebase*)",
+        # A device is driven only through .harness/loop/bin/foreman-device.ps1, which acts on nothing
+        # but the debug build this repository produced - never another app, never a device setting
+        # (ADR-033). These are adb in every form the matcher was measured to catch: plain and .exe, by
+        # full path, behind an env prefix or `cd &&`, and inside bash -c, cmd or powershell. They are
+        # anchored so that a commit message which merely mentions adb still commits.
+        "Bash(adb *)",
+        "Bash(adb)",
+        "Bash(adb.exe*)",
+        "Bash(*/adb *)",
+        "Bash(*/adb)",
+        "Bash(*adb.exe *)",
+        "Bash(*platform-tools*)",
+        "Bash(bash -c*adb*)",
+        "Bash(sh -c*adb*)",
+        "Bash(cmd *adb*)",
+        "Bash(powershell*adb *)",
+        "Bash(pwsh*adb *)",
+        "Bash(*xargs*adb*)",
+        # The two device-automation MCP servers ADR-031 reviewed and rejected, denied outright so no
+        # ledger can grant them back.
+        "mcp__android-agent",
+        "mcp__mobile-mcp"
     )
 
     # Autonomous mode inverts the model (ADR-027): every tool allowed, minus the Deny List shipped in

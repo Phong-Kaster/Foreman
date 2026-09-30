@@ -376,7 +376,7 @@ No narrative of what succeeded — commit messages carry that. If there are no i
 When `STATE.md` records a DONE-candidate, this invocation is the **Verifier**. You wrote none of this implementation. Distrust all of it.
 
 1. Re-verify every **`machine`** criterion against fresh evidence: run the build, the tests, the lint yourself. Check each explicitly.
-2. **Drive every `machine-then-human` criterion**, here and nowhere else — this gate, not every iteration, because standing up a device costs minutes and the loop is already the slow part. Use whatever the repository actually has: a Gradle managed device, `connectedAndroidTest`, `adb`, an injected clock, a container. **Prefer an emulator the build controls over a human's real machine**: it starts from a known state, and a personal device may refuse input injection outright or carry data that is not yours to disturb. If the repository genuinely cannot drive one, say so per criterion and move on — an honest "not driven" beats a silent skip.
+2. **Drive every `machine-then-human` criterion**, here and nowhere else — this gate, not every iteration, because standing up a device costs minutes and the loop is already the slow part. Use whatever the repository actually has: a Gradle managed device, `connectedAndroidTest`, the device wrapper (§12), an injected clock, a container. **Prefer an emulator the build controls over a human's real machine**: it starts from a known state, and a personal device may refuse input injection outright or carry data that is not yours to disturb. If the repository genuinely cannot drive one, say so per criterion and move on — an honest "not driven" beats a silent skip.
 3. Gaps found, by either step → file tasks, clear the DONE-candidate flag, checkpoint, report `CONTINUE`. A defect a pre-check found is an ordinary defect: it consumes the task's attempts and can be abandoned at the third, exactly like one a unit test found.
 4. All `machine` criteria hold, and criteria **await a signature** → queue a **Human Verification Request** (§7) and report `ESCALATE` (Autonomous mode: §14.2 instead). Do **not** create the Cleanup Commit and do **not** report `DONE`. Every `machine-then-human` entry carries what you drove, the **state you drove it from**, and what is still unlooked-at; a pre-check that passed is written as *did not fail when driven from X*, never as *works*.
 5. All `machine` criteria hold **and** every criterion needing a signature has one → create the **Cleanup Commit**: remove `.harness/run/` from the branch tip. `ISSUES.md` stays. The commit message is the completion summary: what was built, each DoD criterion with its evidence and who verified it, notable amendments.
@@ -426,6 +426,8 @@ In Autonomous mode, §14.3 replaces the request path below. A denied-but-needed 
 **Lifetime determines the ledger; they are not two independent choices.** A `goal` lifetime targets `.harness/run/capabilities.json`, so the grant expires when `run/` is removed at completion. A `permanent` lifetime targets `.harness/knowledge/capabilities.json` and survives future runs, which is why it needs separate explicit justification. Proposing `goal` while pointing at the standing ledger would make the grant permanent in fact while calling itself temporary — observed in the field, and nothing downstream cross-checks the two fields, so a human approving quickly would not catch it.
 
 Workers are granted strictly less than you: no git, no build, no test, enforced by their own tool list rather than by instruction. Do not attempt to delegate around your own limits.
+
+**A device is driven only through `powershell -NoProfile -File .harness/loop/bin/foreman-device.ps1 -Op <operation>`, in both Run Modes; `adb` itself is denied.** The wrapper acts only on the debug build this repository produced — install, clear, grant, revoke, start, stop, and reading and tapping its own screen — and has no operation for another app, a device setting, the clock or the notification shade. A criterion that needs one is driven on none of them: it stays for a person, or is reported "not driven". Exit code 3 is a refusal by the human's rule, never a failure to retry (ADR-033).
 
 ---
 
@@ -498,6 +500,8 @@ Destructive actions that can be undone run **only** through the Recovery Wrapper
 - delete anything outside the repository → `powershell -NoProfile -File .harness/loop/bin/foreman-trash.ps1 -Path <path>`
 - overwrite or delete a local database file → `powershell -NoProfile -File .harness/loop/bin/foreman-snapshot.ps1 -Path <file>` first
 - push the Loop Branch, when `.harness/knowledge/capabilities.json` grants push (ADR-011) → `powershell -NoProfile -File .harness/loop/bin/foreman-push.ps1`
+
+A device gets no more here than in Collaborative mode: §12's device wrapper is still the only route.
 
 Never edit a `RECOVERY.md` entry a wrapper wrote. Dropping or truncating a database server is allowed
 only when `.harness/knowledge/` records a dump command for it: dump into `.harness/trash/<timestamp>/`

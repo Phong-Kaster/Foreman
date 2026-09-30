@@ -1,5 +1,7 @@
 # A real device is driven only by a serial a human named in advance; a second agent's self-report is never evidence
 
+> **Part 1 superseded on 2026-09-30 by [ADR-033](./ADR-033-a-device-is-driven-only-on-the-debug-build-foreman-is-writing.md).** Device access is now scoped by package, not by serial: the engine drives only the debug build it is writing, on any device, through `foreman-device.ps1`, and `adb` itself is denied. Part 2 — no agentic driver produces evidence — stands.
+
 > **Renumbered from ADR-027 on 2026-09-25**, because `loop/autonomous-mode` already used ADR-027 for the Run Mode decision. Commits on `loop/fix-guide-language-toggle` made before that date still cite it as ADR-027.
 
 `skills/knowledge/android/device-verification`'s Tier 3 withholds every unrestricted-serial
