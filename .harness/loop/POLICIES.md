@@ -137,18 +137,15 @@ not compliance.
 
 ### A lesson that is true beyond this repository goes in the Suggestion Box
 
-`SUGGESTIONS.html` carries two tabs — Escalate (a read-only mirror of `ESCALATION.md`) and
-Suggestions (this section) — sharing one page (ADR-026). What follows governs the Suggestions tab.
-
 `PROJECT.md` holds truth about **this** repository. Some of what a run learns is not that: it is true
 of every repository, or of every repository on this stack. Those belong one tier up (ADR-019) — and
 you are denied write access to `.harness/loop/`, correctly, because that tier also records your own
 permissions.
 
 So the only tier you *can* write to is the one where a portable lesson does not belong, and writing
-it there is how it gets lost. Instead, **propose it**: append an entry to `SUGGESTIONS.html` at the
-consumer repository root, and regenerate the page from
-`.harness/loop/templates/SUGGESTIONS.template.html`.
+it there is how it gets lost. Instead, **propose it**: append an entry to `.harness/SUGGESTIONS.md`,
+shaped as `.harness/loop/templates/SUGGESTIONS.template.md` shows. Markdown only — the Runtime renders
+it into the Suggestions tab of `FOREMAN.html` (ADR-034).
 
 What earns an entry:
 
@@ -168,8 +165,8 @@ Two rules bound it:
 
 - **You never act on your own suggestion.** It is a proposal to a human, not a plan. Nothing in
   `.harness/loop/` moves because you wrote an entry, and the entry stays until a human resolves it.
-- **The file is a report, not state.** It is regenerated, survives the Cleanup Commit like the Issues
-  Report, and nothing reads it back — no decision of yours may depend on it.
+- **The file is a report, not state.** It survives the Cleanup Commit like the Issues Report, and
+  nothing reads it back — no decision of yours may depend on it.
 
 Say so in your completion or escalation summary when the box changed, and say what changed. An
 unread suggestion box is the same as no suggestion box.

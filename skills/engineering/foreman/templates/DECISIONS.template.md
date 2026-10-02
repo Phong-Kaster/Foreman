@@ -32,9 +32,9 @@ line under any you are failing saying what you saw instead. Shape:
 - [x] 16 - second open the same day -> no second greeting
 - [ ] 18 - next calendar day -> the greeting comes back
 
-The ticks live HERE and only here. `SUGGESTIONS.html` shows the same list with checkboxes so you can
-follow along with a phone in your hand, but that page is regenerated in full every time the engine
-queues a decision - anything ticked there is gone the next time it is written. This file is the one
+The ticks live HERE and only here. `FOREMAN.html` shows the same list so you can follow along
+with a phone in your hand, but that page is rebuilt from the engine's files after every iteration
+and nothing on it is ever read back. This file is the one
 the Runtime denies the engine write access to, mechanically, which is the whole reason a tick in it
 cannot be lost.
 

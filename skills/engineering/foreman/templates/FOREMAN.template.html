@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en" data-ui-lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Foreman</title>
+<!--
+  FOREMAN PAGE - the one page a person reads, rendered by run.ps1 (Write-ForemanPage), never by the
+  engine (ADR-034). The Runtime substitutes every double-braced placeholder mechanically, from the
+  engine's Markdown files: the Decision Queue, the Issues Report, every Definition of Done in git, the
+  Autonomous ledgers and the Suggestion Box. The engine's own words are English; only this page's
+  chrome is bilingual, translated in the browser from the dictionary at the bottom.
+-->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+  :root{
+    --paper:#E7E8E4; --surface:#F4F5F2; --surface-2:#DDDFDA;
+    --ink:#191D1E; --ink-2:#3D4547; --muted:#667072;
+    --rule:#C6CAC4; --rule-soft:#D6D9D3;
+    --accent:#0F5C63; --accent-ink:#0B4750;
+    --ok:#2E6B3A; --partial:#9C6206; --bad:#9A2B22; --person:#5B4A8A;
+    --f-display:"Archivo","Helvetica Neue",Arial,sans-serif;
+    --f-body:"Source Serif 4",Georgia,"Times New Roman",serif;
+    --f-mono:"JetBrains Mono",ui-monospace,"SF Mono",Consolas,monospace;
+  }
+  @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+    --paper:#14181A; --surface:#1B2023; --surface-2:#232A2D;
+    --ink:#E8EBE9; --ink-2:#BAC3C2; --muted:#8A9694;
+    --rule:#2E373A; --rule-soft:#262E31;
+    --accent:#4FBDC7; --accent-ink:#7FD5DC;
+    --ok:#7CC98A; --partial:#DFA53F; --bad:#E0736A; --person:#B7A6E8;
+  }}
+  :root[data-theme="dark"]{
+    --paper:#14181A; --surface:#1B2023; --surface-2:#232A2D;
+    --ink:#E8EBE9; --ink-2:#BAC3C2; --muted:#8A9694;
+    --rule:#2E373A; --rule-soft:#262E31;
+    --accent:#4FBDC7; --accent-ink:#7FD5DC;
+    --ok:#7CC98A; --partial:#DFA53F; --bad:#E0736A; --person:#B7A6E8;
+  }
+  [data-lang="vi"]{display:none}
+  :root[data-ui-lang="vi"] [data-lang="vi"]{display:revert}
+  :root[data-ui-lang="vi"] [data-lang="en"]{display:none}
+
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--f-body);font-size:17px;line-height:1.7;-webkit-font-smoothing:antialiased}
+
+  /* The topbar is a direct child of body, so it stays stuck after the masthead scrolls away. */
+  .topbar{position:sticky;top:0;z-index:50;background:var(--paper);border-bottom:1px solid var(--rule)}
+  .topbar-inner{max-width:900px;margin:0 auto;padding:9px 28px 0;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+  .topbar .who{font-family:var(--f-mono);font-size:11px;letter-spacing:.11em;text-transform:uppercase;color:var(--muted)}
+  select{font-family:var(--f-mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;padding:4px 26px 4px 9px;color:var(--ink);background-color:var(--surface);border:1px solid var(--rule);border-radius:2px;-webkit-appearance:none;appearance:none;
+    background-image:linear-gradient(45deg,transparent 50%,currentColor 50%),linear-gradient(135deg,currentColor 50%,transparent 50%);
+    background-position:calc(100% - 14px) 52%,calc(100% - 9px) 52%;background-size:5px 5px,5px 5px;background-repeat:no-repeat;cursor:pointer}
+  select option{background:var(--surface);color:var(--ink)}
+  nav.tabs{max-width:900px;margin:0 auto;padding:0 28px;display:flex;gap:4px;overflow-x:auto}
+  nav.tabs button{font-family:var(--f-mono);font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);background:none;border:none;border-bottom:2px solid transparent;padding:12px 12px 10px;cursor:pointer;white-space:nowrap}
+  nav.tabs button:hover{color:var(--ink)}
+  nav.tabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent)}
+  nav.tabs .count{display:inline-block;min-width:18px;margin-left:6px;padding:0 5px;border-radius:9px;background:var(--surface-2);color:var(--ink-2);font-size:10.5px;text-align:center}
+  nav.tabs .count.hot{background:var(--partial);color:var(--paper)}
+
+  .wrap{max-width:900px;margin:0 auto;padding:0 28px 90px}
+  section.tab{display:none}
+  section.tab.active{display:block}
+  header.mast{border-bottom:2px solid var(--ink);padding:30px 0 20px;margin-bottom:8px}
+  .eyebrow{font-family:var(--f-mono);font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:var(--accent-ink);margin:0 0 12px}
+  h1{font-family:var(--f-display);font-weight:700;font-size:clamp(1.9rem,5vw,2.6rem);line-height:1.12;letter-spacing:-.02em;margin:0 0 12px}
+  h2{font-family:var(--f-display);font-weight:700;font-size:1.35rem;line-height:1.3;margin:40px 0 4px}
+  h2 .n{font-family:var(--f-mono);font-size:12px;color:var(--muted);font-weight:400;margin-left:8px}
+  .lede{font-size:1.02rem;color:var(--ink-2);margin:0;max-width:66ch}
+  .note{margin:0 0 16px;color:var(--muted);font-size:.95rem;max-width:66ch}
+  .outcome{display:inline-block;font-family:var(--f-mono);font-size:13px;letter-spacing:.08em;padding:4px 10px;border:1.5px solid currentColor;border-radius:2px;margin:0 0 12px}
+  .outcome.ok{color:var(--ok)} .outcome.partial{color:var(--partial)} .outcome.bad{color:var(--bad)} .outcome.running{color:var(--accent)}
+  .facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px 22px;margin:16px 0 0;font-size:.95rem}
+  .facts dt{font-family:var(--f-mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+  .facts dd{margin:0;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+  .warn{border:1px solid var(--partial);border-left:3px solid var(--partial);background:var(--surface);padding:14px 18px;margin:22px 0 0;font-size:.96rem}
+  .warn strong{color:var(--partial)}
+  .warn p{margin:0}
+  .warn.collaborative{display:none}
+  .howto{border:1px solid var(--accent);border-left:3px solid var(--accent);background:var(--surface);padding:12px 18px;margin:20px 0 6px;font-size:.96rem}
+  .howto p{margin:0}
+  .calm{color:var(--muted);font-size:1rem;padding:18px 0}
+
+  .card{margin-top:22px;border:1px solid var(--rule);background:var(--surface);border-radius:3px}
+  .card.pending{border-left:3px solid var(--partial)}
+  .card>.md{padding:6px 22px 16px}
+  .md{border-top:none}
+  .md h3{font-family:var(--f-display);font-weight:700;font-size:1.12rem;margin:22px 0 8px;padding-bottom:4px;border-bottom:1px solid var(--rule-soft)}
+  .md h4,.md h5,.md h6{font-family:var(--f-display);font-weight:600;font-size:1rem;color:var(--accent-ink);margin:18px 0 6px}
+  .md p{margin:0 0 12px}
+  .md ul,.md ol{margin:0 0 14px;padding-left:22px}
+  .md blockquote{margin:0 0 14px;padding:4px 0 4px 14px;border-left:2px solid var(--rule);color:var(--ink-2)}
+  .md hr{border:none;border-top:1px solid var(--rule-soft);margin:22px 0}
+  .md pre{font-family:var(--f-mono);font-size:12.5px;line-height:1.6;background:var(--paper);border:1px solid var(--rule-soft);padding:10px 14px;overflow-x:auto;margin:0 0 14px}
+  .plain>.md{border-top:1px solid var(--rule);padding-top:14px}
+
+  article.dod{margin-top:26px;border:1px solid var(--rule);background:var(--surface);border-radius:3px}
+  article.dod.current{border-color:var(--accent);border-width:1.5px}
+  article.dod>details>summary{list-style:none;cursor:pointer;padding:18px 22px;display:block}
+  article.dod>details>summary::-webkit-details-marker{display:none}
+  article.dod>details[open]>summary{border-bottom:1px solid var(--rule-soft)}
+  article.dod .md{padding:6px 22px 20px}
+  .meta{font-family:var(--f-mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);display:flex;gap:14px;flex-wrap:wrap;margin:0 0 6px}
+  .meta .branch{color:var(--accent-ink);overflow-wrap:anywhere}
+  .dod-title{font-family:var(--f-display);font-weight:700;font-size:1.35rem;line-height:1.3;margin:0 0 10px;display:block}
+  .badges{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 10px}
+  .badge{font-family:var(--f-mono);font-size:11px;letter-spacing:.07em;text-transform:uppercase;padding:2px 8px;border:1.5px solid currentColor;border-radius:2px}
+  .badge.current{color:var(--accent)} .badge.approved{color:var(--ok)} .badge.awaiting{color:var(--partial)}
+  .badge.closed{color:var(--muted)} .badge.open{color:var(--bad)}
+  .tally{display:flex;gap:18px;flex-wrap:wrap;font-family:var(--f-mono);font-size:12px;color:var(--ink-2);margin:0}
+  .tally b{font-size:15px;color:var(--ink);margin-right:5px;font-variant-numeric:tabular-nums}
+  .closing{font-size:.92rem;color:var(--muted);margin:8px 0 0}
+  .closing code{font-size:.8em}
+  ol.crits{list-style:none;padding:0;margin:0 0 14px}
+  li.crit{display:grid;grid-template-columns:44px 1fr;gap:10px;padding:9px 0;border-bottom:1px solid var(--rule-soft)}
+  li.crit:last-child{border-bottom:none}
+  li.crit .num{font-family:var(--f-mono);font-weight:600;font-size:13px;text-align:right;color:var(--accent-ink);padding-top:2px;font-variant-numeric:tabular-nums}
+  li.crit .txt{min-width:0;overflow-wrap:anywhere}
+  .cls{font-family:var(--f-mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;padding:1px 6px;border-radius:2px;border:1px solid currentColor;margin-right:6px;white-space:nowrap;vertical-align:1px}
+  .cls.machine{color:var(--accent)}
+  .cls.human,.cls.human-only{color:var(--person)}
+  .cls.machine-then-human{color:var(--partial)}
+  details.proof{margin-top:6px}
+  details.proof>summary{cursor:pointer;font-family:var(--f-mono);font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)}
+  details.proof>div{margin-top:6px;padding:8px 12px;border-left:2px solid var(--rule);background:var(--paper);font-size:.86rem;color:var(--ink-2)}
+
+  code{font-family:var(--f-mono);font-size:.85em;background:var(--surface-2);padding:.08em .34em;border-radius:2px;overflow-wrap:anywhere}
+  pre code{background:none;padding:0}
+  .scroll{overflow-x:auto;margin:0 0 14px}
+  table{width:100%;border-collapse:collapse;font-size:.92rem}
+  th,td{text-align:left;padding:8px 12px 8px 0;border-bottom:1px solid var(--rule-soft);vertical-align:top}
+  th{font-family:var(--f-mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--rule);font-weight:400}
+  .empty{color:var(--muted);font-size:.95rem}
+  .box{font-family:var(--f-mono);color:var(--partial)} .box.done{color:var(--ok)}
+  details.state>summary{cursor:pointer;font-family:var(--f-mono);font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-top:40px}
+  footer{margin-top:56px;padding-top:17px;border-top:2px solid var(--ink);font-family:var(--f-mono);font-size:11.5px;color:var(--muted);line-height:1.8}
+  @media (max-width:560px){.topbar-inner,.wrap,nav.tabs{padding-left:16px;padding-right:16px} article.dod>details>summary,article.dod .md,.card>.md{padding-left:14px;padding-right:14px} li.crit{grid-template-columns:34px 1fr}}
+</style>
+</head>
+<body data-default-tab="{{DEFAULT_TAB}}">
+
+<div class="topbar">
+  <div class="topbar-inner">
+    <span class="who">{{REPO}} · {{MODE}} · {{BRANCH}}</span>
+    <select id="lang" aria-label="Language / Ngôn ngữ">
+      <option value="en">English</option>
+      <option value="vi">Tiếng Việt</option>
+    </select>
+  </div>
+  <nav class="tabs" role="tablist">
+    <button role="tab" data-tab="needs"><span data-lang="en">Needs you</span><span data-lang="vi">Cần bạn</span><span class="count {{NEEDS_HOT}}">{{N_NEEDS}}</span></button>
+    <button role="tab" data-tab="dod"><span data-lang="en">Definition of Done</span><span data-lang="vi">Định nghĩa "xong"</span><span class="count">{{N_DODS}}</span></button>
+    <button role="tab" data-tab="run"><span data-lang="en">This run</span><span data-lang="vi">Lần chạy</span></button>
+    <button role="tab" data-tab="suggestions"><span data-lang="en">Suggestions</span><span data-lang="vi">Gợi ý</span><span class="count">{{N_SUGGESTIONS}}</span></button>
+  </nav>
+</div>
+
+<div class="wrap">
+
+<section class="tab" id="needs">
+  <header class="mast">
+    <p class="eyebrow"><span data-lang="en">Generated</span><span data-lang="vi">Tạo lúc</span> {{GENERATED}}</p>
+    <h1><span data-lang="en">What is waiting on you</span><span data-lang="vi">Những gì đang chờ bạn</span></h1>
+    <p class="lede" data-lang="en">Questions the engine could not answer within its authority, and the checks only a person can make.</p>
+    <p class="lede" data-lang="vi">Những câu hỏi engine không tự trả lời được trong phạm vi quyền của nó, và những bước kiểm tra chỉ người mới làm được.</p>
+  </header>
+  <div class="howto">
+    <p data-lang="en"><strong>Answer in chat through <code>/foreman</code></strong>, or write under the entry's id in <code>.harness/run/DECISIONS.md</code> and re-run. Never on this page: nothing here is read back.</p>
+    <p data-lang="vi"><strong>Trả lời trong chat qua <code>/foreman</code></strong>, hoặc ghi dưới id của mục đó trong <code>.harness/run/DECISIONS.md</code> rồi chạy lại. Đừng ghi trên trang này: không có gì ở đây được đọc lại.</p>
+  </div>
+  {{SECTION_NEEDS}}
+</section>
+
+<section class="tab" id="dod">
+  <header class="mast">
+    <p class="eyebrow">{{N_DODS}} DoD</p>
+    <h1><span data-lang="en">Definition of Done</span><span data-lang="vi">Định nghĩa "xong"</span></h1>
+    <p class="lede" data-lang="en">The checklist each run is graded against, newest first. The top one is this run's, read straight from <code>.harness/run/DoD.md</code> — edit that file, not this page, before you approve it. Criteria keep the numbers <code>DoD.md</code> gives them, grouped under its headings.</p>
+    <p class="lede" data-lang="vi">Checklist mà mỗi lần chạy được chấm theo, mới nhất ở trên. Mục trên cùng là của lần chạy hiện tại, đọc thẳng từ <code>.harness/run/DoD.md</code> — muốn sửa thì sửa file đó trước khi duyệt, không sửa trang này. Mỗi tiêu chí giữ nguyên số thứ tự trong <code>DoD.md</code>, chia theo các tiêu đề của nó.</p>
+  </header>
+  {{SECTION_DODS}}
+</section>
+
+<section class="tab" id="run">
+  <header class="mast">
+    <p class="eyebrow">{{MODE}} · {{BRANCH}}</p>
+    <h1><span data-lang="en">This run</span><span data-lang="vi">Lần chạy này</span></h1>
+    <p class="outcome {{OUTCOME_CLASS}}">{{OUTCOME}}</p>
+    <p class="lede">{{REASON}}</p>
+    <dl class="facts">
+      <div><dt><span data-lang="en">Iterations</span><span data-lang="vi">Số vòng</span></dt><dd>{{ITERATIONS}}</dd></div>
+      <div><dt><span data-lang="en">This session</span><span data-lang="vi">Phiên này</span></dt><dd>{{ELAPSED}}</dd></div>
+      <div><dt><span data-lang="en">Assumptions</span><span data-lang="vi">Giả định</span></dt><dd>{{N_ASSUMPTIONS}}</dd></div>
+      <div><dt><span data-lang="en">Recoverable actions</span><span data-lang="vi">Hành động khôi phục được</span></dt><dd>{{N_RECOVERY}}</dd></div>
+    </dl>
+    <div class="warn {{MODE_CLASS}}">
+      <p data-lang="en"><strong>Read this first.</strong> In Autonomous mode the engine decided alone and ran with every tool allowed except a Deny List. That list is prefix matching over command strings, not a security boundary: it stops an engine that slips while following the rules, not one that routes around them. Review the assumptions and recoverable actions below before you merge anything.</p>
+      <p data-lang="vi"><strong>Đọc phần này trước.</strong> Ở chế độ Tự động, engine tự quyết mọi thứ và chạy với mọi công cụ được phép, trừ một danh sách cấm. Danh sách đó chỉ so khớp tiền tố của chuỗi lệnh, không phải rào an ninh: nó chặn được engine lỡ tay khi đang làm đúng luật, không chặn được engine cố tình lách. Hãy xem các giả định và hành động khôi phục bên dưới trước khi merge bất cứ thứ gì.</p>
+    </div>
+  </header>
+
+  <h2><span data-lang="en">What is not finished</span><span data-lang="vi">Những gì chưa xong</span></h2>
+  <p class="note" data-lang="en">From <code>.harness/ISSUES.md</code>: abandoned tasks with their attempts, unfixed review findings, and what waits for a person.</p>
+  <p class="note" data-lang="vi">Lấy từ <code>.harness/ISSUES.md</code>: task bị bỏ kèm các lần thử, lỗi review chưa sửa, và những gì chờ người kiểm tra.</p>
+  <div class="plain"><div class="md">{{SECTION_ISSUES}}</div></div>
+
+  <h2><span data-lang="en">Decisions the engine made alone</span><span data-lang="vi">Những quyết định engine tự đưa ra</span><span class="n">{{N_ASSUMPTIONS}}</span></h2>
+  <p class="note" data-lang="en">Autonomous mode only. Each is a question a Collaborative run would have asked you. To overturn one, answer its id in <code>.harness/run/DECISIONS.md</code> and re-run, or run its revert command yourself.</p>
+  <p class="note" data-lang="vi">Chỉ có ở chế độ Tự động. Mỗi mục là một câu mà chế độ Hợp tác lẽ ra đã hỏi bạn. Muốn lật lại, trả lời id của nó trong <code>.harness/run/DECISIONS.md</code> rồi chạy lại, hoặc tự chạy lệnh revert của nó.</p>
+  <div class="plain"><div class="md">{{SECTION_ASSUMPTIONS}}</div></div>
+
+  <h2><span data-lang="en">Actions git cannot undo, and how to undo them</span><span data-lang="vi">Hành động git không tự hoàn tác được, và cách hoàn tác</span><span class="n">{{N_RECOVERY}}</span></h2>
+  <p class="note" data-lang="en">Deletions, snapshots and pushes made through the Recovery Wrappers. Captured copies are in <code>.harness/trash/</code>.</p>
+  <p class="note" data-lang="vi">Các lần xoá, chụp lại và push đi qua wrapper khôi phục. Bản sao đã chụp nằm trong <code>.harness/trash/</code>.</p>
+  <div class="plain"><div class="md">{{SECTION_RECOVERY}}</div></div>
+
+  <details class="state">
+    <summary><span data-lang="en">Engine state (STATE.md)</span><span data-lang="vi">Trạng thái engine (STATE.md)</span></summary>
+    <div class="plain"><div class="md">{{SECTION_STATE}}</div></div>
+  </details>
+</section>
+
+<section class="tab" id="suggestions">
+  <header class="mast">
+    <p class="eyebrow">{{N_SUGGESTIONS}}</p>
+    <h1><span data-lang="en">Suggestion Box</span><span data-lang="vi">Hộp gợi ý</span></h1>
+    <p class="lede" data-lang="en">Lessons these runs learned that are true beyond this repository, so they belong in Foreman itself or in a stack pack, where the engine cannot write. Proposals only: the engine never acts on one, and nothing changes until you do. From <code>.harness/SUGGESTIONS.md</code>.</p>
+    <p class="lede" data-lang="vi">Những bài học các lần chạy rút ra mà đúng cả ngoài repo này, nên thuộc về chính Foreman hoặc một gói kiến thức theo nền tảng, nơi engine không được ghi. Chỉ là đề xuất: engine không bao giờ tự làm theo, và không có gì thay đổi cho tới khi bạn quyết. Lấy từ <code>.harness/SUGGESTIONS.md</code>.</p>
+  </header>
+  {{LEGACY_SUGGESTIONS}}
+  <div class="plain"><div class="md">{{SECTION_SUGGESTIONS}}</div></div>
+</section>
+
+<footer>
+  <span data-lang="en">Rendered by run.ps1 from the engine's Markdown files after every iteration (ADR-034). Nothing on this page is read back, and nothing on it applies itself; merging is always yours.</span>
+  <span data-lang="vi">run.ps1 dựng trang này từ các file Markdown của engine sau mỗi vòng (ADR-034). Không có gì trên trang được đọc lại, và không có gì tự áp dụng; merge luôn là việc của bạn.</span>
+</footer>
+
+</div>
+
+<script>
+  (function(){
+    // Headings and labels the runtime writes in English, with their Vietnamese. Anything the
+    // dictionary does not know stays in English, as the engine wrote it.
+    var VI = {
+      "Status":"Trạng thái",
+      "Acceptance Criteria":"Tiêu chí chấp nhận",
+      "Behaviour":"Hành vi",
+      "Permissions the user is asked for":"Quyền xin người dùng",
+      "Background work and notifications":"Chạy nền và thông báo",
+      "Appearance and reachability":"Giao diện và khả năng chạm tới",
+      "Data and storage":"Dữ liệu và lưu trữ",
+      "Build, start and quality":"Build, khởi động và chất lượng",
+      "Removals":"Những thứ cần gỡ bỏ",
+      "Constraints":"Ràng buộc",
+      "Verification Evidence Required":"Bằng chứng cần có",
+      "Current run":"Lần chạy hiện tại",
+      "Approved":"Đã duyệt",
+      "Awaiting your approval":"Đang chờ bạn duyệt",
+      "Closed":"Đã đóng",
+      "Left open":"Còn dang dở",
+      "criteria":"tiêu chí",
+      "removals":"mục gỡ bỏ",
+      "proved by a command":"máy chứng minh",
+      "need a person":"cần người kiểm",
+      "Closed by":"Đóng bởi",
+      "How the engine checks it":"Engine kiểm tra thế nào",
+      "Decisions waiting for an answer":"Quyết định đang chờ trả lời",
+      "Checks waiting for a person":"Bước kiểm tra đang chờ người",
+      "Nothing is waiting on you.":"Không có gì đang chờ bạn.",
+      "RUNNING":"ĐANG CHẠY",
+      "Earlier suggestions, written before this page existed:":"Các gợi ý cũ, viết trước khi có trang này:"
+    };
+    var labels = Array.prototype.slice.call(document.querySelectorAll('.t'));
+    labels.forEach(function(el){ el.setAttribute('data-orig', el.innerHTML); });
+    var root=document.documentElement, sel=document.getElementById('lang'), KEY='foreman-page-lang', lang='en';
+    try{ var saved=localStorage.getItem(KEY); if(saved==='vi'||saved==='en') lang=saved; }catch(e){}
+    function applyLang(v){
+      root.setAttribute('data-ui-lang',v); root.setAttribute('lang',v); sel.value=v;
+      labels.forEach(function(el){
+        var en = el.getAttribute('data-en');
+        if (v==='vi' && VI[en]) { el.textContent = VI[en]; } else { el.innerHTML = el.getAttribute('data-orig'); }
+      });
+    }
+    applyLang(lang);
+    sel.addEventListener('change',function(){ applyLang(sel.value); try{ localStorage.setItem(KEY,sel.value); }catch(e){} });
+
+    // Tabs. The page opens on the tab the runtime chose (what is waiting on you, if anything is), or
+    // on the one named in the address (#dod, #run, ...), so a link can point straight at a tab.
+    var buttons = Array.prototype.slice.call(document.querySelectorAll('nav.tabs button'));
+    function show(id){
+      if (!document.getElementById(id)) { id = 'needs'; }
+      buttons.forEach(function(b){ b.setAttribute('aria-selected', b.getAttribute('data-tab')===id ? 'true' : 'false'); });
+      Array.prototype.forEach.call(document.querySelectorAll('section.tab'), function(s){ s.classList.toggle('active', s.id===id); });
+    }
+    buttons.forEach(function(b){ b.addEventListener('click', function(){ var id=b.getAttribute('data-tab'); show(id); try{ history.replaceState(null,'','#'+id); }catch(e){} window.scrollTo(0,0); }); });
+    var fromHash = (location.hash||'').replace('#','');
+    show(fromHash && document.getElementById(fromHash) ? fromHash : (document.body.getAttribute('data-default-tab') || 'needs'));
+  })();
+</script>
+</body>
+</html>

@@ -129,6 +129,14 @@ If `.harness/run/` does not exist, this invocation is the Bootstrap. Do not impl
      measuring a layer beneath the one the user experiences. Every `human` criterion carries an instruction
      a person can follow without reading the code: what to open, what to do, what to expect.
 
+     **Every criterion is written twice, in English** (ADR-035): first one plain sentence the person
+     approving it can read without knowing the code — no commands, paths, class names, ids or
+     regexes — then, indented beneath it, a `Proof:` line holding everything a command needs,
+     including the state it is driven from. The person approves the sentence; a Proof that checks
+     less than its sentence promises is a defect. Earned on Calendar-Note `loop/music-player-v3`
+     (2026-09-29): all 32 criteria were written for a command to read, the human approved them
+     verbatim, and afterwards said they were hard to understand — a gate nobody can read is a stamp.
+
      **Before classing an appearance criterion `human`, ask whether a pinned render can carry it.**
      Where the repository can render a component host-side and commit the result as a reference image,
      you may open that image, judge it once, and class the criterion `machine` — but only if the
@@ -157,7 +165,8 @@ If `.harness/run/` does not exist, this invocation is the Bootstrap. Do not impl
    - `AMENDMENTS.md`, `HISTORY.md`, `ESCALATION.md` — empty logs.
    - `DECISIONS.md` is **not yours to create.** The Runtime provisions it, mechanically, as soon as this Iteration has created `.harness/run/` — because it is also where the deny rules protecting it start applying, and a file you could create is a file you could still be the only writer of at the moment it is born.
    - `.harness/ISSUES.md` — the Issues Report (§10). A sibling of `run/`, not inside it, which is why it survives the Cleanup Commit.
-   - `SUGGESTIONS.html` at the repository root, two tabs: **Escalate** — a read-only mirror of `ESCALATION.md`, regenerated whenever that file changes — and **Suggestions**, the Suggestion Box: lessons this run learned that are true **beyond** this repository, and so belong in a tier you cannot write to. Both are proposals only; you never act on one. Criteria and the two bounding rules are in `POLICIES.md`.
+   - `.harness/SUGGESTIONS.md`, if it does not exist yet, from its template — the Suggestion Box: lessons this run learned that are true **beyond** this repository, and so belong in a tier you cannot write to. A sibling of `run/`, so it survives the Cleanup Commit. Proposals only; you never act on one. Criteria and the two bounding rules are in `POLICIES.md`.
+   - **No HTML, ever.** The Runtime renders the Decision Queue, every DoD, the Issues Report, the Autonomous ledgers and the Suggestion Box into one page, `FOREMAN.html`, after every Iteration (ADR-034). You write the Markdown.
 7. Propose standing Capabilities for this repository's toolchain (build/test/lint commands) as part of the decision below.
 8. Queue the decision (§7): *"Approve the Definition of Done (edit freely before approving) and the proposed standing capabilities."*
 9. Checkpoint (commit everything above on the Loop Branch) and report `ESCALATE`.
@@ -295,7 +304,7 @@ Ask again only when the new action falls **outside** what was granted — a wide
 
 This is earned: the Calendar-Note alarms run queued eight decisions, and **four of them — D-003, D-004, D-006, D-007 — were the same screenshot-reference grant asked four times**, each one stopping the loop until a human returned. Nothing new was being decided after the first.
 
-When you genuinely do need human input, append an entry to `.harness/run/ESCALATION.md` from the template: an id (`D-00N`, sequential), the question, context, options considered, your recommendation, structured capability proposals if any, and **the tasks this decision blocks**. Regenerate `SUGGESTIONS.html`'s Escalate **and Verify** tabs from their current content **in the same step, before you write `ESCALATE`** — the Verify tab lists every criterion awaiting a signature, each leading with what is still unlooked-at rather than with what the machine already drove, so that a pre-checked item does not read as a finished one — the tab exists to make the queue easy to read, never to be read back as an input. The Runtime checks this: on `ESCALATE` it opens the page for the human, and a page missing any pending `D-0NN` is treated as stale and skipped in favour of the raw `ESCALATION.md`. Skipping the regeneration therefore does not go unnoticed, it just gives the human a worse view of your question.
+When you genuinely do need human input, append an entry to `.harness/run/ESCALATION.md` from the template: an id (`D-00N`, sequential), the question, context, options considered, your recommendation, structured capability proposals if any, and **the tasks this decision blocks**. The Runtime renders every pending entry into the **Needs you** tab of `FOREMAN.html` and opens it on `ESCALATE`; you write only the Markdown (ADR-034).
 
 The human answers in `.harness/run/DECISIONS.md`, under a heading naming this entry's id — never in `.harness/run/ESCALATION.md` itself. You cannot write `DECISIONS.md`; the Runtime denies it, the same as the Capability Ledgers. Never treat `ESCALATION.md` existing, or a human's activity, as a signal that an answer is ready — you may still be working on other tasks for a while after writing this entry, and the only reliable signal that it is safe to answer is the run actually stopping (`Status: ESCALATE`), which you do not control from here.
 
@@ -378,7 +387,7 @@ When `STATE.md` records a DONE-candidate, this invocation is the **Verifier**. Y
 1. Re-verify every **`machine`** criterion against fresh evidence: run the build, the tests, the lint yourself. Check each explicitly.
 2. **Drive every `machine-then-human` criterion**, here and nowhere else — this gate, not every iteration, because standing up a device costs minutes and the loop is already the slow part. Use whatever the repository actually has: a Gradle managed device, `connectedAndroidTest`, the device wrapper (§12), an injected clock, a container. **Prefer an emulator the build controls over a human's real machine**: it starts from a known state, and a personal device may refuse input injection outright or carry data that is not yours to disturb. If the repository genuinely cannot drive one, say so per criterion and move on — an honest "not driven" beats a silent skip.
 3. Gaps found, by either step → file tasks, clear the DONE-candidate flag, checkpoint, report `CONTINUE`. A defect a pre-check found is an ordinary defect: it consumes the task's attempts and can be abandoned at the third, exactly like one a unit test found.
-4. All `machine` criteria hold, and criteria **await a signature** → queue a **Human Verification Request** (§7) and report `ESCALATE` (Autonomous mode: §14.2 instead). Do **not** create the Cleanup Commit and do **not** report `DONE`. Every `machine-then-human` entry carries what you drove, the **state you drove it from**, and what is still unlooked-at; a pre-check that passed is written as *did not fail when driven from X*, never as *works*.
+4. All `machine` criteria hold, and criteria **await a signature** → queue a **Human Verification Request** (§7) and report `ESCALATE` (Autonomous mode: §14.2 instead). Do **not** create the Cleanup Commit and do **not** report `DONE`. Every `machine-then-human` entry carries what you drove, the **state you drove it from**, and what is still unlooked-at, and leads with that last part, so a pre-checked item does not read as a finished one; a pre-check that passed is written as *did not fail when driven from X*, never as *works*.
 5. All `machine` criteria hold **and** every criterion needing a signature has one → create the **Cleanup Commit**: remove `.harness/run/` from the branch tip. `ISSUES.md` stays. The commit message is the completion summary: what was built, each DoD criterion with its evidence and who verified it, notable amendments.
 6. Report `DONE`. Merging is the human's act, never yours.
 
@@ -388,8 +397,8 @@ not a paragraph mentioning that one exists. An unsigned verification request is 
 nobody checked; it is the one thing in that directory that does not belong to the run that raised it.
 
 Earned: a run ended with sixteen unsigned criteria queued as `D-008`. A later goal removed
-`.harness/run/`, and because `SUGGESTIONS.html`'s Escalate tab mirrors only the *current*
-`ESCALATION.md`, all sixteen vanished from the one page built for a human to read. They survived in
+`.harness/run/`, and because the page then built for a human to read mirrored only the *current*
+`ESCALATION.md`, all sixteen vanished from it. They survived in
 git history and in a prose note — which is to say, nowhere anybody looks. The cheapest way to make an
 inconvenient question disappear must not be "start another run".
 
@@ -522,5 +531,6 @@ Never report `ESCALATE` except for the DoD approval. When no executable task rem
 ## 14.5 The Run Report
 
 Keep `ASSUMPTIONS.md` and `RECOVERY.md` current in every checkpoint. On whatever exit ends the run, the
-Runtime renders `RUN-REPORT.html` from them, `DoD.md`, `STATE.md` and `.harness/ISSUES.md`. You never
+Runtime renders them, with `DoD.md`, `STATE.md` and `.harness/ISSUES.md`, into the **This run** tab of
+`FOREMAN.html`. You never
 write the HTML: a run that ends by budget or crash never gets an Iteration in which to write it.

@@ -1,5 +1,7 @@
 # The Runtime pins the Iteration's Model Tier, and records what every iteration cost
 
+> **One rejected option reversed on 2026-10-02 by [ADR-034](./ADR-034-one-page-for-the-human-rendered-by-the-runtime-and-the-engine-writes-no-html.md):** the Runtime now renders the Decision Queue itself, so the stale-page check described below is gone.
+
 > **Renumbered from ADR-024 on 2026-09-25**, because `main` already had [ADR-024](./ADR-024-the-iteration-budget-is-counted-from-commits-not-a-process-variable.md). Commits on `loop/fix-guide-language-toggle` made before that date still cite it as ADR-024.
 
 A run that produced good work — 251 tests, 0 lint errors, no abandoned task, 36 DoD criteria — was

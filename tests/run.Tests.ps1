@@ -45,6 +45,12 @@ function New-TestRepo {
     return $dir
 }
 
+# The page template the Runtime renders FOREMAN.html from (ADR-034), copied into a test repository.
+function Copy-PageTemplate([string]$repo) {
+    New-Item -ItemType Directory -Path (Join-Path $repo ".harness/loop/templates") -Force | Out-Null
+    Copy-Item (Join-Path $RepoRootDir ".harness/loop/templates/FOREMAN.template.html") (Join-Path $repo ".harness/loop/templates/")
+}
+
 function Set-FakeClaudeQueue {
     param([string]$TestRepo, [string[]]$Directives)
     $queueFile = Join-Path $TestRepo "queue.txt"
@@ -732,48 +738,63 @@ Describe "run.ps1 surfaces an ESCALATE to the human" {
 
     # ESCALATE stops the loop dead and the run waits on a human who has no idea they are being
     # waited on - about 46 minutes of pure idle across two decisions on the Calendar-Note run. The
-    # page built for this, SUGGESTIONS.html's Escalate tab, was never regenerated once: the copy in
-    # that repository carried no D-0NN id at all.
+    # page built for this, SUGGESTIONS.html's Escalate tab, was the engine's to regenerate and was
+    # never regenerated once. The Runtime now renders the queue itself (ADR-034), so the page cannot
+    # be stale; these pin that it shows what is pending, and only that.
 
-    It "detects that the page is missing the decision the engine just queued" {
+    It "puts every pending decision on the Needs you tab, and leaves an answered one off" {
         $repo = New-TestRepo
         try {
+            Copy-PageTemplate $repo
             New-Item -ItemType Directory -Path (Join-Path $repo ".harness/run") -Force | Out-Null
-            Set-Content -Path (Join-Path $repo ".harness/run/ESCALATION.md") -Value "### D-001 - needs a human"
-            # A page from before this decision: exactly the Calendar-Note failure.
-            Set-Content -Path (Join-Path $repo "SUGGESTIONS.html") -Value "<html><body>no decisions here</body></html>"
-            Set-FakeClaudeQueue -TestRepo $repo -Directives @("ESCALATE|question")
-            $code = Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "2", "-NoOpenEscalation")
-
-            $code | Should Be 3
-            $log = Join-Path $env:TEMP ("loop-run-" + (Split-Path $repo -Leaf) + ".log")
-            (Get-Content $log -Raw) | Should Match "STALE"
-        } finally {
-            Remove-TestRepo -TestRepo $repo
-        }
-    }
-
-    It "treats a page that does carry the decision as current" {
-        $repo = New-TestRepo
-        try {
-            New-Item -ItemType Directory -Path (Join-Path $repo ".harness/run") -Force | Out-Null
-            Set-Content -Path (Join-Path $repo ".harness/run/ESCALATION.md") -Value "### D-001 - needs a human"
-            Set-Content -Path (Join-Path $repo "SUGGESTIONS.html") -Value "<html><body>D-001 needs a human</body></html>"
+            Set-Content -Path (Join-Path $repo ".harness/run/ESCALATION.md") -Value @(
+                "# DECISION QUEUE", "", "## D-001 - approve the Definition of Done", "", "- **Status:** pending", "",
+                "### Question", "", "Approve it?", "", "---", "",
+                "## D-002 - which database", "", "- **Status:** pending", "",
+                "## D-003 - an old question", "", "- **Status:** archived")
+            Set-Content -Path (Join-Path $repo ".harness/run/DECISIONS.md") -Value @("## D-002", "", "Room.")
             Set-FakeClaudeQueue -TestRepo $repo -Directives @("ESCALATE|question")
             Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "2", "-NoOpenEscalation") | Should Be 3
 
+            $html = Get-Content (Join-Path $repo "FOREMAN.html") -Raw -Encoding UTF8
+            $html | Should Match 'id="D-001"'
+            $html | Should Match 'Approve it\?'
+            $html | Should Not Match 'id="D-002"'
+            $html | Should Not Match 'id="D-003"'
+            $html | Should Match 'data-default-tab="needs"'
+            $html | Should Match 'class="count hot">1<'
             $log = Join-Path $env:TEMP ("loop-run-" + (Split-Path $repo -Leaf) + ".log")
-            (Get-Content $log -Raw) | Should Not Match "STALE"
+            (Get-Content $log -Raw) | Should Match 'foreman page \(not opened\)'
         } finally {
             Remove-TestRepo -TestRepo $repo
         }
     }
 
-    It "still exits 3 when there is no page to open at all" {
+    It "counts the unticked checks an Autonomous run leaves for a person, not the ticked ones" {
+        $repo = New-TestRepo
+        try {
+            Copy-PageTemplate $repo
+            New-Item -ItemType Directory -Path (Join-Path $repo ".harness") -Force | Out-Null
+            Set-Content -Path (Join-Path $repo ".harness/ISSUES.md") -Value @(
+                "# ISSUES", "", "## Awaiting a person", "", "Tick these in DECISIONS.md.", "",
+                "- [ ] **7 - Empty library.** Open the app with no music.",
+                "- [x] **8 - Playing.** Already signed.",
+                "- [ ] **9 - Lock screen.** Lock and wake the phone.", "", "## Assumptions", "", "- none")
+            Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-Page", "-NoOpenEscalation") | Should Be 0
+            $html = Get-Content (Join-Path $repo "FOREMAN.html") -Raw -Encoding UTF8
+            $html | Should Match 'class="count hot">2<'
+            $html | Should Match '<span class="box">'
+            $html | Should Match '<span class="box done">'
+        } finally {
+            Remove-TestRepo -TestRepo $repo
+        }
+    }
+
+    It "still exits 3 when the engine queued nothing it could name" {
         $repo = New-TestRepo
         try {
             Set-FakeClaudeQueue -TestRepo $repo -Directives @("ESCALATE|question")
-            Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "2") | Should Be 3
+            Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "2", "-NoOpenEscalation") | Should Be 3
         } finally {
             Remove-TestRepo -TestRepo $repo
         }
@@ -1056,10 +1077,7 @@ Describe "run.ps1 in Autonomous mode (ADR-027)" {
         New-Item -ItemType Directory -Path (Join-Path $repo ".harness/loop/capabilities") -Force | Out-Null
         Copy-Item (Join-Path $RepoRootDir ".harness/loop/capabilities/baseline.json") (Join-Path $repo ".harness/loop/capabilities/baseline.json")
     }
-    function Copy-ReportTemplate([string]$repo) {
-        New-Item -ItemType Directory -Path (Join-Path $repo ".harness/loop/templates") -Force | Out-Null
-        Copy-Item (Join-Path $RepoRootDir ".harness/loop/templates/RUN-REPORT.template.html") (Join-Path $repo ".harness/loop/templates/")
-    }
+    function Copy-ReportTemplate([string]$repo) { Copy-PageTemplate $repo }
 
     It "tells the engine its mode in the prompt, never in the system prompt" {
         $repo = New-TestRepo
@@ -1119,7 +1137,7 @@ Describe "run.ps1 in Autonomous mode (ADR-027)" {
         }
     }
 
-    It "ends DONE_PARTIAL with exit 7 and a Run Report that git never sees" {
+    It "ends DONE_PARTIAL with exit 7 and a page that git never sees" {
         $repo = New-TestRepo
         try {
             Copy-RealBaseline $repo; Copy-ReportTemplate $repo
@@ -1127,12 +1145,12 @@ Describe "run.ps1 in Autonomous mode (ADR-027)" {
             $code = Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "2", "-Mode", "Autonomous")
             $code | Should Be 7
 
-            $report = Get-Content (Join-Path $repo "RUN-REPORT.html") -Raw
+            $report = Get-Content (Join-Path $repo "FOREMAN.html") -Raw -Encoding UTF8
             $report | Should Match 'DONE_PARTIAL'
             $report | Should Match 'two criteria await a person'
             $report | Should Not Match '\{\{'
             Push-Location $repo
-            try { (@(& git status --porcelain) -join ';') | Should Not Match 'RUN-REPORT' } finally { Pop-Location }
+            try { (@(& git status --porcelain) -join ';') | Should Not Match 'FOREMAN' } finally { Pop-Location }
         } finally { Remove-TestRepo -TestRepo $repo }
     }
 
@@ -1147,7 +1165,7 @@ Describe "run.ps1 in Autonomous mode (ADR-027)" {
             Set-FakeClaudeQueue -TestRepo $repo -Directives @("DONE|ok")
             Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "2", "-Mode", "Autonomous") | Out-Null
 
-            $report = Get-Content (Join-Path $repo "RUN-REPORT.html") -Raw
+            $report = Get-Content (Join-Path $repo "FOREMAN.html") -Raw -Encoding UTF8
             $report | Should Match 'A-001 - chose Room over SQLDelight'
             $report | Should Match '<code>git revert abc123</code>'
             $report | Should Match '&lt;script&gt;'
@@ -1171,7 +1189,7 @@ Describe "run.ps1 in Autonomous mode (ADR-027)" {
             Set-FakeClaudeQueue -TestRepo $repo -Directives @("DONE|verified")
             Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "2", "-Mode", "Autonomous") | Out-Null
 
-            (Get-Content (Join-Path $repo "RUN-REPORT.html") -Raw) | Should Match 'criterion 7: notes survive a restart'
+            (Get-Content (Join-Path $repo "FOREMAN.html") -Raw -Encoding UTF8) | Should Match 'criterion 7: notes survive a restart'
         } finally { Remove-TestRepo -TestRepo $repo }
     }
 
@@ -1194,14 +1212,14 @@ Describe "run.ps1 in Autonomous mode (ADR-027)" {
         } finally { Remove-TestRepo -TestRepo $repo }
     }
 
-    It "stops at the hour budget with exit 5 and still writes the report" {
+    It "stops at the hour budget with exit 5 and still writes the page" {
         $repo = New-TestRepo
         try {
             Copy-RealBaseline $repo; Copy-ReportTemplate $repo
             Set-FakeClaudeQueue -TestRepo $repo -Directives @("CONTINUE|a", "CONTINUE|b", "CONTINUE|c")
             $code = Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "5", "-MaxHours", "0.00001", "-Mode", "Autonomous")
             $code | Should Be 5
-            (Get-Content (Join-Path $repo "RUN-REPORT.html") -Raw) | Should Match 'Hour budget'
+            (Get-Content (Join-Path $repo "FOREMAN.html") -Raw -Encoding UTF8) | Should Match 'Hour budget'
         } finally { Remove-TestRepo -TestRepo $repo }
     }
 
@@ -1214,13 +1232,21 @@ Describe "run.ps1 in Autonomous mode (ADR-027)" {
         } finally { Remove-TestRepo -TestRepo $repo }
     }
 
-    It "writes no report in Collaborative mode" {
+    It "writes the page in Collaborative mode too, without the Autonomous warning, and removes the pages it replaced" {
         $repo = New-TestRepo
         try {
             Copy-ReportTemplate $repo
+            # Pages the Runtime used to write, excluded from git: left in place they would be read as current.
+            Set-Content -Path (Join-Path $repo "RUN-REPORT.html") -Value "<html>an old report</html>"
+            Set-Content -Path (Join-Path $repo "DOD.html") -Value "<html>an old checklist</html>"
             Set-FakeClaudeQueue -TestRepo $repo -Directives @("DONE|ok")
             Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "2") | Out-Null
+            $html = Get-Content (Join-Path $repo "FOREMAN.html") -Raw -Encoding UTF8
+            $html | Should Match 'class="warn collaborative"'
+            $html | Should Match 'data-default-tab="run"'
+            $html | Should Not Match '\{\{'
             (Test-Path (Join-Path $repo "RUN-REPORT.html")) | Should Be $false
+            (Test-Path (Join-Path $repo "DOD.html")) | Should Be $false
         } finally { Remove-TestRepo -TestRepo $repo }
     }
 }
@@ -1640,5 +1666,288 @@ Describe "The device wrapper acts only on the debug build of this repository (AD
                 Remove-TestRepo -TestRepo $repo
             }
         }
+    }
+}
+
+Describe "FOREMAN.html shows every Definition of Done, newest first" {
+
+    # Asked for by the human, 2026-10-02: DoD.md stays the source, but the checklist is read on a page,
+    # numbered and grouped by category, with the newest DoD first and the earlier ones below it. The
+    # earlier ones exist only in git - the Cleanup Commit deletes .harness/run/ - so the page is rebuilt
+    # from history. Checked by hand against Calendar-Note's seven DoDs before these were written.
+
+    $DodPageTemplate = Join-Path $RepoRootDir ".harness/loop/templates/FOREMAN.template.html"
+    # "Nghe duoc nhac" with its Vietnamese marks, built from code points: this file is not UTF-8 to
+    # Windows PowerShell, and git's console output was not either until the page asked for UTF-8.
+    $Vietnamese = "Nghe " + [char]0x0111 + [char]0x01B0 + [char]0x1EE3 + "c nh" + [char]0x1EA1 + "c"
+
+    function New-DodRepo {
+        $repo = New-TestRepo
+        New-Item -ItemType Directory -Path (Join-Path $repo ".harness/loop/templates") -Force | Out-Null
+        Copy-Item $DodPageTemplate (Join-Path $repo ".harness/loop/templates/FOREMAN.template.html")
+        return $repo
+    }
+    function Set-Dod([string]$repo, [string]$text) {
+        $path = Join-Path $repo ".harness/run/DoD.md"
+        New-Item -ItemType Directory -Path (Split-Path $path) -Force | Out-Null
+        [System.IO.File]::WriteAllText($path, $text, (New-Object System.Text.UTF8Encoding($false)))
+    }
+    function Save-All([string]$repo, [string]$message, [string]$date) {
+        Push-Location $repo
+        try {
+            $env:GIT_AUTHOR_DATE = $date; $env:GIT_COMMITTER_DATE = $date
+            & git add -A 2>$null | Out-Null
+            & git -c user.email=test@local -c user.name=LoopTest commit --quiet -m $message 2>$null | Out-Null
+        } finally {
+            Remove-Item Env:\GIT_AUTHOR_DATE, Env:\GIT_COMMITTER_DATE -ErrorAction SilentlyContinue
+            Pop-Location
+        }
+    }
+    function Get-DodPage([string]$repo) {
+        $page = Join-Path $repo "FOREMAN.html"
+        if (-not (Test-Path $page)) { return "" }
+        return [System.IO.File]::ReadAllText($page, [System.Text.Encoding]::UTF8)
+    }
+    $SecondGoal = @"
+# Definition of Done - second goal
+
+## Status
+
+- [ ] APPROVED - approve via the pending D-001 in .harness/run/ESCALATION.md
+
+## Acceptance Criteria
+
+### Behaviour
+
+1. [machine] tapping a song plays it
+2. [human] you hear the song
+
+### Permissions the user is asked for
+
+3. [machine] the app asks for notifications on first play
+
+## Removals
+
+R1. [machine] the demo screen is gone
+"@
+
+    It "puts the current run's DoD first, read from disk, then earlier ones from git, newest first" {
+        $repo = New-DodRepo
+        try {
+            $argLog = Join-Path $repo "args.txt"
+            $env:FAKE_CLAUDE_ARGLOG = $argLog
+            Set-Dod $repo "# Definition of Done - first goal`n`n## Acceptance Criteria`n`n1. [machine] $Vietnamese works`n"
+            Save-All $repo "loop(bootstrap): plan the first goal" "2026-09-01T10:00:00+07:00"
+            Remove-Item (Join-Path $repo ".harness/run") -Recurse -Force
+            Save-All $repo "loop(done): the first goal ships" "2026-09-02T10:00:00+07:00"
+            Set-Dod $repo $SecondGoal
+            Save-All $repo "loop(bootstrap): plan the second goal" "2026-09-10T10:00:00+07:00"
+            # A person's edit before approving: on disk, in no commit yet.
+            Set-Dod $repo ($SecondGoal.Replace("3. [machine] the app asks", "4. [human] an edit nobody committed`n3. [machine] the app asks"))
+
+            Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-Page", "-NoOpenEscalation") | Should Be 0
+            $html = Get-DodPage $repo
+            ($html.IndexOf("second goal") -ge 0 -and $html.IndexOf("second goal") -lt $html.IndexOf("first goal")) | Should Be $true
+            $html | Should Match 'an edit nobody committed'
+            $html.Contains($Vietnamese) | Should Be $true
+            $html | Should Match 'the first goal ships'
+            $html | Should Match 'badge current'
+            $html | Should Match 'badge closed'
+            $html | Should Not Match '\{\{'
+            (Test-Path $argLog) | Should Be $false
+            Push-Location $repo
+            try { (@(& git status --porcelain) -join ';') | Should Not Match 'FOREMAN\.html' } finally { Pop-Location }
+        } finally {
+            Remove-Item Env:\FAKE_CLAUDE_ARGLOG -ErrorAction SilentlyContinue
+            Remove-TestRepo -TestRepo $repo
+        }
+    }
+
+    It "keeps each criterion's own number under its category, with its Verification Class" {
+        $repo = New-DodRepo
+        try {
+            Set-Dod $repo $SecondGoal
+            Save-All $repo "loop(bootstrap): plan the second goal" "2026-09-10T10:00:00+07:00"
+            Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-Page", "-NoOpenEscalation") | Should Be 0
+            $html = Get-DodPage $repo
+            # An <ol> would have restarted at 1 under the second heading.
+            $permissions = $html.IndexOf('data-en="Permissions the user is asked for"')
+            ($permissions -gt 0 -and $html.IndexOf('<span class="num">3</span>') -gt $permissions) | Should Be $true
+            $html | Should Match '<span class="num">R1</span>'
+            $html | Should Match '<span class="cls human">human</span>you hear the song'
+        } finally { Remove-TestRepo -TestRepo $repo }
+    }
+
+    It "opens the page at the approval gate while the DoD waits, and counts it approved once DECISIONS.md answers" {
+        $repo = New-DodRepo
+        $leaf = Split-Path $repo -Leaf
+        try {
+            Set-Dod $repo $SecondGoal
+            Save-All $repo "loop(bootstrap): plan the second goal" "2026-09-10T10:00:00+07:00"
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("ESCALATE|approve the Definition of Done")
+            Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "2", "-NoOpenEscalation") | Should Be 3
+            (Get-Content (Join-Path $env:TEMP "loop-run-$leaf.log") -Raw) | Should Match 'foreman page \(not opened\)'
+            (Get-DodPage $repo) | Should Match 'badge awaiting'
+
+            Set-Content -Path (Join-Path $repo ".harness/run/DECISIONS.md") -Value "## D-001`n`nApproved as written."
+            Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-Page", "-NoOpenEscalation") | Should Be 0
+            $html = Get-DodPage $repo
+            $html | Should Match 'badge approved'
+            $html | Should Not Match 'badge awaiting'
+        } finally { Remove-TestRepo -TestRepo $repo }
+    }
+
+    It "-Page leaves the Run Mode and a live run's lock alone" {
+        $repo = New-DodRepo
+        $leaf = Split-Path $repo -Leaf
+        $lock = Join-Path $env:TEMP "loop-run-$leaf.lock"
+        try {
+            Set-Dod $repo $SecondGoal
+            Save-All $repo "loop(bootstrap): plan the second goal" "2026-09-10T10:00:00+07:00"
+            Remove-Item (Join-Path $repo ".harness/run") -Recurse -Force
+            Push-Location $repo
+            try { $modeFile = Join-Path (& git rev-parse --absolute-git-dir).Trim() "foreman-mode" } finally { Pop-Location }
+            # Before bootstrap a run would reset this to Collaborative; rendering a page must not.
+            Set-Content -Path $modeFile -Value "Autonomous" -Encoding ascii
+            # A live process holds the lock - this test's own.
+            "$PID" | Out-File -FilePath $lock -Encoding ascii
+
+            Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-Page", "-NoOpenEscalation") | Should Be 0
+            (Get-Content $modeFile -TotalCount 1).Trim() | Should Be "Autonomous"
+            (Get-Content $lock -TotalCount 1).Trim() | Should Be "$PID"
+            (Get-DodPage $repo) | Should Match 'badge open'
+        } finally {
+            Remove-Item $lock -Force -ErrorAction SilentlyContinue
+            Remove-TestRepo -TestRepo $repo
+        }
+    }
+
+    It "has the DoD template group criteria by category and number them straight through" {
+        $template = Get-Content (Join-Path $RepoRootDir ".harness/loop/templates/DoD.template.md") -Raw
+        $order = @("### Behaviour", "### Permissions the user is asked for", "### Background work and notifications",
+                   "### Appearance and reachability", "### Data and storage", "### Build, start and quality")
+        $at = @($order | ForEach-Object { $template.IndexOf($_) })
+        ($at | Where-Object { $_ -lt 0 }).Count | Should Be 0
+        for ($i = 1; $i -lt $at.Count; $i++) { ($at[$i] -gt $at[$i - 1]) | Should Be $true }
+        $template | Should Match 'never restarting at a heading'
+        # The page translates exactly these headings; a renamed one would silently stay English.
+        $page = Get-Content $DodPageTemplate -Raw -Encoding UTF8
+        foreach ($h in $order) { $page.Contains('"' + $h.Substring(4) + '"') | Should Be $true }
+    }
+}
+
+Describe "FOREMAN.html is the one page, and the engine writes no HTML (ADR-034)" {
+
+    # Asked for by the human, 2026-10-02: one HTML file to read, instead of SUGGESTIONS.html,
+    # RUN-REPORT.html and DOD.html. Two of those were already the Runtime's; the third was the engine's,
+    # and it was the one that went stale. These pin that the engine is never again told to write one.
+
+    $Spec = Get-Content (Join-Path $RepoRootDir ".harness/loop/ENGINE.md") -Raw
+    $Policies = Get-Content (Join-Path $RepoRootDir ".harness/loop/POLICIES.md") -Raw
+
+    It "never asks the engine for a page, and points it at the Markdown the page is built from" {
+        $Spec | Should Not Match 'SUGGESTIONS\.html'
+        $Policies | Should Not Match 'SUGGESTIONS\.html'
+        $Spec | Should Not Match 'RUN-REPORT\.html'
+        $Spec | Should Match 'No HTML, ever'
+        $Spec | Should Match '\.harness/SUGGESTIONS\.md'
+        $Policies | Should Match '\.harness/SUGGESTIONS\.md'
+    }
+
+    It "renders the Suggestion Box from .harness/SUGGESTIONS.md, and links a SUGGESTIONS.html left from before" {
+        $repo = New-TestRepo
+        try {
+            Copy-PageTemplate $repo
+            New-Item -ItemType Directory -Path (Join-Path $repo ".harness") -Force | Out-Null
+            Set-Content -Path (Join-Path $repo ".harness/SUGGESTIONS.md") -Value @(
+                "# SUGGESTION BOX", "", "---", "",
+                "## S-001 - ask for POST_NOTIFICATIONS before posting", "", "- **Destination:** stack android", "",
+                "## S-002 - a pipe hides the exit code", "", "- **Destination:** loop")
+            Set-Content -Path (Join-Path $repo "SUGGESTIONS.html") -Value "<html>the engine's old page</html>"
+            Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-Page", "-NoOpenEscalation") | Should Be 0
+            $html = Get-Content (Join-Path $repo "FOREMAN.html") -Raw -Encoding UTF8
+            $html | Should Match 'S-001 - ask for POST_NOTIFICATIONS before posting'
+            $html | Should Match 'data-tab="suggestions"><span data-lang="en">Suggestions</span><span data-lang="vi">[^<]*</span><span class="count">2<'
+            $html | Should Match 'href="SUGGESTIONS.html"'
+            # The engine's committed file is not the Runtime's to delete.
+            (Test-Path (Join-Path $repo "SUGGESTIONS.html")) | Should Be $true
+        } finally { Remove-TestRepo -TestRepo $repo }
+    }
+
+    It "counts no suggestion in a Suggestion Box fresh from its template" {
+        $repo = New-TestRepo
+        try {
+            Copy-PageTemplate $repo
+            New-Item -ItemType Directory -Path (Join-Path $repo ".harness") -Force | Out-Null
+            Copy-Item (Join-Path $RepoRootDir ".harness/loop/templates/SUGGESTIONS.template.md") (Join-Path $repo ".harness/SUGGESTIONS.md")
+            Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-Page", "-NoOpenEscalation") | Should Be 0
+            $html = Get-Content (Join-Path $repo "FOREMAN.html") -Raw -Encoding UTF8
+            $html | Should Match '<span class="count">0</span></button>\s*</nav>'
+        } finally { Remove-TestRepo -TestRepo $repo }
+    }
+
+    It "keeps a code span's asterisks literal while rendering emphasis around it" {
+        $repo = New-TestRepo
+        try {
+            Copy-PageTemplate $repo
+            New-Item -ItemType Directory -Path (Join-Path $repo ".harness") -Force | Out-Null
+            $tick = [char]96
+            Set-Content -Path (Join-Path $repo ".harness/SUGGESTIONS.md") -Value @("## S-001 - rules", "", ("*Driven on the emulator:* grant " + $tick + "Bash(*DebugAndroidTest*)" + $tick + " only"), "", ("*Screenshot: " + $tick + "run/evidence/c7.png" + $tick + ", still unlooked-at*"))
+            Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-Page", "-NoOpenEscalation") | Should Be 0
+            $html = Get-Content (Join-Path $repo "FOREMAN.html") -Raw -Encoding UTF8
+            $html | Should Match '<em>Driven on the emulator:</em>'
+            $html | Should Match '<em>Screenshot: <code>run/evidence/c7.png</code>, still unlooked-at</em>'
+            $html | Should Match '<code>Bash\(\*DebugAndroidTest\*\)</code>'
+        } finally { Remove-TestRepo -TestRepo $repo }
+    }
+}
+
+Describe "A DoD criterion is written twice, once for the person and once for the engine (ADR-035)" {
+
+    # Calendar-Note loop/music-player-v3, 2026-09-29: all 32 criteria were written for a command to
+    # read, the human approved them verbatim, and on 2026-10-02 said they were hard to understand.
+    # Decided by the human the same day: a plain sentence for the person, a Proof for the engine,
+    # always in English, and the page shows the sentence with the Proof folded under it.
+
+    function Show-Dod([string]$text) {
+        $repo = New-TestRepo
+        Copy-PageTemplate $repo
+        New-Item -ItemType Directory -Path (Join-Path $repo ".harness/run") -Force | Out-Null
+        [System.IO.File]::WriteAllText((Join-Path $repo ".harness/run/DoD.md"), $text, (New-Object System.Text.UTF8Encoding($false)))
+        Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-Page", "-NoOpenEscalation") | Out-Null
+        $html = [System.IO.File]::ReadAllText((Join-Path $repo "FOREMAN.html"), [System.Text.Encoding]::UTF8)
+        Remove-TestRepo -TestRepo $repo
+        return $html
+    }
+
+    It "shows the person's sentence and folds the engine's Proof under it" {
+        $tick = [char]96
+        $html = Show-Dod ("# Definition of Done`n`n## Acceptance Criteria`n`n" +
+            "8. [machine] Tapping a song plays it.`n" +
+            "   Proof: " + $tick + "dumpsys media_session" + $tick + " shows state PLAYING(3),`n" +
+            "   driven from a fresh install.`n" +
+            "9. [human] An old-style criterion with no Proof line.`n")
+        $html | Should Match '<span class="cls machine">machine</span>Tapping a song plays it\.<details class="proof">'
+        $html | Should Match '<code>dumpsys media_session</code> shows state PLAYING\(3\), driven from a fresh install\.</div></details>'
+        # The Proof never leaks into the sentence, and a criterion without one has no fold at all.
+        $html | Should Not Match 'plays it\. Proof:'
+        $html | Should Match 'An old-style criterion with no Proof line\.</div></li>'
+    }
+
+    It "reads a bold sentence as the sentence and the rest of its line as the Proof" {
+        $html = Show-Dod ("## Acceptance Criteria`n`n**1. [machine] The whole app compiles.** gradlew assembleDebug exits 0.`n")
+        $html | Should Match '<span class="cls machine">machine</span>The whole app compiles\.<details class="proof">'
+        $html | Should Match 'gradlew assembleDebug exits 0\.</div></details>'
+        $html | Should Match '<b>1</b>'
+    }
+
+    It "has ENGINE.md and the DoD template ask for both halves, in English" {
+        $spec = Get-Content (Join-Path $RepoRootDir ".harness/loop/ENGINE.md") -Raw
+        $spec | Should Match 'Every criterion is written twice, in English'
+        $spec | Should Match 'a Proof that checks\s+less than its sentence promises is a defect'
+        $template = Get-Content (Join-Path $RepoRootDir ".harness/loop/templates/DoD.template.md") -Raw
+        $template | Should Match 'Every criterion is written twice'
+        $template | Should Match '(?m)^1\. \[machine\] .+\r?\n   Proof: '
+        $template | Should Match '(?m)^R1\. \[machine\] .+\r?\n    Proof: '
     }
 }
