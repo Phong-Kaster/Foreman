@@ -152,9 +152,9 @@ normal too: nobody is there to restart it, so the Watchdog keeps retrying with a
 Treat a `Status: ESCALATE`, `Status: DONE`, `Status: DONE_PARTIAL`, or `Status: FAILED` line arriving
 in the stream, or the process exiting, as the trigger to stop the monitor and move to the matching
 step below. Exit code 6 means the run stopped at the quota ceiling — report that and offer to resume
-after the reset. Exit code 5 means a budget (iterations or hours) ran out. An Autonomous run prints
-`Run Report: <path>` on **every** exit, including budget, quota and crash-limit stops; whenever that
-line appears, handle it as step 7b does in addition to the matching step.
+after the reset. Exit code 5 means a budget (iterations or hours) ran out. The runtime prints
+`Foreman page: <path>` on **every** exit, in both modes, including budget, quota and crash-limit
+stops; in an Autonomous run, handle it as step 7b does in addition to the matching step.
 
 ## 6. On ESCALATE
 
@@ -170,6 +170,14 @@ pending ID. This is the only point at which `ESCALATE` becomes visible to the us
 plain prose it reads identically to Claude pausing to ask something on its own, and the user has no
 way to tell an engine-mandated gate from an ordinary question. Keep the same heading, translated
 into the conversation's language, on every re-presentation of a still-pending entry.
+
+Tell the user everything waiting on them is on one page, `FOREMAN.html` at the repository root,
+which the runtime renders and opens on `ESCALATE`: the **Needs you** tab holds every pending entry and
+every check awaiting a person; the **Definition of Done** tab holds the DoD, every criterion numbered
+and grouped by category, with earlier runs' DoDs below it, newest first. Edits to the DoD go in
+`.harness/run/DoD.md`, which the page is rebuilt from. If the page is missing or closed, run
+`powershell -NoProfile -File .harness/loop/run.ps1 -Page`. Summarise the entries in chat as well; when
+you summarise a DoD, use each criterion's plain sentence, never its `Proof:` line (ADR-035).
 
 Present them as a batch, most blocking first — an entry's `Blocks tasks` field tells you how much
 work each one is holding up. Offer the engine's own proposed options as choices when they are
@@ -219,10 +227,11 @@ saying so.
 Remind the user that merging is always their manual step — neither this skill nor the engine ever
 merges. The engine pushes only the Loop Branch, and only when this repository granted push (ADR-011).
 
-## 7b. The Run Report (Autonomous runs)
+## 7b. The This run tab (Autonomous runs)
 
-An Autonomous run ends with `RUN-REPORT.html` at the repository root, rendered by the runtime from
-the engine's ledgers. It is excluded from git, so it never appears in `git status`. Give the user its
+Every run ends with `FOREMAN.html` at the repository root, rendered by the runtime from the engine's
+Markdown files (ADR-034); for an Autonomous run its **This run** tab is the report of what the engine
+decided and did alone. It is excluded from git, so it never appears in `git status`. Give the user its
 path, then summarize it in the conversation from the ledgers it was built from — never ask the user to
 open files to find out what happened:
 

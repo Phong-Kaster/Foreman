@@ -152,8 +152,16 @@ _Avoid_: Blocklist, sandbox
 A script under `.harness/loop/bin/` through which Autonomous mode performs a destructive action it may take: it captures what is about to be lost into `.harness/trash/`, then appends the capture and the exact restore command to `.harness/run/RECOVERY.md`. `foreman-trash` (delete), `foreman-snapshot` (before overwriting a data file), `foreman-push` (the Loop Branch, where push is granted).
 _Avoid_: Safe command, undo
 
+**Foreman page**:
+`FOREMAN.html` at the repository root — the one page a person reads, rendered mechanically by the Runtime from the engine's Markdown, never by the engine, after every iteration and on every exit (ADR-034). Four tabs: **Needs you** (pending decisions and checks awaiting a person), **Definition of Done** (every DoD in git, newest first), **This run** (outcome, Open Issues, Assumptions, Recovery entries, state) and **Suggestions** (the Suggestion Box). Excluded from git through `.git/info/exclude`.
+_Avoid_: Report page, dashboard
+
+**Proof** (of a DoD criterion):
+The indented `Proof:` line under a criterion's plain sentence: everything a command or the Verifier needs to prove it — commands, files, the state it is driven from. The sentence is the person's and is what they approve; the Proof is the engine's (ADR-035). A Proof that checks less than its sentence promises is a defect.
+_Avoid_: Evidence (that is what running the Proof produces)
+
 **Run Report**:
-`RUN-REPORT.html` at the repository root, rendered mechanically by the Runtime — never the engine — on every exit of an Autonomous run, including budget and crash-limit stops: outcome, Assumptions, Recovery entries, Open Issues, the DoD. Excluded from git through `.git/info/exclude`.
+The **This run** tab of the Foreman page in an Autonomous run: outcome, Assumptions, Recovery entries, Open Issues. Until ADR-034 it was its own file, `RUN-REPORT.html`.
 _Avoid_: Summary (the Roll-up Summary is the Skill's cross-branch view)
 
 **Library-docs pack**:

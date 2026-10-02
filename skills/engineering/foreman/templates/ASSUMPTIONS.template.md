@@ -1,8 +1,8 @@
 # ASSUMPTIONS
 
 > Autonomous mode only (ENGINE.md §14.1, ADR-027). Every decision the engine made alone, where a
-> Collaborative run would have stopped to ask. The Runtime renders this file into `RUN-REPORT.html` at
-> the end of the run, so each entry must make sense to someone who has read nothing else.
+> Collaborative run would have stopped to ask. The Runtime renders this file into the This run tab of
+> `FOREMAN.html` after every iteration, so each entry must make sense to someone who has read nothing else.
 >
 > To overturn one: answer its id in `.harness/run/DECISIONS.md` and re-run. A human answer always
 > outranks an assumption — the engine reverts what depended on it. Or run the revert command below

@@ -10,7 +10,20 @@
 
 ## Acceptance Criteria
 
-<!-- One criterion per line, each tagged with its Verification Class.
+<!-- Every criterion is written twice, once for each reader (ADR-035), always in English:
+
+     1. [machine] Tapping a song plays it.
+        Proof: `dumpsys media_session` shows the app's session in state PLAYING(3) with the tapped
+        song's title, driven from a fresh install with the permission granted.
+
+     The first line is the PERSON's: one plain sentence about what they will see or be able to do,
+     readable by someone who has never opened the code - no commands, file paths, class names, ids or
+     regexes. It is what the human approves. The indented `Proof:` line is the ENGINE's: everything
+     a command or a Verifier needs - commands, files, the state it is driven from, the exact
+     expectation. FOREMAN.html shows the sentence and folds the Proof away under it. A Proof that
+     checks less than its sentence promises is a defect, not a shorthand.
+
+     Each criterion is tagged with its Verification Class.
      [machine] a command's output or a named file proves it; the Verifier proves it itself.
      [human]   a person must look at the running software; blocks DONE until signed off.
 
@@ -20,9 +33,51 @@
      A user-facing capability usually needs one of each. "The user can delete a note" is both
      "the record is removed" [machine] and "the delete control is visible and reachable" [human].
      A DoD with user-facing behaviour and NO [human] criteria is a defect: it is measuring a layer
-     beneath the one the user experiences. When uncertain, choose [human]. -->
-1. [machine] …
-2. [human] … — open …, do …, expect …
+     beneath the one the user experiences. When uncertain, choose [human].
+
+     Group the criteria under the category headings below, in this order, and leave out a heading
+     with nothing under it. A criterion that fits two categories goes under the first one. Number
+     criteria continuously across the categories - 1, 2, 3 ... never restarting at a heading - because
+     the number is the criterion's id everywhere else (STATE.md, ESCALATION.md, the Verify tab). The
+     Runtime renders this file into FOREMAN.html for the human, grouped and numbered exactly as written. -->
+
+### Behaviour
+
+<!-- What the user can do and what happens: flows, business logic, state that survives a restart. -->
+1. [machine] <what the user can do, in one plain sentence>
+   Proof: <the command or file that proves it, and the state it is driven from>
+2. [human] <what a person will see when they try it>
+   Proof: open …, do …, expect …
+
+### Permissions the user is asked for
+
+<!-- Every runtime permission the app requests: when it is asked, and what happens on allow and on deny. -->
+3. [machine] <when the app asks, and what happens if the user says no>
+   Proof: …
+
+### Background work and notifications
+
+<!-- What keeps working off screen - services, scheduled work - and the notifications and controls it shows. -->
+4. [human] <what keeps working when the app is in the background>
+   Proof: …
+
+### Appearance and reachability
+
+<!-- Whether a control can be seen, found and reached: contrast, layout, system bars and gesture areas. -->
+5. [human] <what a person can see and reach on screen>
+   Proof: …
+
+### Data and storage
+
+<!-- What is saved, where, and what survives a restart, an update or a reinstall. -->
+6. [machine] <what is kept, and what survives a restart>
+   Proof: …
+
+### Build, start and quality
+
+<!-- It builds, starts without crashing, and the test and lint commands pass. -->
+7. [machine] The app builds and opens without crashing.
+   Proof: …
 
 ## Removals
 
@@ -37,8 +92,10 @@
        that looks unused under "Questions" below, never as a removal.
 
      If this section is empty, say why in one line. -->
-R1. [machine] … is gone — e.g. `HomeFragment` no longer appears in the navigation graph or the source tree
-R2. [machine] … — e.g. the merged debug manifest declares no `ACCESS_FINE_LOCATION`
+R1. [machine] <what is gone, in plain words> — e.g. The template's demo Home screen is gone.
+    Proof: e.g. `HomeFragment` appears neither in the navigation graph nor in the source tree
+R2. [machine] <what is gone, in plain words> — e.g. The app no longer asks for the user's location.
+    Proof: e.g. the merged debug manifest declares no `ACCESS_FINE_LOCATION`
 
 Questions (product repositories only): …
 

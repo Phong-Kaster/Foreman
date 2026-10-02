@@ -5,7 +5,7 @@
 `README.md` is the file GitHub renders on the repository's home page, and it stays the source of
 truth for what Foreman is and how to use it. `docs/index.html` is a second, parallel presentation of
 the same content — bilingual (English/Vietnamese), a fresh visual design distinct from the
-`foreman-field-report.html` / `SUGGESTIONS.template.html` report style, published via GitHub Pages
+`foreman-field-report.html` / `FOREMAN.template.html` report style, published via GitHub Pages
 (`/docs` on `main`) for a friendlier, animated reading experience. It does not replace README, does
 not change README's role, and is not linked to from it as an authority — it is a nicer way to read
 the same thing.

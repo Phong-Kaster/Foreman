@@ -63,7 +63,10 @@ param(
     # Suppress the live engine activity feed (feed is on by default for observability).
     [switch]$QuietEngine,
     # Consenting-adult fast path (ADR-004): full permission bypass, for sandboxed/VM runs only.
-    [switch]$DangerouslySkipPermissions
+    [switch]$DangerouslySkipPermissions,
+    # Render FOREMAN.html - the one page a person reads (ADR-034) - open it, and stop. Invokes no
+    # engine, takes no lock and leaves the Run Mode alone, so it is safe beside a live run.
+    [switch]$Page
 )
 
 $ErrorActionPreference = "Stop"
@@ -131,7 +134,7 @@ function Get-RunMode {
     return "Collaborative"
 }
 $ModeFile = Resolve-ModeFile
-if ($ModeFile) {
+if ($ModeFile -and -not $Page) {
     if ($Mode -ne "") {
         Set-Content -Path $ModeFile -Value $Mode -Encoding ascii
     } elseif (-not (Test-Path $RunDir)) {
@@ -144,7 +147,9 @@ $script:RunMode = Get-RunMode
 # Run lock: at most ONE Foreman per repository. Two concurrent engines committing to the
 # same branch would corrupt the run - refuse to start if a live instance holds the lock.
 $LockFile = Join-Path $env:TEMP ("loop-run-" + (Split-Path $RepoRoot -Leaf) + ".lock")
-if (Test-Path $LockFile) {
+if ($Page) {
+    # Rendering a page is not a run: no lock to take, and none to wait for.
+} elseif (Test-Path $LockFile) {
     $oldPid = (Get-Content $LockFile -TotalCount 1).Trim()
     $alive = $false
     if ($oldPid -match '^\d+$') { $alive = ($null -ne (Get-Process -Id ([int]$oldPid) -ErrorAction SilentlyContinue)) }
@@ -154,7 +159,7 @@ if (Test-Path $LockFile) {
     }
     # Stale lock from a dead process - take over.
 }
-"$PID" | Out-File -FilePath $LockFile -Encoding ascii
+if (-not $Page) { "$PID" | Out-File -FilePath $LockFile -Encoding ascii }
 
 # Logs, one pair per repository, in TEMP (never inside the repo):
 #   .log       human-readable activity feed (what you tail to watch the loop)
@@ -179,10 +184,12 @@ function Write-RunLog([string]$line) {
 function Write-RawLog([string]$line) {
     if ($null -ne $script:RawWriter) { try { $script:RawWriter.WriteLine($line) } catch {} }
 }
-Write-Host "Foreman starting. PID: $PID" -ForegroundColor Cyan
-Write-Host "Activity log: $RunLog"
-Write-Host "Watch live from another terminal:  Get-Content `"$RunLog`" -Wait -Tail 20"
-Write-Host "Raw engine events (debugging): $RawLog"
+if (-not $Page) {
+    Write-Host "Foreman starting. PID: $PID" -ForegroundColor Cyan
+    Write-Host "Activity log: $RunLog"
+    Write-Host "Watch live from another terminal:  Get-Content `"$RunLog`" -Wait -Tail 20"
+    Write-Host "Raw engine events (debugging): $RawLog"
+}
 
 # ---------- Capability compiler (mechanical: concatenates human-approved rules, never translates) ----------
 # Ledger layers, by lifecycle:
@@ -412,65 +419,6 @@ function Write-Telemetry {
         ) -join "`t"
         [System.IO.File]::AppendAllLines($TelemetryFile, [string[]]@($row), (New-Object System.Text.UTF8Encoding($false)))
     } catch { }   # Measurement must never be able to stop execution.
-}
-
-# ---------- Escalation surfacing ----------
-# ESCALATE stops the loop dead and the run then waits on a human who has no idea they are being
-# waited on. On the Calendar-Note alarms run that cost about 46 minutes of pure idle across two
-# decisions - and the page built for exactly this, SUGGESTIONS.html's Escalate tab, was never
-# refreshed even once: the copy in that repository carried no D-0NN id at all and predated the tab.
-# ENGINE.md 9 already tells the engine to regenerate it. This is the check that the instruction was
-# actually carried out, because an instruction nothing verifies is a wish (ADR-002).
-function Get-PendingDecisionIds {
-    $escalation = Join-Path $RunDir "ESCALATION.md"
-    if (-not (Test-Path $escalation)) { return @() }
-    try {
-        $ids = [System.Collections.Generic.HashSet[string]]::new()
-        foreach ($m in [regex]::Matches((Get-Content $escalation -Raw), '(?m)^#{1,6}\s*(D-\d{3})(?![0-9])')) {
-            $null = $ids.Add($m.Groups[1].Value)
-        }
-        return @($ids)
-    } catch { return @() }
-}
-
-# Opens the decision queue and returns what was actually shown. A page missing any pending id is
-# STALE, and a stale page is never opened as though it were current: showing yesterday's questions
-# is worse than showing the raw file, because it looks answered.
-function Open-EscalationQueue {
-    $pending = Get-PendingDecisionIds
-    $page = Join-Path $RepoRoot "SUGGESTIONS.html"
-    $target = $null
-    if (Test-Path $page) {
-        $html = ""
-        try { $html = Get-Content $page -Raw } catch { }
-        $missing = @($pending | Where-Object { $html -notmatch [regex]::Escape($_) })
-        if ($pending.Count -gt 0 -and $missing.Count -eq 0) {
-            $target = $page
-        } else {
-            $why = if ($pending.Count -eq 0) { "ESCALATION.md names no D-0NN entry" }
-                   else { "SUGGESTIONS.html is missing $($missing -join ', ')" }
-            Write-Warning "The Escalate tab was not regenerated for this decision ($why)."
-            Write-Warning "Opening ESCALATION.md instead - a stale page would read as though it were answered."
-            Write-RunLog "escalate page STALE: $why"
-        }
-    }
-    if ($null -eq $target) {
-        $escalation = Join-Path $RunDir "ESCALATION.md"
-        if (Test-Path $escalation) { $target = $escalation }
-    }
-    if ($null -eq $target) { return }
-    # -NoOpenEscalation suppresses the BROWSER, never the check above: whether the engine regenerated
-    # the tab is a fact about this run, and a headless CI box is exactly where nobody would notice it.
-    if ($NoOpenEscalation) {
-        Write-Host "Decision queue: $target (not opening; -NoOpenEscalation)" -ForegroundColor Magenta
-        Write-RunLog "escalate target (not opened): $target"
-        return
-    }
-    Write-Host "Opening $([IO.Path]::GetFileName($target))" -ForegroundColor Magenta
-    Write-RunLog "opened for the human: $target"
-    # Fail-silent: no browser, no display, a locked-down desktop - none of that is a reason to fail a
-    # run whose engineering work already succeeded.
-    try { Start-Process $target | Out-Null } catch { Write-Warning "Could not open $target automatically: $_" }
 }
 
 # ---------- Quota reader (ADR-012) ----------
@@ -947,6 +895,13 @@ function ConvertTo-InlineHtml([string]$text) {
     $html = ConvertTo-HtmlText $text
     $html = [regex]::Replace($html, '`([^`]+)`', '<code>$1</code>')
     $html = [regex]::Replace($html, '\*\*([^*]+)\*\*', '<strong>$1</strong>')
+    # *emphasis*, which may hold a code span, but never inside one: `Bash(*DebugAndroidTest*)` is a
+    # rule, not italics. A span whose code holds an asterisk is left as written.
+    $html = [regex]::Replace($html, '(<code>.*?</code>)|(?<![\w*])\*(?![\s*])([^*]+?)(?<!\s)\*(?![\w*])', [System.Text.RegularExpressions.MatchEvaluator] {
+        param($m)
+        if ($m.Groups[1].Success) { return $m.Value }
+        return '<em>' + $m.Groups[2].Value + '</em>'
+    })
     return $html
 }
 
@@ -989,7 +944,9 @@ function ConvertFrom-LedgerMarkdown([string]$markdown) {
             $want = if ($line -match '^\s*\d+\.') { "ol" } else { "ul" }
             $item = if ($line -match '^\s*[-*]\s+(.*)$') { $Matches[1] } else { ($line -replace '^\s*\d+\.\s+', '') }
             if ($list -ne $want) { & $flushList; $out.Add("<$want>"); $list = $want }
-            $out.Add("<li>" + (ConvertTo-InlineHtml $item) + "</li>")
+            # A task-list box reads as a box: unticked waits on someone, ticked is signed.
+            $li = (ConvertTo-InlineHtml $item) -replace '^\[ \]\s*', '<span class="box">&#9744;</span> ' -replace '^\[[xX]\]\s*', '<span class="box done">&#9745;</span> '
+            $out.Add("<li>" + $li + "</li>")
         } elseif ($line -match '^\s*>\s?(.*)$') {
             & $flushPara; & $flushList
             $out.Add("<blockquote>" + (ConvertTo-InlineHtml $Matches[1]) + "</blockquote>")
@@ -1017,40 +974,415 @@ function Add-GitExclude([string]$pattern) {
     Add-Content -Path $exclude -Value $pattern
 }
 
-# RUN-REPORT.html at the repository root. Excluded through .git/info/exclude so it is never
-# committed and never shows up as a dirty tree the next run's engine would treat as crash debris.
-function Write-RunReport {
-    $template = Join-Path $LoopDir "templates/RUN-REPORT.template.html"
-    if (-not (Test-Path $template)) { Write-Warning "No RUN-REPORT template at $template; skipping the report."; return }
+# ---------- Definition of Done, as the page shows it ----------
+# The Definition of Done tab of FOREMAN.html: the DoD a person is asked to approve, numbered and grouped
+# exactly as DoD.md writes it, followed by every earlier DoD the repository's git history still holds,
+# newest first. DoD.md stays the source; this is only a rendering of it.
+$DodGitPath = ".harness/run/DoD.md"
+$script:DodAwaiting = $false
+
+# git prints through the console's code page, which is not UTF-8 on Windows: a DoD quoting a
+# Vietnamese PRD came back as mojibake. Read git's output as UTF-8 for the length of one call.
+function Invoke-GitUtf8([string[]]$gitArgs) {
+    $saved = [Console]::OutputEncoding
+    try {
+        try { [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false) } catch {}
+        $lines = & git @gitArgs 2>$null
+        $script:GitExit = $LASTEXITCODE
+        return , @($lines)
+    } finally { try { [Console]::OutputEncoding = $saved } catch {} }
+}
+
+# A label the page's chrome translates in the browser (the dictionary is in FOREMAN.template.html). Text
+# the dictionary does not know - an engine-chosen heading - stays as the engine wrote it.
+function ConvertTo-DodLabel([string]$text) {
+    $plain = $text.Trim()
+    return '<span class="t" data-en="' + (ConvertTo-HtmlText $plain) + '">' + (ConvertTo-InlineHtml $plain) + '</span>'
+}
+
+# DoD.md to HTML. Criteria keep the numbers DoD.md gives them - an <ol> would renumber every list from 1
+# under each category heading - and carry their Verification Class as a chip. Everything that is not a
+# heading or a criterion goes through ConvertFrom-LedgerMarkdown unchanged.
+function ConvertFrom-DodMarkdown([string]$markdown) {
+    if (-not $markdown) { return '<p class="empty">(nothing recorded)</p>' }
+    $markdown = [regex]::Replace($markdown, '(?s)<!--.*?-->', '')
+    $out = New-Object System.Collections.Generic.List[string]
+    $other = New-Object System.Collections.Generic.List[string]
+    $st = @{ Crit = $null; InList = $false; Fence = $false }
+    $flushOther = {
+        if (($other -join '').Trim()) { $out.Add((ConvertFrom-LedgerMarkdown ($other -join "`n"))) }
+        $other.Clear()
+    }
+    $closeCrit = {
+        if ($null -ne $st.Crit) {
+            $text = ($st.Crit.Lines -join ' ').Trim()
+            $chip = ''
+            if ($text -match '^\[(machine-then-human|human-only|machine|human)\]\s*(.*)$') {
+                $chip = '<span class="cls ' + $Matches[1] + '">' + $Matches[1] + '</span>'
+                $text = $Matches[2]
+            }
+            # The sentence is the person's; the Proof is the engine's, folded away under it (ADR-035).
+            $proof = ''
+            if ($st.Crit.Proof.Count -gt 0) {
+                $proof = '<details class="proof"><summary>' + (ConvertTo-DodLabel "How the engine checks it") + '</summary><div>' + (ConvertTo-InlineHtml (($st.Crit.Proof -join ' ').Trim())) + '</div></details>'
+            }
+            $out.Add('<li class="crit"><span class="num">' + (ConvertTo-HtmlText $st.Crit.Num) + '</span><div class="txt">' + $chip + (ConvertTo-InlineHtml $text) + $proof + '</div></li>')
+            $st.Crit = $null
+        }
+    }
+    $closeList = { & $closeCrit; if ($st.InList) { $out.Add('</ol>'); $st.InList = $false } }
+
+    foreach ($raw in ($markdown -split "`r?`n")) {
+        $line = $raw.TrimEnd()
+        if ($line -match '^\s*```') { & $closeList; $other.Add($raw); $st.Fence = -not $st.Fence; continue }
+        if ($st.Fence) { $other.Add($raw); continue }
+        if ($line -match '^(#{1,6})\s+(.*)$') {
+            & $closeList; & $flushOther
+            # The title is the card's own heading; ## is a section, ### and below a category.
+            if ($Matches[1].Length -eq 1) { continue }
+            $tag = if ($Matches[1].Length -eq 2) { "h3" } else { "h4" }
+            $out.Add("<$tag>" + (ConvertTo-DodLabel $Matches[2]) + "</$tag>")
+            continue
+        }
+        # A criterion opens a line, numbered. Some DoDs already split it the same way as a Proof line
+        # does, with the sentence in bold - `**1. [machine] It compiles.** gradlew ...` (Calendar-Note's
+        # Alarms DoD, 2026-09-13) - so the bold part is the sentence and the rest is the Proof.
+        if ($line -match '^\s*\*\*(R?\d+)\.\s+(.+?)\*\*\s*(.*)$' -or $line -match '^\s*(R?\d+)\.\s+(.*)$') {
+            $num = $Matches[1]; $sentence = $Matches[2]; $rest = if ($Matches.Count -gt 3) { $Matches[3] } else { "" }
+            & $flushOther; & $closeCrit
+            if (-not $st.InList) { $out.Add('<ol class="crits">'); $st.InList = $true }
+            $st.Crit = @{ Num = $num; Lines = New-Object System.Collections.Generic.List[string]; Proof = New-Object System.Collections.Generic.List[string]; InProof = $false }
+            $st.Crit.Lines.Add($sentence)
+            if ($line -match '^\s*\*\*') { $st.Crit.InProof = $true; if ($rest) { $st.Crit.Proof.Add($rest) } }
+            continue
+        }
+        # An indented line continues the criterion above it - DoDs wrap long criteria that way. An
+        # indented `Proof:` line starts the engine's half, and everything indented after it belongs there.
+        if ($null -ne $st.Crit -and $line -match '^\s+(\*\*)?Proof:(\*\*)?\s*(.*)$') {
+            $st.Crit.InProof = $true; $st.Crit.Proof.Add($Matches[3]); continue
+        }
+        if ($null -ne $st.Crit -and $line -match '^\s+\S') {
+            if ($st.Crit.InProof) { $st.Crit.Proof.Add($line.Trim()) } else { $st.Crit.Lines.Add($line.Trim()) }
+            continue
+        }
+        if ($line -eq '') {
+            if ($null -ne $st.Crit -or $st.InList) { & $closeCrit } else { $other.Add('') }
+            continue
+        }
+        & $closeList
+        $other.Add($raw)
+    }
+    & $closeList; & $flushOther
+    return ($out -join "`n")
+}
+
+# Every DoD this repository's history holds, one entry per run. A run's DoD is born in the commit that
+# adds .harness/run/DoD.md (its bootstrap) and ends in the one that deletes it (its Cleanup Commit, or a
+# new goal clearing the old run); each commit in between belongs to the most recent birth in its own
+# ancestry. Newest first.
+function Get-DodHistory {
+    $log = Invoke-GitUtf8 @("log", "--all", "--format=@@%H%x09%cI%x09%s", "--name-status", "--", $DodGitPath)
+    if ($script:GitExit -ne 0) { return , @() }
+    $commits = New-Object System.Collections.Generic.List[object]
+    $last = $null
+    foreach ($l in $log) {
+        if ("$l" -match '^@@([0-9a-f]{40})\t([^\t]+)\t(.*)$') {
+            $last = [pscustomobject]@{ Sha = $Matches[1]; Date = [DateTimeOffset]::Parse($Matches[2]); Subject = $Matches[3]; Status = "" }
+            $commits.Add($last)
+        } elseif ($null -ne $last -and "$l" -match '^([AMD])\t') { $last.Status = $Matches[1] }
+    }
+    $byBirth = @{}
+    foreach ($c in $commits) {
+        $birth = $c.Sha
+        if ($c.Status -ne "A") {
+            $birth = ("" + (& git log -1 --diff-filter=A --format=%H $c.Sha -- $DodGitPath 2>$null)).Trim()
+        }
+        if (-not $birth) { continue }
+        if (-not $byBirth.ContainsKey($birth)) { $byBirth[$birth] = New-Object System.Collections.Generic.List[object] }
+        $byBirth[$birth].Add($c)
+    }
+    $runs = @()
+    foreach ($birth in $byBirth.Keys) {
+        $members = @($byBirth[$birth] | Sort-Object { $_.Date })
+        $born = @($members | Where-Object { $_.Sha -eq $birth }) | Select-Object -First 1
+        if ($null -eq $born) { $born = $members[0] }
+        $latest = @($members | Where-Object { $_.Status -ne "D" }) | Select-Object -Last 1
+        if ($null -eq $latest) { continue }
+        $closed = @($members | Where-Object { $_.Status -eq "D" }) | Select-Object -Last 1
+        $runs += [pscustomobject]@{ Birth = $birth; Born = $born.Date; Subject = $born.Subject; Latest = $latest.Sha; Closed = $closed }
+    }
+    return , @($runs | Sort-Object { $_.Born } -Descending)
+}
+
+function Get-DodBranchName([string]$sha) {
+    $name = ("" + (& git name-rev --name-only "--refs=refs/heads/loop/*" "--refs=refs/remotes/*/loop/*" $sha 2>$null)).Trim()
+    if (-not $name -or $name -eq "undefined") { $name = ("" + (& git name-rev --name-only $sha 2>$null)).Trim() }
+    if ($name -eq "undefined") { return "" }
+    # A branch shows as the remote sees it (origin/loop/x, upstream/loop/x); the page wants loop/x.
+    return (($name -replace '[~^].*$', '') -replace '^remotes/', '' -replace '^[^/]+/(?=loop/)', '')
+}
+
+function ConvertTo-DodCard($dod, [int]$index) {
+    $md = [regex]::Replace($dod.Markdown, '(?s)<!--.*?-->', '')
+    $title = $dod.Subject -replace '^loop\([^)]*\):\s*', ''
+    $h1 = [regex]::Match($md, '(?m)^#\s+Definition of Done\s*[-:\u2013\u2014]+\s*(.+?)\s*$')
+    if ($h1.Success) { $title = $h1.Groups[1].Value }
+
+    $approved = $md -match '(?mi)^\s*-\s*\[x\]\s*APPROVED'
+    $awaiting = $false
+    # The engine usually ticks the box when it consumes the approval, but not always: the human's own
+    # answer in DECISIONS.md is the approval, so a current run counts as approved once that answer exists.
+    if (-not $approved -and $dod.Current) {
+        $id = "D-001"
+        $status = [regex]::Match($md, '(?mi)^\s*-\s*\[ \]\s*APPROVED.*?\b(D-\d{3})\b')
+        if ($status.Success) { $id = $status.Groups[1].Value }
+        $decisions = Join-Path $RunDir "DECISIONS.md"
+        $answers = ""
+        if (Test-Path $decisions) { $answers = [regex]::Replace((Get-Content $decisions -Raw -Encoding UTF8), '(?s)<!--.*?-->', '') }
+        if ($answers -match "(?m)^#{1,6}\s*$id\b") { $approved = $true } else { $awaiting = $true }
+    }
+
+    $badges = @()
+    if ($dod.Current) { $badges += '<span class="badge current">' + (ConvertTo-DodLabel "Current run") + '</span>' }
+    if ($approved) { $badges += '<span class="badge approved">' + (ConvertTo-DodLabel "Approved") + '</span>' }
+    if ($awaiting) { $badges += '<span class="badge awaiting">' + (ConvertTo-DodLabel "Awaiting your approval") + '</span>' }
+    if ($null -ne $dod.Closed) { $badges += '<span class="badge closed">' + (ConvertTo-DodLabel "Closed") + '</span>' }
+    elseif (-not $dod.Current) { $badges += '<span class="badge open">' + (ConvertTo-DodLabel "Left open") + '</span>' }
+
+    $criteria = [regex]::Matches($md, '(?m)^\s*(\*\*)?\d+\.\s+\S').Count
+    $removals = [regex]::Matches($md, '(?m)^\s*(\*\*)?R\d+\.\s+\S').Count
+    $byCommand = [regex]::Matches($md, '(?m)^\s*(\*\*)?R?\d+\.\s+\[machine\]').Count
+    $byPerson = [regex]::Matches($md, '(?m)^\s*(\*\*)?R?\d+\.\s+\[(human|human-only|machine-then-human)\]').Count
+    $tally = '<p class="tally">' +
+        '<span><b>' + $criteria + '</b>' + (ConvertTo-DodLabel "criteria") + '</span>' +
+        '<span><b>' + $removals + '</b>' + (ConvertTo-DodLabel "removals") + '</span>' +
+        '<span><b>' + $byCommand + '</b>' + (ConvertTo-DodLabel "proved by a command") + '</span>' +
+        '<span><b>' + $byPerson + '</b>' + (ConvertTo-DodLabel "need a person") + '</span></p>'
+    $closing = ""
+    if ($null -ne $dod.Closed) {
+        $closing = '<p class="closing">' + (ConvertTo-DodLabel "Closed by") + ' <code>' + (ConvertTo-HtmlText $dod.Closed.Sha.Substring(0, 7)) + '</code> ' + (ConvertTo-HtmlText $dod.Closed.Subject) + '</p>'
+    }
+    $meta = '<span>' + (ConvertTo-HtmlText $dod.When) + '</span>'
+    if ($dod.Branch) { $meta += '<span class="branch">' + (ConvertTo-HtmlText $dod.Branch) + '</span>' }
+    $open = if ($index -eq 0) { " open" } else { "" }
+    $current = if ($dod.Current) { " current" } else { "" }
+    # Each piece in its own parentheses: in PowerShell the comma binds tighter than +, so a bare
+    # 'a' + $b inside a list splits into separate elements.
+    return @(
+        ("<article class=`"dod$current`" id=`"dod-$($index + 1)`"><details$open><summary>"),
+        ("<p class=`"meta`">$meta</p>"),
+        ('<span class="dod-title">' + (ConvertTo-InlineHtml $title) + '</span>'),
+        ('<p class="badges">' + ($badges -join ' ') + '</p>'),
+        $tally, $closing,
+        "</summary>",
+        ('<div class="md">' + (ConvertFrom-DodMarkdown $md) + '</div>'),
+        "</details></article>"
+    ) -join "`n"
+}
+
+# Every Definition of Done as page cards: the current run's first, read from disk so a person's edits
+# before approving show up, then every earlier one from git, newest first. Sets $script:DodAwaiting
+# when the current run's DoD has not been approved yet.
+function Get-DodCards {
+    $script:DodAwaiting = $false
+    $history = Get-DodHistory
+    $dods = @()
+    $onDisk = Join-Path $RepoRoot $DodGitPath
+    $currentBirth = ""
+    if (Test-Path $onDisk) {
+        # The run in this working tree: its birth is the newest add in HEAD's history, unless the file
+        # was deleted after that add - then what is on disk is a DoD no commit holds yet.
+        $lastTouch = Invoke-GitUtf8 @("log", "-1", "--format=%H%x09%cI", "--name-status", "HEAD", "--", $DodGitPath)
+        $deletedSince = ($lastTouch | Where-Object { "$_" -match '^D\t' }).Count -gt 0
+        if (-not $deletedSince) {
+            $currentBirth = ("" + (& git log -1 --diff-filter=A --format=%H HEAD -- $DodGitPath 2>$null)).Trim()
+        }
+        $born = @($history | Where-Object { $_.Birth -eq $currentBirth }) | Select-Object -First 1
+        $dods += [pscustomobject]@{
+            Current = $true; Markdown = (Get-Content $onDisk -Raw -Encoding UTF8)
+            Subject = if ($born) { $born.Subject } else { "" }
+            When = if ($born) { $born.Born.ToString("yyyy-MM-dd") } else { (Get-Date -Format "yyyy-MM-dd") }
+            Branch = ("" + (& git rev-parse --abbrev-ref HEAD 2>$null)).Trim(); Closed = $null
+        }
+    }
+    foreach ($run in $history) {
+        if ($run.Birth -eq $currentBirth) { continue }
+        $text = (Invoke-GitUtf8 @("show", "$($run.Latest):$DodGitPath")) -join "`n"
+        if ($script:GitExit -ne 0) { continue }
+        $dods += [pscustomobject]@{
+            Current = $false; Markdown = $text; Subject = $run.Subject
+            When = $run.Born.ToString("yyyy-MM-dd"); Branch = (Get-DodBranchName $run.Latest); Closed = $run.Closed
+        }
+    }
+    $cards = @()
+    for ($i = 0; $i -lt $dods.Count; $i++) { $cards += ConvertTo-DodCard $dods[$i] $i }
+    if ($dods.Count -gt 0) { $script:DodAwaiting = ($dods[0].Current -and ($cards[0] -match 'badge awaiting')) }
+    return , @($cards)
+}
+
+# The Decision Queue entries still waiting: in ESCALATION.md, not marked answered or archived, and with
+# no heading of their own in DECISIONS.md yet - the same test the /foreman skill applies.
+function Get-PendingDecisions {
+    $escalation = Join-Path $RunDir "ESCALATION.md"
+    if (-not (Test-Path $escalation)) { return , @() }
+    $text = [regex]::Replace((Get-Content $escalation -Raw -Encoding UTF8), '(?s)<!--.*?-->', '')
+    $answers = ""
+    $decisions = Join-Path $RunDir "DECISIONS.md"
+    if (Test-Path $decisions) { $answers = [regex]::Replace((Get-Content $decisions -Raw -Encoding UTF8), '(?s)<!--.*?-->', '') }
+    $headings = [regex]::Matches($text, '(?m)^(#{1,6})[ \t]+(.*)$')
+    $pending = @()
+    for ($i = 0; $i -lt $headings.Count; $i++) {
+        $h = $headings[$i]
+        if ($h.Groups[2].Value -notmatch '^(D-\d{3})(?![0-9])') { continue }
+        $id = $Matches[1]
+        # An entry runs to the next heading at its own level or above, so its sub-headings stay in it.
+        $level = $h.Groups[1].Value.Length
+        $end = $text.Length
+        for ($j = $i + 1; $j -lt $headings.Count; $j++) {
+            if ($headings[$j].Groups[1].Value.Length -le $level) { $end = $headings[$j].Index; break }
+        }
+        $entry = $text.Substring($h.Index, $end - $h.Index)
+        if ($entry -match '(?mi)^\s*-\s*\*\*Status:\*\*\s*(answered|archived)\b') { continue }
+        if ($answers -match "(?m)^#{1,6}\s*$id(?![0-9])") { continue }
+        $pending += [pscustomobject]@{ Id = $id; Markdown = ($entry -replace '(?m)^\s*-{3,}\s*$', '') }
+    }
+    return , @($pending)
+}
+
+# ISSUES.md's "Awaiting a person": the checklist an Autonomous run reports instead of queueing
+# (ENGINE.md 14.2). $null when the section is missing or holds only its empty table header.
+function Get-AwaitingPerson {
+    $issues = [regex]::Replace((Read-RunArtifact ".harness/ISSUES.md"), '(?s)<!--.*?-->', '')
+    # \r? because the engine's files are CRLF on Windows, and $ does not match before a \r.
+    $m = [regex]::Match($issues, '(?ms)^##[ \t]+Awaiting a person[ \t]*\r?$(.*?)(?=^##[ \t]|\z)')
+    if (-not $m.Success) { return $null }
+    $body = $m.Groups[1].Value
+    $lines = @($body -split "`r?`n")
+    $rows = @($lines | Where-Object { $_ -match '^\s*\|' -and $_ -notmatch '^\s*\|[\s:|-]+\|\s*$' })
+    # A ticked box is signed, so it is not waiting; an unticked box or a plain item is.
+    $items = @($lines | Where-Object { $_ -match '^\s*([-*]|\d+\.)\s+\S' -and $_ -notmatch '^\s*[-*]\s+\[[xX]\]' })
+    $count = [Math]::Max(0, $rows.Count - 1) + $items.Count
+    if ($count -eq 0) { return $null }
+    return [pscustomobject]@{ Markdown = $body; Count = $count }
+}
+
+# ---------- The Foreman page (ADR-034) ----------
+# FOREMAN.html at the repository root is the one page a person reads: what is waiting on them, every
+# Definition of Done, this run's ledgers and the Suggestion Box, as four tabs. The engine writes
+# Markdown only; this renders all of it after every iteration and on every exit, so the page cannot go
+# stale. It replaced three pages, and the one the engine had to keep current - SUGGESTIONS.html's
+# Escalate tab - was the one that went stale: on the Calendar-Note alarms run it was never refreshed
+# once, and the human waited about 46 minutes across two decisions nobody knew were queued.
+# Excluded through .git/info/exclude, so it is never committed and never crash debris.
+$ForemanPage = Join-Path $RepoRoot "FOREMAN.html"
+
+function Write-ForemanPage([string]$Outcome = "", [string]$Reason = "") {
+    $template = Join-Path $LoopDir "templates/FOREMAN.template.html"
+    if (-not (Test-Path $template)) { Write-RunLog "foreman page: no template at $template"; return $null }
+
+    # What is waiting on the human.
+    $pending = Get-PendingDecisions
+    $awaiting = Get-AwaitingPerson
+    $needs = @()
+    if ($pending.Count -gt 0) {
+        $needs += '<h2>' + (ConvertTo-DodLabel "Decisions waiting for an answer") + '<span class="n">' + $pending.Count + '</span></h2>'
+        foreach ($p in $pending) { $needs += '<div class="card pending" id="' + $p.Id + '"><div class="md">' + (ConvertFrom-LedgerMarkdown $p.Markdown) + '</div></div>' }
+    }
+    if ($null -ne $awaiting) {
+        $needs += '<h2>' + (ConvertTo-DodLabel "Checks waiting for a person") + '<span class="n">' + $awaiting.Count + '</span></h2>'
+        $needs += '<div class="card pending"><div class="md">' + (ConvertFrom-LedgerMarkdown $awaiting.Markdown) + '</div></div>'
+    }
+    $nNeeds = $pending.Count + $(if ($null -ne $awaiting) { $awaiting.Count } else { 0 })
+    if ($nNeeds -eq 0) { $needs += '<p class="calm">' + (ConvertTo-DodLabel "Nothing is waiting on you.") + '</p>' }
+
+    $cards = Get-DodCards
+    $dodSection = if ($cards.Count -gt 0) { $cards -join "`n" } else { '<p class="empty">(nothing recorded)</p>' }
+
     $assumptions = Read-RunArtifact ".harness/run/ASSUMPTIONS.md"
     $recovery = Read-RunArtifact ".harness/run/RECOVERY.md"
-    $outcomeClass = switch ($script:Outcome) { "DONE" { "ok" } "DONE_PARTIAL" { "partial" } default { "bad" } }
+    $suggestions = Read-RunArtifact ".harness/SUGGESTIONS.md"
+    $nSuggestions = ([regex]::Matches([regex]::Replace($suggestions, '(?s)<!--.*?-->', ''), '(?m)^##\s+S-\d+')).Count
+    # A SUGGESTIONS.html from before this page is the engine's committed file, not the Runtime's to
+    # delete: link it, so what it holds is not lost from view.
+    $legacy = ""
+    if (Test-Path (Join-Path $RepoRoot "SUGGESTIONS.html")) {
+        $legacy = '<p class="note">' + (ConvertTo-DodLabel "Earlier suggestions, written before this page existed:") + ' <a href="SUGGESTIONS.html">SUGGESTIONS.html</a></p>'
+    }
+
+    if (-not $Outcome) {
+        $last = Read-ExecutionStatus
+        if ($null -ne $last) { $Outcome = $last.Word; if (-not $Reason) { $Reason = $last.Reason } } else { $Outcome = "RUNNING" }
+    }
+    $outcomeClass = switch ($Outcome) { "DONE" { "ok" } "DONE_PARTIAL" { "partial" } "ESCALATE" { "partial" } "RUNNING" { "running" } "CONTINUE" { "running" } default { "bad" } }
+    $outcomeHtml = if ($Outcome -eq "RUNNING") { ConvertTo-DodLabel "RUNNING" } else { ConvertTo-HtmlText $Outcome }
+    $defaultTab = if ($nNeeds -gt 0) { "needs" } elseif ($Outcome -ne "RUNNING" -and $Outcome -ne "CONTINUE") { "run" } elseif ($cards.Count -gt 0) { "dod" } else { "run" }
     $branch = & git rev-parse --abbrev-ref HEAD 2>$null
+
     $values = [ordered]@{
         "{{REPO}}"                = ConvertTo-HtmlText (Split-Path $RepoRoot -Leaf)
         "{{MODE}}"                = ConvertTo-HtmlText $script:RunMode
+        "{{MODE_CLASS}}"          = $script:RunMode.ToLowerInvariant()
         "{{BRANCH}}"              = ConvertTo-HtmlText ("" + $branch).Trim()
-        "{{OUTCOME}}"             = ConvertTo-HtmlText $script:Outcome
+        "{{GENERATED}}"           = Get-Date -Format "yyyy-MM-dd HH:mm"
+        "{{DEFAULT_TAB}}"         = $defaultTab
+        "{{N_NEEDS}}"             = "" + $nNeeds
+        "{{NEEDS_HOT}}"           = $(if ($nNeeds -gt 0) { "hot" } else { "" })
+        "{{SECTION_NEEDS}}"       = ($needs -join "`n")
+        "{{N_DODS}}"              = "" + $cards.Count
+        "{{SECTION_DODS}}"        = $dodSection
+        "{{OUTCOME}}"             = $outcomeHtml
         "{{OUTCOME_CLASS}}"       = $outcomeClass
-        "{{REASON}}"              = ConvertTo-InlineHtml $script:OutcomeReason
+        "{{REASON}}"              = ConvertTo-InlineHtml $Reason
         "{{ITERATIONS}}"          = "" + (Get-PriorIterationCount)
         "{{ELAPSED}}"             = Format-Elapsed $RunStart
-        "{{GENERATED}}"           = Get-Date -Format "yyyy-MM-dd HH:mm"
         "{{N_ASSUMPTIONS}}"       = "" + ([regex]::Matches($assumptions, '(?m)^## A-\d+')).Count
         "{{N_RECOVERY}}"          = "" + ([regex]::Matches($recovery, '(?m)^## R-\d+')).Count
+        "{{SECTION_ISSUES}}"      = ConvertFrom-LedgerMarkdown (Read-RunArtifact ".harness/ISSUES.md")
         "{{SECTION_ASSUMPTIONS}}" = ConvertFrom-LedgerMarkdown $assumptions
         "{{SECTION_RECOVERY}}"    = ConvertFrom-LedgerMarkdown $recovery
-        "{{SECTION_ISSUES}}"      = ConvertFrom-LedgerMarkdown (Read-RunArtifact ".harness/ISSUES.md")
-        "{{SECTION_DOD}}"         = ConvertFrom-LedgerMarkdown (Read-RunArtifact ".harness/run/DoD.md")
         "{{SECTION_STATE}}"       = ConvertFrom-LedgerMarkdown (Read-RunArtifact ".harness/run/STATE.md")
+        "{{N_SUGGESTIONS}}"       = "" + $nSuggestions
+        "{{SECTION_SUGGESTIONS}}" = ConvertFrom-LedgerMarkdown $suggestions
+        "{{LEGACY_SUGGESTIONS}}"  = $legacy
     }
     $html = Get-Content $template -Raw -Encoding UTF8
     foreach ($key in $values.Keys) { $html = $html.Replace($key, $values[$key]) }
-    $reportPath = Join-Path $RepoRoot "RUN-REPORT.html"
-    [System.IO.File]::WriteAllText($reportPath, $html, (New-Object System.Text.UTF8Encoding($false)))
-    Add-GitExclude "/RUN-REPORT.html"
-    Write-Host "Run Report: $reportPath" -ForegroundColor Cyan
-    Write-RunLog "run report: $reportPath"
+    [System.IO.File]::WriteAllText($ForemanPage, $html, (New-Object System.Text.UTF8Encoding($false)))
+    Add-GitExclude "/FOREMAN.html"
+    # The pages this one replaced were the Runtime's own, excluded from git: remove them so a person
+    # never reads a stale one beside the live one.
+    foreach ($old in @("RUN-REPORT.html", "DOD.html")) {
+        $oldPath = Join-Path $RepoRoot $old
+        if (Test-Path $oldPath) { Remove-Item $oldPath -Force -ErrorAction SilentlyContinue; Write-RunLog "foreman page: removed the superseded $old" }
+    }
+    Write-RunLog "foreman page: $ForemanPage (waiting on the human: $nNeeds, DoD: $($cards.Count), DoD awaiting approval: $($script:DodAwaiting))"
+    return $ForemanPage
+}
+
+# Opens the page for the human. -NoOpenEscalation suppresses the browser, never the rendering: a
+# headless box still gets the page.
+function Open-ForemanPage([string]$pagePath, [string]$why) {
+    if (-not $pagePath) { return }
+    if ($NoOpenEscalation) {
+        Write-Host "Foreman page: $pagePath (not opening; -NoOpenEscalation)" -ForegroundColor Magenta
+        Write-RunLog "foreman page (not opened): $pagePath - $why"
+        return
+    }
+    Write-Host "Opening FOREMAN.html - $why" -ForegroundColor Magenta
+    Write-RunLog "opened for the human: $pagePath - $why"
+    # Fail-silent: no browser, no display, a locked-down desktop - none of that is a reason to fail a
+    # run whose engineering work already succeeded.
+    try { Start-Process $pagePath | Out-Null } catch { Write-Warning "Could not open $pagePath automatically: $_" }
+}
+
+# -Page: render FOREMAN.html, open it, and stop. No engine, no lock, no change to the Run Mode - safe
+# to run beside a live loop.
+if ($Page) {
+    $rendered = Write-ForemanPage
+    if (-not $rendered) { Write-Host "No page template in .harness/loop/templates - reinstall the runtime (/foreman re-syncs it)." -ForegroundColor Yellow; exit 1 }
+    Write-Host "Foreman page: $rendered" -ForegroundColor Cyan
+    if (-not $NoOpenEscalation) { try { Start-Process $rendered | Out-Null } catch { Write-Warning "Could not open $rendered automatically: $_" } }
+    exit 0
 }
 
 # ---------- The loop ----------
@@ -1223,13 +1555,16 @@ for ($iteration = $priorIterations + 1; $iteration -le $MaxIterations; $iteratio
     } else {
         Ensure-DecisionsFile
     }
+    # After every iteration, so the page a person reads is the run as this iteration left it.
+    $pagePath = $null
+    try { $pagePath = Write-ForemanPage -Outcome $status.Word -Reason $status.Reason } catch { Write-RunLog "foreman page could not be rendered: $_" }
 
     switch ($status.Word) {
         "DONE"     { Write-Host "Goal verified complete. Review and merge the Loop Branch." -ForegroundColor Green; Stop-Run 0 "DONE" $status.Reason }
-        "DONE_PARTIAL" { Write-Host "Run finished without every criterion met. See RUN-REPORT.html for what was decided, done, and left." -ForegroundColor Yellow; Stop-Run 7 "DONE_PARTIAL" $status.Reason }
+        "DONE_PARTIAL" { Write-Host "Run finished without every criterion met. See the This run tab of FOREMAN.html for what was decided, done, and left." -ForegroundColor Yellow; Stop-Run 7 "DONE_PARTIAL" $status.Reason }
         "ESCALATE" {
-            Write-Host "Human decision required. See .harness/run/ESCALATION.md - answer the queued decisions, then re-run." -ForegroundColor Magenta
-            Open-EscalationQueue
+            Write-Host "Human decision required. See the Needs you tab of FOREMAN.html - answer the queued decisions, then re-run." -ForegroundColor Magenta
+            Open-ForemanPage $pagePath "a decision is waiting on you"
             Stop-Run 3 "ESCALATE" $status.Reason
         }
         "FAILED"   { Write-Host "Execution broken. Human repair required. See .harness/run/STATE.md for the engine's last findings." -ForegroundColor Red; Stop-Run 4 "FAILED" $status.Reason }
@@ -1259,11 +1594,13 @@ Write-Host "Iteration budget ($MaxIterations) exhausted. Stopping deterministica
 Write-Host "This is a Runtime safety bound, not a judgment about the work. Inspect .harness/run/STATE.md and re-run to continue from the last Stable Checkpoint."
 Stop-Run 5 "BUDGET" "Iteration budget ($MaxIterations) exhausted - a Runtime safety bound, not a judgment about the work."
 } finally {
-    # The Run Report is rendered here, on every exit path, because the exits the engine never sees
-    # coming - budget, crash limit, quota - are exactly when the human most needs it (ADR-027).
-    if ($script:RunMode -eq "Autonomous") {
-        try { Write-RunReport } catch { Write-Warning "Could not render RUN-REPORT.html ($_)." }
-    }
+    # The page is rendered here too, on every exit path and in both modes, because the exits the
+    # engine never sees coming - budget, crash limit, quota - are exactly when the human most needs
+    # it (ADR-027, ADR-034).
+    try {
+        $final = Write-ForemanPage -Outcome $script:Outcome -Reason $script:OutcomeReason
+        if ($final) { Write-Host "Foreman page: $final" -ForegroundColor Cyan }
+    } catch { Write-Warning "Could not render FOREMAN.html ($_)." }
     # Cleanup always runs, even on exit: release the log writers and the run lock.
     if ($null -ne $script:LogWriter) { try { $script:LogWriter.Dispose() } catch {} }
     if ($null -ne $script:RawWriter) { try { $script:RawWriter.Dispose() } catch {} }

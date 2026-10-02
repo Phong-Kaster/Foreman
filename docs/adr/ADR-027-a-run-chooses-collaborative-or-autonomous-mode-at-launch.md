@@ -1,5 +1,7 @@
 # A run chooses Collaborative or Autonomous mode at launch; the engine can never choose it for itself
 
+> **Run Report superseded in part on 2026-10-02 by [ADR-034](./ADR-034-one-page-for-the-human-rendered-by-the-runtime-and-the-engine-writes-no-html.md).** `RUN-REPORT.html` is now the This run tab of `FOREMAN.html`, rendered in both modes. Everything else here stands.
+
 > **Status: implemented, 2026-09-24; not yet proven by a real run.** The switch, `ENGINE.md` §14, the
 > Autonomous permission compiler, the Recovery Wrappers, `DONE_PARTIAL`, the budgets and the Run Report
 > are all in place and covered by the Pester suite — but only against `fake-claude`. No real engine has

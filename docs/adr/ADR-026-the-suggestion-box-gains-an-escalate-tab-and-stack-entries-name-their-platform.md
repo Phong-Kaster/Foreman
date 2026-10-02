@@ -1,5 +1,7 @@
 # The Suggestion Box gains an Escalate tab, and every stack-tier entry names its platform
 
+> **Superseded in part on 2026-10-02 by [ADR-034](./ADR-034-one-page-for-the-human-rendered-by-the-runtime-and-the-engine-writes-no-html.md).** The engine no longer writes `SUGGESTIONS.html`: the Suggestion Box is `.harness/SUGGESTIONS.md`, and the Runtime renders it and the Decision Queue into tabs of `FOREMAN.html`. The platform rule for stack entries stands.
+
 Commit `92baf7f` gave the engine a write path for a lesson that is true beyond the repository it was
 found in: `SUGGESTIONS.html`, regenerated at the repository root, read-only, never acted on by the
 engine itself (ADR-019). It solved the write problem. It did not solve two others, both found by
