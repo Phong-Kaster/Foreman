@@ -1143,10 +1143,7 @@ function ConvertTo-DodCard($dod, [int]$index) {
         $id = "D-001"
         $status = [regex]::Match($md, '(?mi)^\s*-\s*\[ \]\s*APPROVED.*?\b(D-\d{3})\b')
         if ($status.Success) { $id = $status.Groups[1].Value }
-        $decisions = Join-Path $RunDir "DECISIONS.md"
-        $answers = ""
-        if (Test-Path $decisions) { $answers = [regex]::Replace((Get-Content $decisions -Raw -Encoding UTF8), '(?s)<!--.*?-->', '') }
-        if ($answers -match "(?m)^#{1,6}\s*$id\b") { $approved = $true } else { $awaiting = $true }
+        if ((Get-AnsweredDecisionIds).ContainsKey($id)) { $approved = $true } else { $awaiting = $true }
     }
 
     $badges = @()
@@ -1227,15 +1224,40 @@ function Get-DodCards {
     return , @($cards)
 }
 
+# The ids the human has actually answered in DECISIONS.md. A heading alone is not an answer: the file
+# is provisioned with an empty "## D-001" over a placeholder comment, and counting that heading made
+# FOREMAN.html show nothing waiting and the DoD "Approved" at Kanso's first gate (2026-10-05) while
+# D-001 was still pending. ENGINE.md 6.2 reads the file the same way: an empty body is not a decision.
+function Get-AnsweredDecisionIds {
+    $answered = @{}
+    $decisions = Join-Path $RunDir "DECISIONS.md"
+    if (-not (Test-Path $decisions)) { return $answered }
+    $text = [regex]::Replace((Get-Content $decisions -Raw -Encoding UTF8), '(?s)<!--.*?-->', '')
+    $headings = [regex]::Matches($text, '(?m)^(#{1,6})[ \t]+(.*?)[ \t]*\r?$')
+    for ($i = 0; $i -lt $headings.Count; $i++) {
+        if ($headings[$i].Groups[2].Value -notmatch '^(D-\d{3})(?![0-9])') { continue }
+        $id = $Matches[1]
+        # The answer runs to the next heading at its own level or above, so a sub-heading inside an
+        # answer stays part of it.
+        $level = $headings[$i].Groups[1].Value.Length
+        $start = $headings[$i].Index + $headings[$i].Length
+        $end = $text.Length
+        for ($j = $i + 1; $j -lt $headings.Count; $j++) {
+            if ($headings[$j].Groups[1].Value.Length -le $level) { $end = $headings[$j].Index; break }
+        }
+        $body = $text.Substring($start, $end - $start) -replace '(?m)^\s*-{3,}\s*$', ''
+        if ($body.Trim()) { $answered[$id] = $true }
+    }
+    return $answered
+}
+
 # The Decision Queue entries still waiting: in ESCALATION.md, not marked answered or archived, and with
-# no heading of their own in DECISIONS.md yet - the same test the /foreman skill applies.
+# no answer of their own in DECISIONS.md yet - the same test the /foreman skill applies.
 function Get-PendingDecisions {
     $escalation = Join-Path $RunDir "ESCALATION.md"
     if (-not (Test-Path $escalation)) { return , @() }
     $text = [regex]::Replace((Get-Content $escalation -Raw -Encoding UTF8), '(?s)<!--.*?-->', '')
-    $answers = ""
-    $decisions = Join-Path $RunDir "DECISIONS.md"
-    if (Test-Path $decisions) { $answers = [regex]::Replace((Get-Content $decisions -Raw -Encoding UTF8), '(?s)<!--.*?-->', '') }
+    $answered = Get-AnsweredDecisionIds
     $headings = [regex]::Matches($text, '(?m)^(#{1,6})[ \t]+(.*)$')
     $pending = @()
     for ($i = 0; $i -lt $headings.Count; $i++) {
@@ -1250,7 +1272,7 @@ function Get-PendingDecisions {
         }
         $entry = $text.Substring($h.Index, $end - $h.Index)
         if ($entry -match '(?mi)^\s*-\s*\*\*Status:\*\*\s*(answered|archived)\b') { continue }
-        if ($answers -match "(?m)^#{1,6}\s*$id(?![0-9])") { continue }
+        if ($answered.ContainsKey($id)) { continue }
         $pending += [pscustomobject]@{ Id = $id; Markdown = ($entry -replace '(?m)^\s*-{3,}\s*$', '') }
     }
     return , @($pending)
@@ -1392,62 +1414,62 @@ if ($Page) {
     exit 0
 }
 
-# ---------- Baseline guard (ADR-036) ----------
-# Approved screenshot baselines are the exam a UI is graded against, and the engine never moves one.
-# The record routes are denied above, but a baseline can still change another way: with
-# roborazzi.test.record=true in gradle.properties the ordinary test task re-records every image.
-# Measured on Foreman-Proving-Ground, 2026-10-05: a contrast defect was recorded as the new truth and
-# verifyRoborazziDebug then passed with the defect in place. So the Runtime checks the files
-# themselves after every iteration, whatever changed them. New baselines are free; an existing one
-# may change only when the human lists it under "## Baselines" in DECISIONS.md.
-$BaselinePathspec = ':(glob)**/src/test/screenshots/**'
-$script:BaselineSnapshot = $null
-
-function Get-BaselineSnapshot {
-    $snapshot = @{}
-    $files = & git ls-files -c -o --exclude-standard -- $BaselinePathspec 2>$null
-    foreach ($rel in @($files)) {
-        if (-not $rel) { continue }
-        $full = Join-Path $RepoRoot $rel
-        if (Test-Path -LiteralPath $full -PathType Leaf) { $snapshot[$rel] = (Get-FileHash -LiteralPath $full -Algorithm SHA256).Hash }
-    }
-    return $snapshot
-}
-
-function Get-ApprovedBaselines {
-    $decisions = Join-Path $RunDir "DECISIONS.md"
-    if (-not (Test-Path $decisions)) { return , @() }
-    $text = [regex]::Replace((Get-Content $decisions -Raw -Encoding UTF8), '(?s)<!--.*?-->', '')
-    $section = [regex]::Match($text, '(?ms)^##[ \t]+Baselines[ \t]*\r?$(.*?)(?=^##[ \t]|\z)')
-    if (-not $section.Success) { return , @() }
-    $paths = @()
-    foreach ($line in ($section.Groups[1].Value -split "`r?`n")) {
-        if ($line -match '^\s*[-*]\s+`?([^`\s]+)`?') { $paths += ($Matches[1] -replace '\\', '/').TrimStart('./') }
-    }
-    return , $paths
-}
-
-function Assert-BaselinesUnmoved {
-    if ($null -eq $script:BaselineSnapshot) { return }
-    $now = Get-BaselineSnapshot
-    $approved = Get-ApprovedBaselines
-    $moved = @(); $gone = @()
-    foreach ($rel in @($script:BaselineSnapshot.Keys)) {
-        if (-not $now.ContainsKey($rel)) { $gone += $rel; continue }
-        if ($now[$rel] -ne $script:BaselineSnapshot[$rel] -and ($approved -notcontains $rel)) { $moved += $rel }
-    }
-    if ($gone.Count -gt 0) { Write-RunLog "baseline guard: removed (not stopped): $($gone -join ', ')" }
-    if ($moved.Count -gt 0) {
-        $list = $moved -join ', '
-        Write-Host "An approved baseline image changed without the human's approval: $list" -ForegroundColor Red
-        Write-RunLog "baseline guard: changed without approval: $list"
-        Stop-Run 4 "FAILED" ("An approved screenshot baseline changed without the human's approval: $list. " +
-            "Re-recording a baseline is the human's decision (ADR-036): put it back with git checkout, or list it " +
-            "under '## Baselines' in .harness/run/DECISIONS.md to approve the new version.")
-    }
-    $script:BaselineSnapshot = $now
-}
-
+# ---------- Baseline guard (ADR-036) ----------
+# Approved screenshot baselines are the exam a UI is graded against, and the engine never moves one.
+# The record routes are denied above, but a baseline can still change another way: with
+# roborazzi.test.record=true in gradle.properties the ordinary test task re-records every image.
+# Measured on Foreman-Proving-Ground, 2026-10-05: a contrast defect was recorded as the new truth and
+# verifyRoborazziDebug then passed with the defect in place. So the Runtime checks the files
+# themselves after every iteration, whatever changed them. New baselines are free; an existing one
+# may change only when the human lists it under "## Baselines" in DECISIONS.md.
+$BaselinePathspec = ':(glob)**/src/test/screenshots/**'
+$script:BaselineSnapshot = $null
+
+function Get-BaselineSnapshot {
+    $snapshot = @{}
+    $files = & git ls-files -c -o --exclude-standard -- $BaselinePathspec 2>$null
+    foreach ($rel in @($files)) {
+        if (-not $rel) { continue }
+        $full = Join-Path $RepoRoot $rel
+        if (Test-Path -LiteralPath $full -PathType Leaf) { $snapshot[$rel] = (Get-FileHash -LiteralPath $full -Algorithm SHA256).Hash }
+    }
+    return $snapshot
+}
+
+function Get-ApprovedBaselines {
+    $decisions = Join-Path $RunDir "DECISIONS.md"
+    if (-not (Test-Path $decisions)) { return , @() }
+    $text = [regex]::Replace((Get-Content $decisions -Raw -Encoding UTF8), '(?s)<!--.*?-->', '')
+    $section = [regex]::Match($text, '(?ms)^##[ \t]+Baselines[ \t]*\r?$(.*?)(?=^##[ \t]|\z)')
+    if (-not $section.Success) { return , @() }
+    $paths = @()
+    foreach ($line in ($section.Groups[1].Value -split "`r?`n")) {
+        if ($line -match '^\s*[-*]\s+`?([^`\s]+)`?') { $paths += ($Matches[1] -replace '\\', '/').TrimStart('./') }
+    }
+    return , $paths
+}
+
+function Assert-BaselinesUnmoved {
+    if ($null -eq $script:BaselineSnapshot) { return }
+    $now = Get-BaselineSnapshot
+    $approved = Get-ApprovedBaselines
+    $moved = @(); $gone = @()
+    foreach ($rel in @($script:BaselineSnapshot.Keys)) {
+        if (-not $now.ContainsKey($rel)) { $gone += $rel; continue }
+        if ($now[$rel] -ne $script:BaselineSnapshot[$rel] -and ($approved -notcontains $rel)) { $moved += $rel }
+    }
+    if ($gone.Count -gt 0) { Write-RunLog "baseline guard: removed (not stopped): $($gone -join ', ')" }
+    if ($moved.Count -gt 0) {
+        $list = $moved -join ', '
+        Write-Host "An approved baseline image changed without the human's approval: $list" -ForegroundColor Red
+        Write-RunLog "baseline guard: changed without approval: $list"
+        Stop-Run 4 "FAILED" ("An approved screenshot baseline changed without the human's approval: $list. " +
+            "Re-recording a baseline is the human's decision (ADR-036): put it back with git checkout, or list it " +
+            "under '## Baselines' in .harness/run/DECISIONS.md to approve the new version.")
+    }
+    $script:BaselineSnapshot = $now
+}
+
 # ---------- The loop ----------
 $consecutiveCrashes = 0
 $quotaWaits = 0

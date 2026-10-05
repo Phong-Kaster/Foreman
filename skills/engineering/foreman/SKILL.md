@@ -188,8 +188,9 @@ stops; in an Autonomous run, handle it as step 7b does in addition to the matchi
 
 `.harness/run/ESCALATION.md` is a **queue**, so expect more than one pending entry — the engine parks
 questions and keeps working, and only stops when it runs out of executable work (ADR-007). An entry
-is pending when its `Status` is `pending` **and** `.harness/run/DECISIONS.md` has no `## D-00N`
-heading for its id yet. Read every pending entry. Do not look for answers inside `ESCALATION.md`:
+is pending when its `Status` is `pending` **and** `.harness/run/DECISIONS.md` has no answer under a
+`## D-00N` heading for its id yet. A heading with nothing under it but comments is not an answer: the
+file is provisioned with an empty `## D-001`. Read every pending entry. Do not look for answers inside `ESCALATION.md`:
 its `### Decision` section is a pointer, never filled in (ADR-025).
 
 Open the batch with a heading that names it as a Foreman decision request, not an ordinary

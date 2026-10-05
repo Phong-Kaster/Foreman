@@ -1797,6 +1797,39 @@ R1. [machine] the demo screen is gone
         } finally { Remove-TestRepo -TestRepo $repo }
     }
 
+    # Kanso's first gate, 2026-10-05: DECISIONS.md is provisioned from a template that already carries
+    # an empty "## D-001" over a placeholder comment. The page counted that heading as the answer, so
+    # it showed nothing waiting and the DoD "Approved" while D-001 was pending. The test above missed
+    # it because its repository had no template, so the provisioned file had no heading at all.
+    It "does not take the provisioned, empty D-001 heading for an answer" {
+        $repo = New-DodRepo
+        try {
+            Copy-Item (Join-Path $RepoRootDir ".harness/loop/templates/DECISIONS.template.md") (Join-Path $repo ".harness/loop/templates/")
+            Set-Dod $repo $SecondGoal
+            Save-All $repo "loop(bootstrap): plan the second goal" "2026-09-10T10:00:00+07:00"
+            # The entry Kanso's bootstrap queued, in its shape: the fake ESCALATE writes only STATUS.md.
+            Set-Content -Path (Join-Path $repo ".harness/run/ESCALATION.md") -Value @(
+                "# ESCALATION", "", "---", "", "## D-001 - Approve the Definition of Done", "",
+                "- **Status:** pending", "- **Type:** DoD approval", "", "### Question", "",
+                "Approve ``.harness/run/DoD.md``.")
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("ESCALATE|approve the Definition of Done")
+            Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "2", "-NoOpenEscalation") | Should Be 3
+            $decisions = Join-Path $repo ".harness/run/DECISIONS.md"
+            (Get-Content $decisions -Raw) | Should Match '(?m)^## D-001'
+            $html = Get-DodPage $repo
+            $html | Should Match 'badge awaiting'
+            $html | Should Match 'class="count hot">1<'
+            $html | Should Match 'data-default-tab="needs"'
+
+            $text = (Get-Content $decisions -Raw) -replace '<!-- Your decision and rationale\. -->', 'Approved as written.'
+            [System.IO.File]::WriteAllText($decisions, $text, (New-Object System.Text.UTF8Encoding($false)))
+            Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-Page", "-NoOpenEscalation") | Should Be 0
+            $html = Get-DodPage $repo
+            $html | Should Match 'badge approved'
+            $html | Should Match 'class="count ">0<'
+        } finally { Remove-TestRepo -TestRepo $repo }
+    }
+
     It "-Page leaves the Run Mode and a live run's lock alone" {
         $repo = New-DodRepo
         $leaf = Split-Path $repo -Leaf
