@@ -270,7 +270,14 @@ function Compile-PermissionSettings {
         # The two device-automation MCP servers ADR-031 reviewed and rejected, denied outright so no
         # ledger can grant them back.
         "mcp__android-agent",
-        "mcp__mobile-mcp"
+        "mcp__mobile-mcp",
+        # Approved screenshot baselines are never re-recorded by the engine (ADR-036). These are every
+        # Gradle route to it measured against the real matcher: the record and clear tasks, and the
+        # record property on any task. New baselines go through bin/foreman-record-baselines.ps1.
+        "Bash(*gradlew*recordRoborazzi*)",
+        "Bash(*gradlew*RecordRoborazzi*)",
+        "Bash(*gradlew*clearRoborazzi*)",
+        "Bash(*gradlew*roborazzi.test.record*)"
     )
 
     # Autonomous mode inverts the model (ADR-027): every tool allowed, minus the Deny List shipped in
@@ -1385,6 +1392,62 @@ if ($Page) {
     exit 0
 }
 
+# ---------- Baseline guard (ADR-036) ----------
+# Approved screenshot baselines are the exam a UI is graded against, and the engine never moves one.
+# The record routes are denied above, but a baseline can still change another way: with
+# roborazzi.test.record=true in gradle.properties the ordinary test task re-records every image.
+# Measured on Foreman-Proving-Ground, 2026-10-05: a contrast defect was recorded as the new truth and
+# verifyRoborazziDebug then passed with the defect in place. So the Runtime checks the files
+# themselves after every iteration, whatever changed them. New baselines are free; an existing one
+# may change only when the human lists it under "## Baselines" in DECISIONS.md.
+$BaselinePathspec = ':(glob)**/src/test/screenshots/**'
+$script:BaselineSnapshot = $null
+
+function Get-BaselineSnapshot {
+    $snapshot = @{}
+    $files = & git ls-files -c -o --exclude-standard -- $BaselinePathspec 2>$null
+    foreach ($rel in @($files)) {
+        if (-not $rel) { continue }
+        $full = Join-Path $RepoRoot $rel
+        if (Test-Path -LiteralPath $full -PathType Leaf) { $snapshot[$rel] = (Get-FileHash -LiteralPath $full -Algorithm SHA256).Hash }
+    }
+    return $snapshot
+}
+
+function Get-ApprovedBaselines {
+    $decisions = Join-Path $RunDir "DECISIONS.md"
+    if (-not (Test-Path $decisions)) { return , @() }
+    $text = [regex]::Replace((Get-Content $decisions -Raw -Encoding UTF8), '(?s)<!--.*?-->', '')
+    $section = [regex]::Match($text, '(?ms)^##[ \t]+Baselines[ \t]*\r?$(.*?)(?=^##[ \t]|\z)')
+    if (-not $section.Success) { return , @() }
+    $paths = @()
+    foreach ($line in ($section.Groups[1].Value -split "`r?`n")) {
+        if ($line -match '^\s*[-*]\s+`?([^`\s]+)`?') { $paths += ($Matches[1] -replace '\\', '/').TrimStart('./') }
+    }
+    return , $paths
+}
+
+function Assert-BaselinesUnmoved {
+    if ($null -eq $script:BaselineSnapshot) { return }
+    $now = Get-BaselineSnapshot
+    $approved = Get-ApprovedBaselines
+    $moved = @(); $gone = @()
+    foreach ($rel in @($script:BaselineSnapshot.Keys)) {
+        if (-not $now.ContainsKey($rel)) { $gone += $rel; continue }
+        if ($now[$rel] -ne $script:BaselineSnapshot[$rel] -and ($approved -notcontains $rel)) { $moved += $rel }
+    }
+    if ($gone.Count -gt 0) { Write-RunLog "baseline guard: removed (not stopped): $($gone -join ', ')" }
+    if ($moved.Count -gt 0) {
+        $list = $moved -join ', '
+        Write-Host "An approved baseline image changed without the human's approval: $list" -ForegroundColor Red
+        Write-RunLog "baseline guard: changed without approval: $list"
+        Stop-Run 4 "FAILED" ("An approved screenshot baseline changed without the human's approval: $list. " +
+            "Re-recording a baseline is the human's decision (ADR-036): put it back with git checkout, or list it " +
+            "under '## Baselines' in .harness/run/DECISIONS.md to approve the new version.")
+    }
+    $script:BaselineSnapshot = $now
+}
+
 # ---------- The loop ----------
 $consecutiveCrashes = 0
 $quotaWaits = 0
@@ -1393,6 +1456,8 @@ if ($priorIterations -gt 0) {
     Write-Host "Resuming: $priorIterations iteration(s) already checkpointed on this branch." -ForegroundColor DarkGray
     Write-RunLog "resuming at iteration $($priorIterations + 1) - $priorIterations already checkpointed"
 }
+
+$script:BaselineSnapshot = Get-BaselineSnapshot
 
 try {
 for ($iteration = $priorIterations + 1; $iteration -le $MaxIterations; $iteration++) {
@@ -1462,6 +1527,8 @@ for ($iteration = $priorIterations + 1; $iteration -le $MaxIterations; $iteratio
     $timeoutKind = Invoke-EngineOnce -EngineArgs $claudeArgs -IterStart $IterStart -Stream (-not $QuietEngine)
 
     $status = Read-ExecutionStatus
+    # Before anything else reacts to this iteration: a moved baseline is a changed exam.
+    Assert-BaselinesUnmoved
 
     # ---- Quota comes first: it is neither a Crash nor an engineering outcome (ADR-012) ----
     # A rejected invocation never ran, so the Watchdog counter must not move. Checking this before

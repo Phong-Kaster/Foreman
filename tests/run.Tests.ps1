@@ -1951,3 +1951,185 @@ Describe "A DoD criterion is written twice, once for the person and once for the
         $template | Should Match '(?m)^R1\. \[machine\] .+\r?\n    Proof: '
     }
 }
+
+Describe "Roborazzi is the default UI check for Android, and its baselines are out of the engine's reach (ADR-036)" {
+
+    # Decided by the human, 2026-10-05, after a spike on Foreman-Proving-Ground (loop/music-player-v3):
+    # Roborazzi captured the real screens after taps on the JVM, caught an injected contrast defect in
+    # 21 s, and went green again once it was fixed. The same spike measured the hole these close:
+    # `testDebugUnitTest -Proborazzi.test.record=true` re-recorded the defect as correct, and verify
+    # then passed with the defect in place.
+
+    $Wrapper = Join-Path $RepoRootDir ".harness/loop/bin/foreman-record-baselines.ps1"
+
+    function New-BaselineRepo([switch]$WithRealBaseline) {
+        $repo = New-TestRepo
+        $dir = Join-Path $repo "app/src/test/screenshots"
+        New-Item -ItemType Directory -Path $dir -Force | Out-Null
+        Set-Content -Path (Join-Path $dir "1_library.png") -Value "approved library" -Encoding ASCII
+        Set-Content -Path (Join-Path $dir "2_playing.png") -Value "approved playing" -Encoding ASCII
+        Push-Location $repo
+        try {
+            & git add -A 2>$null | Out-Null
+            & git -c user.email=t@l -c user.name=t commit --quiet -m "approved baselines" 2>$null | Out-Null
+        } finally { Pop-Location }
+        return $repo
+    }
+    function Set-Approvals([string]$repo, [string[]]$paths) {
+        New-Item -ItemType Directory -Path (Join-Path $repo ".harness/run") -Force | Out-Null
+        $lines = @("# DECISIONS", "", "## Baselines", "") + @($paths | ForEach-Object { "- " + $_ })
+        Set-Content -Path (Join-Path $repo ".harness/run/DECISIONS.md") -Value $lines
+    }
+
+    It "denies every Gradle route to re-recording in both Run Modes, and grants verify, compare and the wrapper" {
+        foreach ($mode in @("Collaborative", "Autonomous")) {
+            $repo = New-TestRepo
+            try {
+                $argLog = Join-Path $repo "args.txt"
+                $env:FAKE_CLAUDE_ARGLOG = $argLog
+                New-Item -ItemType Directory -Path (Join-Path $repo ".harness/loop/capabilities") -Force | Out-Null
+                Copy-Item (Join-Path $RepoRootDir ".harness/loop/capabilities/baseline.json") (Join-Path $repo ".harness/loop/capabilities/baseline.json")
+                Set-FakeClaudeQueue -TestRepo $repo -Directives @("DONE|ok")
+                Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "2", "-Mode", $mode) | Out-Null
+                $settingsPath = ((Get-Content $argLog -Raw) -split '--settings\s+')[1].Split(' ')[0].Trim()
+                $settings = Get-Content $settingsPath -Raw | ConvertFrom-Json
+                foreach ($rule in @("Bash(*gradlew*recordRoborazzi*)", "Bash(*gradlew*RecordRoborazzi*)", "Bash(*gradlew*clearRoborazzi*)", "Bash(*gradlew*roborazzi.test.record*)")) {
+                    ($settings.permissions.deny -contains $rule) | Should Be $true
+                }
+                if ($mode -eq "Collaborative") {
+                    ($settings.permissions.allow -contains "Bash(*gradlew*verifyRoborazzi*)") | Should Be $true
+                    ($settings.permissions.allow -contains "Bash(powershell -NoProfile -File .harness/loop/bin/foreman-record-baselines.ps1*)") | Should Be $true
+                }
+            } finally {
+                Remove-Item Env:\FAKE_CLAUDE_ARGLOG -ErrorAction SilentlyContinue
+                Remove-TestRepo -TestRepo $repo
+            }
+        }
+    }
+
+    It "stops the run when an approved baseline changes, whatever changed it" {
+        $repo = New-BaselineRepo
+        try {
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("TOUCH:app/src/test/screenshots/2_playing.png|COMMIT|CONTINUE|recorded the defect as correct", "DONE|never reached")
+            Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "3") | Should Be 4
+            $log = Get-Content (Join-Path $env:TEMP ("loop-run-" + (Split-Path $repo -Leaf) + ".log")) -Raw
+            $log | Should Match 'baseline guard: changed without approval: app/src/test/screenshots/2_playing\.png'
+        } finally { Remove-TestRepo -TestRepo $repo }
+    }
+
+    It "lets a baseline change once the human lists it under ## Baselines, and never minds a new one" {
+        $repo = New-BaselineRepo
+        try {
+            Set-Approvals $repo @("app/src/test/screenshots/2_playing.png")
+            Set-Content -Path (Join-Path $repo "app/src/test/screenshots/3_now_playing.png") -Value "new" -Encoding ASCII
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("TOUCH:app/src/test/screenshots/2_playing.png|COMMIT|DONE|re-recorded with approval")
+            Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "2") | Should Be 0
+        } finally { Remove-TestRepo -TestRepo $repo }
+    }
+
+    It "records new baselines through the wrapper and puts every existing one back" {
+        $repo = New-BaselineRepo
+        try {
+            # A Gradle stand-in that does what a record task does: rewrites what exists, adds what does not.
+            Set-Content -Path (Join-Path $repo "gradlew.bat") -Encoding ASCII -Value @(
+                "@echo off",
+                "echo gradle %* > gradle-args.txt",
+                "echo rewritten > app\src\test\screenshots\1_library.png",
+                "echo rewritten > app\src\test\screenshots\2_playing.png",
+                "echo new screen > app\src\test\screenshots\3_now_playing.png",
+                "exit /b 0")
+            Set-Approvals $repo @("app/src/test/screenshots/2_playing.png")
+            Push-Location $repo
+            try {
+                $out = & powershell -NoProfile -ExecutionPolicy Bypass -File $Wrapper -Module app 2>$null | Out-String
+                $LASTEXITCODE | Should Be 0
+            } finally { Pop-Location }
+            (Get-Content (Join-Path $repo "gradle-args.txt") -Raw) | Should Match ':app:recordRoborazziDebug'
+            (Get-Content (Join-Path $repo "app/src/test/screenshots/1_library.png") -Raw).Trim() | Should Be "approved library"
+            (Get-Content (Join-Path $repo "app/src/test/screenshots/2_playing.png") -Raw).Trim() | Should Be "rewritten"
+            (Get-Content (Join-Path $repo "app/src/test/screenshots/3_now_playing.png") -Raw).Trim() | Should Be "new screen"
+            $out | Should Match 'new baselines recorded: 1'
+            $out | Should Match 'existing baselines put back unchanged: 1'
+            $out | Should Match "re-recorded with the human's approval: 1"
+        } finally { Remove-TestRepo -TestRepo $repo }
+    }
+
+    It "refuses a module, variant or test filter that could carry shell syntax" {
+        $repo = New-BaselineRepo
+        try {
+            Push-Location $repo
+            try {
+                & powershell -NoProfile -ExecutionPolicy Bypass -File $Wrapper -Module "app;del x" 2>$null | Out-Null
+                $LASTEXITCODE | Should Be 3
+                & powershell -NoProfile -ExecutionPolicy Bypass -File $Wrapper -Module app -Tests "a & b" 2>$null | Out-Null
+                $LASTEXITCODE | Should Be 3
+            } finally { Pop-Location }
+        } finally { Remove-TestRepo -TestRepo $repo }
+    }
+
+    It "has ENGINE.md make Roborazzi the Android default, from the pack that ships with the runtime" {
+        $spec = Get-Content (Join-Path $RepoRootDir ".harness/loop/ENGINE.md") -Raw
+        $spec | Should Match 'Roborazzi is the default UI check'
+        $spec | Should Match '\.harness/loop/packs/android/roborazzi\.md'
+        # Decided by the human the same day: the default libraries are not an approval item at the gate.
+        $spec | Should Match 'without asking: the human made them Foreman''s standing toolchain'
+        $spec | Should Match 'not an approval item at the DoD gate'
+        (Test-Path (Join-Path $RepoRootDir ".harness/loop/packs/android/roborazzi.md")) | Should Be $true
+        $policies = Get-Content (Join-Path $RepoRootDir ".harness/loop/POLICIES.md") -Raw
+        $policies | Should Match 'foreman-record-baselines\.ps1'
+    }
+}
+
+Describe "Foreman declares what it installs, for itself and for the consumer, and shows both (ADR-036)" {
+
+    # Asked for by the human, 2026-10-05: a section in README and the guide naming every library and
+    # repository Foreman uses, why, and where it comes from; Foreman's own tools kept apart from what
+    # goes into a consumer repository; and the tools fetched or offered automatically wherever Foreman
+    # is installed. One manifest feeds all of it, so these keep the three in step.
+
+    $Deps = Get-Content (Join-Path $RepoRootDir ".harness/loop/dependencies.json") -Raw | ConvertFrom-Json
+    $Readme = Get-Content (Join-Path $RepoRootDir "README.md") -Raw -Encoding UTF8
+    $Guide = Get-Content (Join-Path $RepoRootDir "docs/index.html") -Raw -Encoding UTF8
+    $Skill = Get-Content (Join-Path $RepoRootDir "skills/engineering/foreman/SKILL.md") -Raw -Encoding UTF8
+
+    It "keeps two groups that never mix, each entry with a reason and a source" {
+        @($Deps.foreman).Count | Should BeGreaterThan 0
+        @($Deps.consumer.android).Count | Should BeGreaterThan 0
+        foreach ($d in @($Deps.foreman) + @($Deps.consumer.android)) {
+            "$($d.why)" | Should Not BeNullOrEmpty
+            "$($d.repo)" | Should Match '^https://'
+        }
+        # A library that goes into the consumer's build is never also one of Foreman's own tools.
+        $own = @($Deps.foreman | ForEach-Object { $_.name })
+        @($Deps.consumer.android | Where-Object { $own -contains $_.name }).Count | Should Be 0
+    }
+
+    It "lists every entry, with its source, in README and in both halves of the guide's section" {
+        $Readme | Should Match '## What Foreman depends on'
+        $Readme | Should Match "### Foreman's own tools"
+        $Readme | Should Match '### Libraries Foreman adds to your repository'
+        $Guide | Should Match 'id="dependencies"'
+        $Guide | Should Match 'href="#dependencies"'
+        foreach ($d in @($Deps.foreman) + @($Deps.consumer.android)) {
+            $Readme.Contains($d.name) | Should Be $true
+            $Readme.Contains($d.repo) | Should Be $true
+            $Guide.Contains("href=`"$($d.repo)`"") | Should Be $true
+        }
+    }
+
+    It "has /foreman check Foreman's own tools before every launch and ask before installing one" {
+        $Skill | Should Match '## 0c\. Make sure Foreman''s own tools are here'
+        $Skill | Should Match 'dependencies\.json'
+        $Skill | Should Match 'Never install system software unasked'
+        $Skill | Should Match '\*\*Do not\s+install those here\.\*\*'
+        $zeroC = $Skill.IndexOf('## 0c.'); $one = $Skill.IndexOf('## 1. Locate the installed runtime files')
+        ($zeroC -gt 0 -and $zeroC -lt $one) | Should Be $true
+    }
+
+    It "ships the manifest and the packs with the runtime, so every install has them" {
+        $Skill | Should Match '`dependencies\.json`, `agents/`, `bin/`, `capabilities/`,\s*`packs/`'
+        $Deps.consumer.android | Where-Object { $_.default } | ForEach-Object {
+            (Test-Path (Join-Path $RepoRootDir $_.pack)) | Should Be $true
+        }
+    }
+}

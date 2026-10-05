@@ -298,6 +298,8 @@ Foreman/
 │   ├── ENGINE.md                     the AI's operating contract
 │   ├── POLICIES.md                   engineering policy (retries, reviews, evidence)
 │   ├── capabilities/baseline.json    the starter keyring — safe stuff only
+│   ├── dependencies.json             what Foreman installs, for itself and for your repo
+│   ├── packs/                        stack knowledge that ships with the runtime (Roborazzi)
 │   ├── templates/                    blueprints for .harness/run/ and knowledge/
 │   └── scripts/run.ps1               the loop script
 │
@@ -337,6 +339,40 @@ your-repo/
     └── DOMAIN.md             ← your domain rules and formulas. Optional. Only YOU
                                 write it. IMPLEMENT it; it beats the code.
 ```
+
+---
+
+## What Foreman depends on
+
+Two lists that never mix ([ADR-036](./docs/adr/ADR-036-roborazzi-is-the-default-ui-check-for-android-and-foreman-declares-what-it-installs.md)):
+
+- **Foreman's own tools** run on the machine you launch Foreman from. `/foreman` checks them before every launch, lets `npx` fetch the ones it can, and **asks you before installing anything else** on your machine.
+- **Libraries for your repository** are added by the engine to *your project's* build at the start of a run. They are test-only, never shipped in your app. The **default** ones are added automatically, with nothing for you to approve, unless your `PRD.md` or `DOMAIN.md` forbids new dependencies. An opt-in one is proposed in the checklist you approve.
+
+One file holds both lists: [`.harness/loop/dependencies.json`](./.harness/loop/dependencies.json).
+
+### Foreman's own tools
+
+| Tool | Why Foreman uses it | Needed | Installed by | Source |
+|---|---|---|---|---|
+| Claude Code CLI | Runs the engine (claude -p, one invocation per iteration) and the /foreman skill itself. | required | you, once - `/foreman` shows the command and asks first | [anthropics/claude-code](https://github.com/anthropics/claude-code) |
+| Git | Every Stable Checkpoint is a commit on the Loop Branch, and every earlier Definition of Done is read back from history. | required | you, once - `/foreman` shows the command and asks first | [git/git](https://github.com/git/git) |
+| Windows PowerShell 5.1 | Runs the runtime (run.ps1) and the wrappers in .harness/loop/bin/. Built into Windows; the linked repository is its open-source successor. | required | built into Windows | [PowerShell/PowerShell](https://github.com/PowerShell/PowerShell) |
+| Node.js (npx) | npx fetches and runs the skills CLI and the Context7 CLI on demand, so neither is installed globally. | required | you, once - `/foreman` shows the command and asks first | [nodejs/node](https://github.com/nodejs/node) |
+| skills CLI | Installs Foreman into a repository and updates Foreman's own skills before every launch. | required | fetched by `npx` when needed | [vercel-labs/skills](https://github.com/vercel-labs/skills) |
+| Context7 CLI (ctx7) | After a failure that names a library's API, the engine looks up that library's current documentation before retrying (ADR-032). | optional | fetched by `npx` when needed | [upstash/context7](https://github.com/upstash/context7) |
+| Android SDK Platform-Tools (adb) | foreman-device.ps1 drives a phone or emulator through it, on the debug build only (ADR-033). Needed only when a criterion must run on a device. | optional | you, once - `/foreman` shows the command and asks first | [android.googlesource.com/platform/packages/modules/adb](https://android.googlesource.com/platform/packages/modules/adb) |
+| Pester | Tests Foreman's own runtime. Used only when developing Foreman in this repository; a consumer repository never needs it. | optional | only for developing Foreman itself | [pester/Pester](https://github.com/pester/Pester) |
+
+### Libraries Foreman adds to your repository
+
+| Library | Stack | Why | Default | Version | Source |
+|---|---|---|---|---|---|
+| Roborazzi | android | Foreman's default UI check: captures the app's real screens after taps and navigation, on the JVM with no device, and fails with a reference/diff/new image when a screen changes (ADR-036). | **default** | `1.76.0` | [takahirom/roborazzi](https://github.com/takahirom/roborazzi) |
+| Robolectric | android | Runs the app's own Activity, fragments, ViewModels and dependency injection on the JVM, which is what Roborazzi renders. | **default** | `4.17` | [robolectric/robolectric](https://github.com/robolectric/robolectric) |
+| AndroidX Test | android | ActivityScenario launches the real Activity, and AndroidJUnit4 runs the test under Robolectric. | **default** | `1.7.0 / 1.3.0` | [android/android-test](https://github.com/android/android-test) |
+| Compose UI Test | android | Taps, waits for content and finds nodes in the screen under test (androidx.compose.ui:ui-test-junit4, versioned by the Compose BOM). | **default** | `Compose BOM` | [androidx/androidx](https://github.com/androidx/androidx) |
+| Compose Preview Screenshot Testing | android | Google's host-side screenshot test of @Preview composables. Opt-in only, for static previews; Roborazzi is the default because it also covers screens after interaction. | opt-in | `AGP 9+` | [android.googlesource.com/platform/tools/base](https://android.googlesource.com/platform/tools/base) |
 
 ---
 

@@ -20,12 +20,12 @@ repository — and therefore the installer — is concerned. That false positive
 
 ```bash
 cd <repo root>
-for p in "ENGINE.md:ENGINE.md"          "POLICIES.md:POLICIES.md"          "capabilities/baseline.json:capabilities/baseline.json"          "run.ps1:scripts/run.ps1"          "models.json:models.json"; do
+for p in "dependencies.json:dependencies.json" "ENGINE.md:ENGINE.md"          "POLICIES.md:POLICIES.md"          "capabilities/baseline.json:capabilities/baseline.json"          "run.ps1:scripts/run.ps1"          "models.json:models.json"; do
   h1=$(git hash-object ".harness/loop/${p%%:*}")
   h2=$(git hash-object "skills/engineering/foreman/${p##*:}")
   [ "$h1" = "$h2" ] || echo "MISMATCH ${p%%:*}"
 done
-for f in .harness/loop/templates/* .harness/loop/agents/* .harness/loop/bin/*; do
+for f in .harness/loop/templates/* .harness/loop/agents/* .harness/loop/bin/* $(find .harness/loop/packs -type f); do
   t="skills/engineering/foreman/${f#.harness/loop/}"
   [ -f "$t" ] && [ "$(git hash-object "$f")" = "$(git hash-object "$t")" ] || echo "MISMATCH $f"
 done
@@ -47,7 +47,7 @@ no API calls and no real `claude` — the `-ClaudeCommand` seam drives a stub.
 Invoke-Pester -Script @{ Path = 'tests/run.Tests.ps1' } -PassThru
 ```
 
-Expected: **110 passed, 0 failed**. Several `Write-Error` blocks appear in the output — they are the
+Expected: **120 passed, 0 failed**. Several `Write-Error` blocks appear in the output — they are the
 prerequisite tests asserting those exact failures, not test failures. Read the `Passed:`/`Failed:`
 counts, not the presence of red text.
 
