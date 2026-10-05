@@ -156,6 +156,10 @@ _Avoid_: Safe command, undo
 `FOREMAN.html` at the repository root — the one page a person reads, rendered mechanically by the Runtime from the engine's Markdown, never by the engine, after every iteration and on every exit (ADR-034). Four tabs: **Needs you** (pending decisions and checks awaiting a person), **Definition of Done** (every DoD in git, newest first), **This run** (outcome, Open Issues, Assumptions, Recovery entries, state) and **Suggestions** (the Suggestion Box). Excluded from git through `.git/info/exclude`.
 _Avoid_: Report page, dashboard
 
+**Baseline** (screenshot):
+An approved image a screenshot test compares the screen against — under `<module>/src/test/screenshots/` for Roborazzi (ADR-036). New baselines are added through `bin/foreman-record-baselines.ps1`; an existing one changes only when the human lists it under `## Baselines` in `DECISIONS.md`, and the Runtime stops the run otherwise.
+_Avoid_: Golden, snapshot (Roborazzi's and Paparazzi's own words for it)
+
 **Proof** (of a DoD criterion):
 The indented `Proof:` line under a criterion's plain sentence: everything a command or the Verifier needs to prove it — commands, files, the state it is driven from. The sentence is the person's and is what they approve; the Proof is the engine's (ADR-035). A Proof that checks less than its sentence promises is a defect.
 _Avoid_: Evidence (that is what running the Proof produces)

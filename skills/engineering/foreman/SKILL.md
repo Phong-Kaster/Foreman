@@ -58,7 +58,7 @@ commands of step 0: they switch a run in progress and must not change its runtim
 1. **Find Foreman's skills.** Read `skills-lock.json` and take every skill whose `source` is
    `Phong-Kaster/Foreman` (`foreman` itself, and any pack such as `library-docs` or the
    `android-*` packs). Update only those — never the repository's other skills. No lock file, or no
-   Foreman entry: skip to step 1.
+   Foreman entry: skip to step 0c.
 2. **Refuse to mix in local edits.** If `git status --porcelain` already shows changes under those
    skills' directories (`.agents/skills/<name>`, `.claude/skills/<name>`) or `skills-lock.json`,
    do not update: tell the user their installed skill has local changes, and continue with it.
@@ -79,15 +79,43 @@ commands of step 0: they switch a run in progress and must not change its runtim
 6. **If the update fails** — offline, registry down, a timeout — continue with the installed
    version and tell the user in one line. Never block a run on an update check.
 
+## 0c. Make sure Foreman's own tools are here — every launch
+
+`<SkillDir>/dependencies.json` (find `<SkillDir>` as step 1 describes) lists what Foreman needs, in
+two groups that never mix (ADR-036):
+
+- **`foreman`**: tools Foreman itself runs on this machine. Check them here.
+- **`consumer`**: libraries the engine adds to this repository's own build at Bootstrap. **Do not
+  install those here.** The engine adds them on the Loop Branch at Bootstrap: the `default` ones without
+  asking, any other one only once the human approves it in the DoD.
+
+For each `foreman` entry that is not `development_only`, run its `check` command, with a timeout of a
+minute:
+
+1. **It passes:** nothing to do.
+2. **It fails and the entry is `auto`:** npx fetches it on first use. Run the `check` once more, so the
+   fetch happens now rather than mid-run. If it still fails, say so in one line and continue.
+3. **It fails and the entry is not `auto`:** this is software on the user's machine. Name the tool,
+   say what it is for (`why`), and show its `install` command. Run that command only if the user says
+   yes. Never install system software unasked.
+4. **A `required` tool is still missing:** stop and say which one, because the run cannot work without
+   it. An optional one (`required: false`) never blocks: say what will not work without it — device
+   checks without adb, documentation lookups without Context7 — and continue.
+
+Report the result in one line when everything passes. Skip this step for the `mode` commands of
+step 0, as step 0b does.
+
 ## 1. Locate the installed runtime files
 
 Check `.claude/skills/foreman/` and `.agents/skills/foreman/` (identical copies) —
 use whichever exists; call it `<SkillDir>` below. It contains `ENGINE.md`, `POLICIES.md`,
-`models.json`, `agents/`, `bin/`, `capabilities/baseline.json`, `templates/`, `scripts/run.ps1`.
+`models.json`, `dependencies.json`, `agents/`, `bin/`, `capabilities/baseline.json`, `packs/`,
+`templates/`, `scripts/run.ps1`.
 
 ## 2. Sync .harness/loop/ at the repo root
 
-Copy `<SkillDir>/ENGINE.md`, `POLICIES.md`, `models.json`, `agents/`, `bin/`, `capabilities/`, `templates/`, and
+Copy `<SkillDir>/ENGINE.md`, `POLICIES.md`, `models.json`, `dependencies.json`, `agents/`, `bin/`, `capabilities/`,
+`packs/`, `templates/`, and
 `scripts/run.ps1` (as `.harness/loop/run.ps1`) into `.harness/loop/` at the repository root, overwriting existing
 copies there.
 Never touch `.harness/run/`, `.harness/knowledge/`, or `PRD.md` — those are per-repo runtime state, not part of

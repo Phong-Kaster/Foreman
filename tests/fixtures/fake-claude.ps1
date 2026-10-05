@@ -29,6 +29,9 @@
                                   Checkpoint), then behaves as <directive>
       SETMODE:<mode>|<directive> -> rewrites <git-dir>/foreman-mode, as the Skill does to switch a
                                   live run, then behaves as <directive>
+      TOUCH:<path>|<directive> -> appends a byte to <path> (relative to the repo root), as anything
+                                  re-recording a screenshot baseline would, then behaves as
+                                  <directive>. Chain it before COMMIT to commit the change.
                                   (e.g. SETMODE:Autonomous|CONTINUE|more work)
 
     An empty or missing queue writes nothing (a crash), so an unconfigured test fails loudly
@@ -159,6 +162,13 @@ if ($directive -match '^WARNED\|(.+)$') {
 if ($directive -match '^SETMODE:([A-Za-z]+)\|(.+)$') {
     $gitDir = (& git rev-parse --absolute-git-dir 2>$null).Trim()
     Set-Content -Path (Join-Path $gitDir "foreman-mode") -Value $Matches[1] -Encoding ascii
+    $directive = $Matches[2]
+}
+
+# TOUCH: changes a file's bytes - here, a screenshot baseline moved by something other than the
+# wrapper (ADR-036) - then behaves as the following directive.
+if ($directive -match '^TOUCH:([^|]+)\|(.+)$') {
+    Add-Content -Path (Join-Path (Get-Location) $Matches[1]) -Value "x" -NoNewline
     $directive = $Matches[2]
 }
 

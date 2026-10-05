@@ -1,0 +1,134 @@
+{
+  "_comment": "Every third-party tool and library Foreman relies on, in two groups that never mix (ADR-036). 'foreman' is what Foreman itself runs on the machine it is launched from; the /foreman skill checks these before every launch, fetches the ones npx can fetch, and asks before installing anything else. 'consumer' is what the engine adds to a consumer repository's own build, by stack, at Bootstrap - test-only. Entries marked default are added without asking (decided by the human, 2026-10-05) unless PRD.md or DOMAIN.md forbids new dependencies; any other entry is proposed in the DoD. README.md and docs/index.html show both tables; a test keeps them in step with this file.",
+
+  "foreman": [
+    {
+      "name": "Claude Code CLI",
+      "repo": "https://github.com/anthropics/claude-code",
+      "why": "Runs the engine (claude -p, one invocation per iteration) and the /foreman skill itself.",
+      "check": "claude --version",
+      "install": "npm install -g @anthropic-ai/claude-code",
+      "auto": false,
+      "required": true
+    },
+    {
+      "name": "Git",
+      "repo": "https://github.com/git/git",
+      "why": "Every Stable Checkpoint is a commit on the Loop Branch, and every earlier Definition of Done is read back from history.",
+      "check": "git --version",
+      "install": "winget install --id Git.Git -e",
+      "auto": false,
+      "required": true
+    },
+    {
+      "name": "Windows PowerShell 5.1",
+      "repo": "https://github.com/PowerShell/PowerShell",
+      "why": "Runs the runtime (run.ps1) and the wrappers in .harness/loop/bin/. Built into Windows; the linked repository is its open-source successor.",
+      "check": "powershell -NoProfile -Command $PSVersionTable.PSVersion.ToString()",
+      "install": "built into Windows",
+      "auto": false,
+      "required": true
+    },
+    {
+      "name": "Node.js (npx)",
+      "repo": "https://github.com/nodejs/node",
+      "why": "npx fetches and runs the skills CLI and the Context7 CLI on demand, so neither is installed globally.",
+      "check": "npx --version",
+      "install": "winget install --id OpenJS.NodeJS.LTS -e",
+      "auto": false,
+      "required": true
+    },
+    {
+      "name": "skills CLI",
+      "repo": "https://github.com/vercel-labs/skills",
+      "why": "Installs Foreman into a repository and updates Foreman's own skills before every launch.",
+      "check": "npx -y skills@latest --version",
+      "install": "fetched by npx on first use",
+      "auto": true,
+      "required": true
+    },
+    {
+      "name": "Context7 CLI (ctx7)",
+      "repo": "https://github.com/upstash/context7",
+      "why": "After a failure that names a library's API, the engine looks up that library's current documentation before retrying (ADR-032).",
+      "check": "CTX7_TELEMETRY_DISABLED=1 npx -y ctx7 --version",
+      "install": "fetched by npx on first use",
+      "auto": true,
+      "required": false
+    },
+    {
+      "name": "Android SDK Platform-Tools (adb)",
+      "repo": "https://android.googlesource.com/platform/packages/modules/adb",
+      "why": "foreman-device.ps1 drives a phone or emulator through it, on the debug build only (ADR-033). Needed only when a criterion must run on a device.",
+      "check": "adb version",
+      "install": "winget install --id Google.PlatformTools -e",
+      "auto": false,
+      "required": false
+    },
+    {
+      "name": "Pester",
+      "repo": "https://github.com/pester/Pester",
+      "why": "Tests Foreman's own runtime. Used only when developing Foreman in this repository; a consumer repository never needs it.",
+      "check": "powershell -NoProfile -Command (Get-Module -ListAvailable Pester | Select-Object -First 1).Version.ToString()",
+      "install": "built into Windows (Pester 3.4)",
+      "auto": false,
+      "required": false,
+      "development_only": true
+    }
+  ],
+
+  "consumer": {
+    "android": [
+      {
+        "name": "Roborazzi",
+        "repo": "https://github.com/takahirom/roborazzi",
+        "why": "Foreman's default UI check: captures the app's real screens after taps and navigation, on the JVM with no device, and fails with a reference/diff/new image when a screen changes (ADR-036).",
+        "artifacts": ["plugin io.github.takahirom.roborazzi", "io.github.takahirom.roborazzi:roborazzi", "io.github.takahirom.roborazzi:roborazzi-compose"],
+        "version": "1.76.0",
+        "scope": "testImplementation",
+        "default": true,
+        "pack": ".harness/loop/packs/android/roborazzi.md"
+      },
+      {
+        "name": "Robolectric",
+        "repo": "https://github.com/robolectric/robolectric",
+        "why": "Runs the app's own Activity, fragments, ViewModels and dependency injection on the JVM, which is what Roborazzi renders.",
+        "artifacts": ["org.robolectric:robolectric"],
+        "version": "4.17",
+        "scope": "testImplementation",
+        "default": true,
+        "pack": ".harness/loop/packs/android/roborazzi.md"
+      },
+      {
+        "name": "AndroidX Test",
+        "repo": "https://github.com/android/android-test",
+        "why": "ActivityScenario launches the real Activity, and AndroidJUnit4 runs the test under Robolectric.",
+        "artifacts": ["androidx.test:core", "androidx.test.ext:junit"],
+        "version": "1.7.0 / 1.3.0",
+        "scope": "testImplementation",
+        "default": true,
+        "pack": ".harness/loop/packs/android/roborazzi.md"
+      },
+      {
+        "name": "Compose UI Test",
+        "repo": "https://github.com/androidx/androidx",
+        "why": "Taps, waits for content and finds nodes in the screen under test (androidx.compose.ui:ui-test-junit4, versioned by the Compose BOM).",
+        "artifacts": ["androidx.compose.ui:ui-test-junit4"],
+        "version": "Compose BOM",
+        "scope": "testImplementation",
+        "default": true,
+        "pack": ".harness/loop/packs/android/roborazzi.md"
+      },
+      {
+        "name": "Compose Preview Screenshot Testing",
+        "repo": "https://android.googlesource.com/platform/tools/base",
+        "why": "Google's host-side screenshot test of @Preview composables. Opt-in only, for static previews; Roborazzi is the default because it also covers screens after interaction.",
+        "artifacts": ["plugin com.android.compose.screenshot"],
+        "version": "AGP 9+",
+        "scope": "screenshotTestImplementation",
+        "default": false,
+        "pack": "skills/knowledge/android/compose-visual-testing"
+      }
+    ]
+  }
+}

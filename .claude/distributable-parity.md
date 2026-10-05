@@ -21,7 +21,9 @@ source in **twelve files** and was missing a template outright.
 | `.harness/loop/capabilities/baseline.json` | `skills/engineering/foreman/capabilities/baseline.json` | includes the Autonomous Deny List |
 | `.harness/loop/templates/` | `skills/engineering/foreman/templates/` | |
 | `.harness/loop/agents/` | `skills/engineering/foreman/agents/` | |
-| `.harness/loop/bin/` | `skills/engineering/foreman/bin/` | the Recovery Wrappers (ADR-027) |
+| `.harness/loop/bin/` | `skills/engineering/foreman/bin/` | the Recovery Wrappers (ADR-027) and the device and baseline wrappers |
+| `.harness/loop/packs/` | `skills/engineering/foreman/packs/` | stack knowledge that ships with the runtime, Roborazzi first (ADR-036) |
+| `.harness/loop/dependencies.json` | `skills/engineering/foreman/dependencies.json` | what Foreman installs, for itself and for the consumer (ADR-036) |
 | `.harness/loop/run.ps1` | `skills/engineering/foreman/scripts/run.ps1` | note the **different filename** |
 
 - `.harness/loop/` is what a **manual install** copies, and what this repository runs against itself.
@@ -45,6 +47,8 @@ cp $L/capabilities/baseline.json $K/capabilities/
 cp -r $L/templates/. $K/templates/
 cp -r $L/agents/.    $K/agents/
 cp -r $L/bin/.       $K/bin/
+cp -r $L/packs/.     $K/packs/
+cp $L/dependencies.json $K/
 cp $L/run.ps1        $K/scripts/run.ps1
 ```
 

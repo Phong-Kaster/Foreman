@@ -61,6 +61,18 @@
         "Bash(powershell -NoProfile -File .harness/loop/bin/foreman-device.ps1 *)",
         "Bash(powershell -NoProfile -ExecutionPolicy Bypass -File .harness/loop/bin/foreman-device.ps1 *)"
       ]
+    },
+    {
+      "intent": "Check an Android app's real screens against their approved screenshots on the JVM, with no device, in every iteration - Roborazzi is Foreman's default UI check for Android (ADR-036, packs/android/roborazzi.md). Verify fails on any change and writes a reference/diff/new comparison image; compare writes the comparison without failing. New baselines are added only through the wrapper, which puts every existing one back.",
+      "command": "gradlew :<module>:verifyRoborazzi<Variant> / compareRoborazzi<Variant>; powershell -NoProfile -File .harness/loop/bin/foreman-record-baselines.ps1 -Module <module>",
+      "scope": "the repository's own screenshot tests and the baselines under <module>/src/test/screenshots/; recording over an existing baseline is denied in every form, and the Runtime stops the run if one changes without the human's approval",
+      "lifetime": "permanent",
+      "allow": [
+        "Bash(*gradlew*verifyRoborazzi*)",
+        "Bash(*gradlew*compareRoborazzi*)",
+        "Bash(powershell -NoProfile -File .harness/loop/bin/foreman-record-baselines.ps1*)",
+        "Bash(powershell -NoProfile -ExecutionPolicy Bypass -File .harness/loop/bin/foreman-record-baselines.ps1*)"
+      ]
     }
   ],
   "autonomous": {

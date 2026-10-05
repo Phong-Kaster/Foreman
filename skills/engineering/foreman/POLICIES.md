@@ -310,6 +310,12 @@ not, and a command matcher cannot tell them apart - so a baseline change is an E
 a goal-scoped grant, never a standing rule. This limit is the only part of the contract that is
 mechanically enforceable, and the rest of this section is worth nothing without it.
 
+Roborazzi's routes are closed mechanically, in both Run Modes (ADR-036). The record and clear tasks
+and the `roborazzi.test.record` property are denied. New baselines go through
+`bin/foreman-record-baselines.ps1`, which puts back every baseline that already existed. The Runtime
+also stops the run if an existing baseline changes by any other route. Earned 2026-10-05: with that
+property set, the ordinary test task re-recorded a contrast defect as correct, and verify then passed.
+
 ## Review Standards
 
 Fresh-Context Review checks, in priority order: correctness, security, edge cases, architecture conformance, dead code, duplication, maintainability, testability, performance.

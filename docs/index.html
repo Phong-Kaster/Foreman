@@ -289,6 +289,7 @@
         <ul>
           <li><a href="#repo-structure" data-lang="vi">Cấu trúc repo Foreman</a><a href="#repo-structure" data-lang="en">Foreman's own structure</a></li>
           <li><a href="#your-repo" data-lang="vi">Trong repo của bạn</a><a href="#your-repo" data-lang="en">In your repo</a></li>
+          <li><a href="#dependencies" data-lang="vi">Foreman dùng những gì</a><a href="#dependencies" data-lang="en">What Foreman depends on</a></li>
         </ul>
       </div>
       <div class="navgroup">
@@ -900,6 +901,8 @@ git merge loop/&lt;prd-slug&gt;               # your call, your hands</code></pr
 │   ├── ENGINE.md                     <span data-lang="vi">hợp đồng vận hành của AI</span><span data-lang="en">the AI's operating contract</span>
 │   ├── POLICIES.md                   <span data-lang="vi">chính sách kỹ thuật (retry, review, bằng chứng)</span><span data-lang="en">engineering policy (retries, reviews, evidence)</span>
 │   ├── capabilities/baseline.json    <span data-lang="vi">chùm chìa khoá khởi điểm — chỉ những thứ an toàn</span><span data-lang="en">the starter keyring — safe stuff only</span>
+│   ├── dependencies.json             <span data-lang="vi">những gì Foreman cài, cho chính nó và cho repo của bạn</span><span data-lang="en">what Foreman installs, for itself and for your repo</span>
+│   ├── packs/                        <span data-lang="vi">kiến thức theo nền tảng đi kèm runtime (Roborazzi)</span><span data-lang="en">stack knowledge that ships with the runtime (Roborazzi)</span>
 │   ├── templates/                    <span data-lang="vi">bản thiết kế cho .harness/run/ và knowledge/</span><span data-lang="en">blueprints for .harness/run/ and knowledge/</span>
 │   └── scripts/run.ps1               <span data-lang="vi">script chạy loop</span><span data-lang="en">the loop script</span>
 │
@@ -927,6 +930,9 @@ git merge loop/&lt;prd-slug&gt;               # your call, your hands</code></pr
 ├── .claude/skills/foreman/   ← <span data-lang="vi">skill đã cài</span><span data-lang="en">the installed skill</span>
 ├── .harness/loop/            ← <span data-lang="vi">runtime, làm mới mỗi lần /foreman</span><span data-lang="en">the runtime, refreshed on every /foreman</span>
 ├── PRD.md                    ← <span data-lang="vi">của bạn. điều bạn muốn.</span><span data-lang="en">yours. what you want.</span>
+├── FOREMAN.html              ← <span data-lang="vi">trang duy nhất bạn đọc: việc cần bạn, mọi</span><span data-lang="en">the one page you read: what needs you, every</span>
+│                               <span data-lang="vi">checklist, lần chạy này, gợi ý. Runtime dựng lại</span><span data-lang="en">checklist, this run, suggestions. Rebuilt by the</span>
+│                               <span data-lang="vi">sau mỗi vòng; không bao giờ được commit.</span><span data-lang="en">runtime after every cycle; never committed.</span>
 ├── .harness/run/             ← <span data-lang="vi">ghi chú làm việc của robot cho lần chạy này. Dùng một lần —</span><span data-lang="en">the robot's working notes for this run. Disposable —</span>
 │                               <span data-lang="vi">bị xoá khỏi đầu nhánh khi xong.</span><span data-lang="en">removed from the branch tip when it finishes.</span>
 └── knowledge/                ← <span data-lang="vi">sống sót qua mọi lần chạy. Ba file, ba quy tắc:</span><span data-lang="en">survives every run. Three files, three rules:</span>
@@ -936,6 +942,104 @@ git merge loop/&lt;prd-slug&gt;               # your call, your hands</code></pr
     │                           <span data-lang="vi">TRÁNH nó. Bị xoá theo từng mục khi đã sửa.</span><span data-lang="en">AVOID it. Deleted per entry once fixed.</span>
     └── DOMAIN.md             ← <span data-lang="vi">quy tắc và công thức của domain bạn. Tuỳ chọn. Chỉ BẠN</span><span data-lang="en">your domain rules and formulas. Optional. Only YOU</span>
                                 <span data-lang="vi">được ghi nó. THỰC THI nó; nó thắng code.</span><span data-lang="en">write it. IMPLEMENT it; it beats the code.</span></code></pre>
+    </section>
+
+    <section class="sec" id="dependencies">
+      <p class="sec-kicker" data-lang="vi">Công cụ và thư viện</p>
+      <p class="sec-kicker" data-lang="en">Tools and libraries</p>
+      <h2 class="reveal" data-lang="vi">Foreman dùng những gì</h2>
+      <h2 class="reveal" data-lang="en">What Foreman depends on</h2>
+
+      <p class="reveal" data-lang="vi">Hai danh sách không bao giờ trộn lẫn (<a href="https://github.com/Phong-Kaster/Foreman/blob/main/docs/adr/ADR-036-roborazzi-is-the-default-ui-check-for-android-and-foreman-declares-what-it-installs.md" target="_blank" rel="noopener">ADR-036</a>):</p>
+      <p class="reveal" data-lang="en">Two lists that never mix (<a href="https://github.com/Phong-Kaster/Foreman/blob/main/docs/adr/ADR-036-roborazzi-is-the-default-ui-check-for-android-and-foreman-declares-what-it-installs.md" target="_blank" rel="noopener">ADR-036</a>):</p>
+      <ul class="reveal">
+        <li data-lang="vi"><strong>Công cụ của chính Foreman</strong> chạy trên máy bạn khởi động Foreman. <code>/foreman</code> kiểm tra chúng trước mỗi lần chạy, để <code>npx</code> tự tải những gì nó tải được, và <strong>hỏi bạn trước khi cài bất cứ thứ gì khác</strong> lên máy.</li>
+        <li data-lang="en"><strong>Foreman's own tools</strong> run on the machine you launch Foreman from. <code>/foreman</code> checks them before every launch, lets <code>npx</code> fetch the ones it can, and <strong>asks you before installing anything else</strong> on your machine.</li>
+        <li data-lang="vi"><strong>Thư viện cho repo của bạn</strong> được engine thêm vào bản build của <em>dự án bạn</em> lúc bắt đầu một lần chạy. Chúng chỉ dùng cho test, không bao giờ đi vào app. Những thư viện <strong>mặc định</strong> được thêm tự động, bạn không cần duyệt, trừ khi <code>PRD.md</code> hoặc <code>DOMAIN.md</code> của bạn cấm thêm dependency. Thư viện tuỳ chọn thì được đề xuất trong checklist bạn duyệt.</li>
+        <li data-lang="en"><strong>Libraries for your repository</strong> are added by the engine to <em>your project's</em> build at the start of a run. They are test-only, never shipped in your app. The <strong>default</strong> ones are added automatically, with nothing for you to approve, unless your <code>PRD.md</code> or <code>DOMAIN.md</code> forbids new dependencies. An opt-in one is proposed in the checklist you approve.</li>
+      </ul>
+      <p class="reveal" data-lang="vi">Một file giữ cả hai danh sách: <code>.harness/loop/dependencies.json</code>.</p>
+      <p class="reveal" data-lang="en">One file holds both lists: <code>.harness/loop/dependencies.json</code>.</p>
+
+      <h3 class="reveal" data-lang="vi">Công cụ của chính Foreman</h3>
+      <h3 class="reveal" data-lang="en">Foreman's own tools</h3>
+      <div class="reveal tablewrap">
+        <table>
+          <thead><tr data-lang="vi"><th>Công cụ</th><th>Foreman dùng để làm gì</th><th>Cần</th><th>Ai cài</th><th>Nguồn</th></tr><tr data-lang="en"><th>Tool</th><th>Why Foreman uses it</th><th>Needed</th><th>Installed by</th><th>Source</th></tr></thead>
+          <tbody>
+            <tr><td>Claude Code CLI</td>
+              <td data-lang="vi">Chạy engine (claude -p, mỗi vòng một lần gọi) và chính skill /foreman.</td><td data-lang="en">Runs the engine (claude -p, one invocation per iteration) and the /foreman skill itself.</td>
+              <td data-lang="vi">bắt buộc</td><td data-lang="en">required</td>
+              <td data-lang="vi">bạn, một lần — <code>/foreman</code> hiện lệnh và hỏi trước</td><td data-lang="en">you, once — <code>/foreman</code> shows the command and asks first</td>
+              <td><a href="https://github.com/anthropics/claude-code" target="_blank" rel="noopener">anthropics/claude-code</a></td></tr>
+            <tr><td>Git</td>
+              <td data-lang="vi">Mỗi Stable Checkpoint là một commit trên nhánh Loop, và mọi Definition of Done cũ được đọc lại từ lịch sử.</td><td data-lang="en">Every Stable Checkpoint is a commit on the Loop Branch, and every earlier Definition of Done is read back from history.</td>
+              <td data-lang="vi">bắt buộc</td><td data-lang="en">required</td>
+              <td data-lang="vi">bạn, một lần — <code>/foreman</code> hiện lệnh và hỏi trước</td><td data-lang="en">you, once — <code>/foreman</code> shows the command and asks first</td>
+              <td><a href="https://github.com/git/git" target="_blank" rel="noopener">git/git</a></td></tr>
+            <tr><td>Windows PowerShell 5.1</td>
+              <td data-lang="vi">Chạy runtime (run.ps1) và các wrapper trong .harness/loop/bin/. Có sẵn trong Windows; repo được liên kết là bản kế nhiệm mã nguồn mở của nó.</td><td data-lang="en">Runs the runtime (run.ps1) and the wrappers in .harness/loop/bin/. Built into Windows; the linked repository is its open-source successor.</td>
+              <td data-lang="vi">bắt buộc</td><td data-lang="en">required</td>
+              <td data-lang="vi">có sẵn trong Windows</td><td data-lang="en">built into Windows</td>
+              <td><a href="https://github.com/PowerShell/PowerShell" target="_blank" rel="noopener">PowerShell/PowerShell</a></td></tr>
+            <tr><td>Node.js (npx)</td>
+              <td data-lang="vi">npx tải và chạy skills CLI cùng Context7 CLI khi cần, nên không phải cài toàn cục.</td><td data-lang="en">npx fetches and runs the skills CLI and the Context7 CLI on demand, so neither is installed globally.</td>
+              <td data-lang="vi">bắt buộc</td><td data-lang="en">required</td>
+              <td data-lang="vi">bạn, một lần — <code>/foreman</code> hiện lệnh và hỏi trước</td><td data-lang="en">you, once — <code>/foreman</code> shows the command and asks first</td>
+              <td><a href="https://github.com/nodejs/node" target="_blank" rel="noopener">nodejs/node</a></td></tr>
+            <tr><td>skills CLI</td>
+              <td data-lang="vi">Cài Foreman vào một repo và cập nhật các skill của Foreman trước mỗi lần chạy.</td><td data-lang="en">Installs Foreman into a repository and updates Foreman's own skills before every launch.</td>
+              <td data-lang="vi">bắt buộc</td><td data-lang="en">required</td>
+              <td data-lang="vi"><code>npx</code> tự tải khi cần</td><td data-lang="en">fetched by <code>npx</code> when needed</td>
+              <td><a href="https://github.com/vercel-labs/skills" target="_blank" rel="noopener">vercel-labs/skills</a></td></tr>
+            <tr><td>Context7 CLI (ctx7)</td>
+              <td data-lang="vi">Sau một lỗi nhắc tới API của một thư viện, engine tra tài liệu mới nhất của thư viện đó trước khi thử lại (ADR-032).</td><td data-lang="en">After a failure that names a library's API, the engine looks up that library's current documentation before retrying (ADR-032).</td>
+              <td data-lang="vi">tuỳ chọn</td><td data-lang="en">optional</td>
+              <td data-lang="vi"><code>npx</code> tự tải khi cần</td><td data-lang="en">fetched by <code>npx</code> when needed</td>
+              <td><a href="https://github.com/upstash/context7" target="_blank" rel="noopener">upstash/context7</a></td></tr>
+            <tr><td>Android SDK Platform-Tools (adb)</td>
+              <td data-lang="vi">foreman-device.ps1 điều khiển điện thoại hoặc emulator qua nó, chỉ trên bản debug (ADR-033). Chỉ cần khi một tiêu chí phải chạy trên thiết bị.</td><td data-lang="en">foreman-device.ps1 drives a phone or emulator through it, on the debug build only (ADR-033). Needed only when a criterion must run on a device.</td>
+              <td data-lang="vi">tuỳ chọn</td><td data-lang="en">optional</td>
+              <td data-lang="vi">bạn, một lần — <code>/foreman</code> hiện lệnh và hỏi trước</td><td data-lang="en">you, once — <code>/foreman</code> shows the command and asks first</td>
+              <td><a href="https://android.googlesource.com/platform/packages/modules/adb" target="_blank" rel="noopener">android.googlesource.com/platform/packages/modules/adb</a></td></tr>
+            <tr><td>Pester</td>
+              <td data-lang="vi">Kiểm thử runtime của chính Foreman. Chỉ dùng khi phát triển Foreman trong repo này; repo consumer không bao giờ cần.</td><td data-lang="en">Tests Foreman's own runtime. Used only when developing Foreman in this repository; a consumer repository never needs it.</td>
+              <td data-lang="vi">tuỳ chọn</td><td data-lang="en">optional</td>
+              <td data-lang="vi">chỉ khi phát triển Foreman</td><td data-lang="en">only for developing Foreman itself</td>
+              <td><a href="https://github.com/pester/Pester" target="_blank" rel="noopener">pester/Pester</a></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3 class="reveal" data-lang="vi">Thư viện Foreman thêm vào repo của bạn</h3>
+      <h3 class="reveal" data-lang="en">Libraries Foreman adds to your repository</h3>
+      <div class="reveal tablewrap">
+        <table>
+          <thead><tr data-lang="vi"><th>Thư viện</th><th>Nền tảng</th><th>Để làm gì</th><th>Mặc định</th><th>Phiên bản</th><th>Nguồn</th></tr><tr data-lang="en"><th>Library</th><th>Stack</th><th>Why</th><th>Default</th><th>Version</th><th>Source</th></tr></thead>
+          <tbody>
+            <tr><td>Roborazzi</td><td>android</td>
+              <td data-lang="vi">Công cụ kiểm UI mặc định của Foreman: chụp màn hình thật của app sau khi bấm và chuyển màn, chạy trên JVM không cần thiết bị, và fail kèm ảnh chuẩn/khác biệt/mới khi màn hình thay đổi (ADR-036).</td><td data-lang="en">Foreman's default UI check: captures the app's real screens after taps and navigation, on the JVM with no device, and fails with a reference/diff/new image when a screen changes (ADR-036).</td>
+              <td data-lang="vi"><strong>mặc định</strong></td><td data-lang="en"><strong>default</strong></td>
+              <td><code>1.76.0</code></td><td><a href="https://github.com/takahirom/roborazzi" target="_blank" rel="noopener">takahirom/roborazzi</a></td></tr>
+            <tr><td>Robolectric</td><td>android</td>
+              <td data-lang="vi">Chạy Activity, fragment, ViewModel và DI thật của app trên JVM, để Roborazzi có cái mà vẽ.</td><td data-lang="en">Runs the app's own Activity, fragments, ViewModels and dependency injection on the JVM, which is what Roborazzi renders.</td>
+              <td data-lang="vi"><strong>mặc định</strong></td><td data-lang="en"><strong>default</strong></td>
+              <td><code>4.17</code></td><td><a href="https://github.com/robolectric/robolectric" target="_blank" rel="noopener">robolectric/robolectric</a></td></tr>
+            <tr><td>AndroidX Test</td><td>android</td>
+              <td data-lang="vi">ActivityScenario khởi chạy Activity thật, và AndroidJUnit4 chạy test dưới Robolectric.</td><td data-lang="en">ActivityScenario launches the real Activity, and AndroidJUnit4 runs the test under Robolectric.</td>
+              <td data-lang="vi"><strong>mặc định</strong></td><td data-lang="en"><strong>default</strong></td>
+              <td><code>1.7.0 / 1.3.0</code></td><td><a href="https://github.com/android/android-test" target="_blank" rel="noopener">android/android-test</a></td></tr>
+            <tr><td>Compose UI Test</td><td>android</td>
+              <td data-lang="vi">Bấm, chờ nội dung và tìm phần tử trên màn hình đang kiểm (androidx.compose.ui:ui-test-junit4, phiên bản theo Compose BOM).</td><td data-lang="en">Taps, waits for content and finds nodes in the screen under test (androidx.compose.ui:ui-test-junit4, versioned by the Compose BOM).</td>
+              <td data-lang="vi"><strong>mặc định</strong></td><td data-lang="en"><strong>default</strong></td>
+              <td><code>Compose BOM</code></td><td><a href="https://github.com/androidx/androidx" target="_blank" rel="noopener">androidx/androidx</a></td></tr>
+            <tr><td>Compose Preview Screenshot Testing</td><td>android</td>
+              <td data-lang="vi">Screenshot test chạy trên máy host của Google cho các composable @Preview. Chỉ là tuỳ chọn, cho preview tĩnh; Roborazzi là mặc định vì nó còn kiểm được màn hình sau khi tương tác.</td><td data-lang="en">Google's host-side screenshot test of @Preview composables. Opt-in only, for static previews; Roborazzi is the default because it also covers screens after interaction.</td>
+              <td data-lang="vi">tuỳ chọn</td><td data-lang="en">opt-in</td>
+              <td><code>AGP 9+</code></td><td><a href="https://android.googlesource.com/platform/tools/base" target="_blank" rel="noopener">android.googlesource.com/platform/tools/base</a></td></tr>
+          </tbody>
+        </table>
+      </div>
     </section>
 
     <!-- ============================================================= STATUS ============================================================= -->
