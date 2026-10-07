@@ -63,6 +63,15 @@ standard it sells:
 - Git Bash rewrites `ref:path` into `ref;path` when the ref contains a slash **and** the path starts
   with a dot-directory — i.e. exactly `loop/<slug>` plus `.harness/**`. Resolve the ref with
   `git rev-parse` first, or prefix `MSYS_NO_PATHCONV=1`.
+- Under `$ErrorActionPreference = "Stop"`, `& git ... 2>$null` **throws** the moment git writes to
+  stderr: PowerShell 5.1 turns native stderr into a terminating error, and `run.ps1` exits 1. Wrap a
+  native call that may fail in `try { } catch { }` and then check `$LASTEXITCODE` (ADR-037).
+- **One permission rule containing a backslash makes Claude Code ignore the whole settings file**, every
+  deny with it, silently. Write rules with forward slashes; match a Windows path with `*` where the
+  separator would be (`*.gradle*caches*`). `run.ps1` refuses such a rule at launch (ADR-037).
+- A process started from a Claude Code session dies with the session: the background time limit, the
+  app closing. Start a long run through WMI (`Invoke-CimMethod Win32_Process Create`), as `/foreman`
+  step 4 does.
 
 ## Lessons from real runs
 
