@@ -141,11 +141,27 @@ exists and differs, ask the user to confirm before overwriting — never overwri
 
 ## 4. Launch the runtime
 
-Run from the repository root, via the Bash tool with `run_in_background: true` (this must not be
-a foreground/blocking call — a full run can exceed the foreground command timeout):
+Start it **outside this session's process tree**, so it outlives the session. A run lasts hours, and
+whatever this session started dies with it: a `run_in_background` command was ended by the tool's
+background time limit 30 minutes into Kanso's Run 1, and a process started from the session died when
+the app closed, in the middle of Kanso's Run 3 (2026-10-07). On Windows, have WMI create the process,
+with no window anyone could close by accident:
 
-- Document-path case: `powershell -File .harness/loop/run.ps1 -PrdPath "<resolved path from step 3>"`
-- Inline-text / existing-PRD.md case: `powershell -File .harness/loop/run.ps1`
+```powershell
+$si = New-CimInstance -ClassName Win32_ProcessStartup -ClientOnly -Property @{ ShowWindow = [uint16]0 }
+Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{
+    CommandLine = 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File .harness/loop/run.ps1 <arguments>'
+    CurrentDirectory = '<the repository root>'
+    ProcessStartupInformation = $si }
+```
+
+with `<arguments>` as follows:
+
+- Document-path case: `-PrdPath "<resolved path from step 3>"`
+- Inline-text / existing-PRD.md case: none
+
+The result's `ProcessId` is the run. Tell the user, so they can stop it: `taskkill /PID <id> /T /F`
+ends the run and the engine it started.
 
 If step 0 found a mode flag, append `-Mode Autonomous` or `-Mode Collaborative`. Without a flag,
 pass no `-Mode` at all — passing one would overwrite a switch the user made with `/foreman mode`.
@@ -159,11 +175,13 @@ Tell the user it started, which mode it is running in (every iteration header in
 Immediately attach a Monitor to the same log file (`tail -f` on the path from step 4), unfiltered,
 with `persistent: true` — a run can take a long time. Every line `run.ps1` writes (iteration
 headers, `engine>` tool-use lines, `engine:` text snippets, `Status:` lines) now streams into the
-conversation live, the same as any other command's output.
+conversation live, the same as any other command's output. The run is not this session's child, so
+its exit reaches no one by itself: in the same Monitor, also poll the `ProcessId` from step 4
+(`tasklist /FI "PID eq <id>"`) and print a line when it is gone.
 
 You do **not** need to keep your own notes of non-blocking findings any more: the engine
-regenerates `.harness/ISSUES.md` every iteration, and that file survives the Cleanup Commit.
-Read it rather than reconstructing it.
+updates `.harness/ISSUES.md` every iteration, carrying every unsigned item over, and that file
+survives the Cleanup Commit. Read it rather than reconstructing it.
 
 Two new stream lines are normal and are **not** failures — do not stop the monitor for either:
 
@@ -171,6 +189,8 @@ Two new stream lines are normal and are **not** failures — do not stop the mon
   until the window resets, then continuing on its own (ADR-012). Tell the user when it resumes.
 - `Crash detected (idle timeout)` / `(hard timeout)` — a hung iteration was killed; the Watchdog
   re-invokes and the next iteration recovers from the last checkpoint.
+- `Timeout (after-result) killed the engine process tree` — the engine had already reported, but
+  something it left running kept its process alive; its status stands and the run goes on.
 - `mode switched: <old> -> <new>` — the user switched the run with `/foreman mode ...`; tell them
   it has taken effect.
 

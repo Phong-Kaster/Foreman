@@ -411,6 +411,13 @@ does not compile at all — changing a signature the third one calls is enough. 
 anything shared, run the command set that covers the whole tree, and say which commands that was.
 "Everything I ran passed" is only evidence if you can name what you did not run.
 
+**A build or test command runs under a time bound, and a hang is a failure.** Start it under
+`timeout <seconds>` (or give the build's test task a timeout), and treat running out of time as a
+failed attempt that names what was running — never as a reason to keep polling. Earned: an iteration
+polled a build log for 35 minutes while one Robolectric test spun forever on a preview that never
+settled, and the Runtime's 20-minute idle bound never fired, because the polling itself kept
+producing events.
+
 ## Capability Risk Classes
 
 - **Low-risk (baseline, permanent, ships with the runtime):** reading repository files; `git status/diff/log/add/commit/checkout/branch` local operations; creating and editing files inside the consumer repository (excluding protected paths).

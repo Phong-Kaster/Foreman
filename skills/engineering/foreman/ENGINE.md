@@ -279,7 +279,7 @@ Update, in one atomic checkpoint commit (code + `.harness/run/` + `.harness/know
 - `HISTORY.md` — one entry for this Iteration
 - `PLAN.md` and `AMENDMENTS.md` if amended
 - `.harness/knowledge/PROJECT.md` for operational discoveries
-- `.harness/ISSUES.md` — regenerated (§10)
+- `.harness/ISSUES.md` — updated (§10)
 
 Commit message: first line `loop(phase-<n>): <what a human would call this>` — a plain summary, not a task id list. Body: what each Worker did, evidence for build/test/lint, and amendments made. Successful evidence lives here; `git log` is the execution history.
 
@@ -379,6 +379,12 @@ It is a **derived cache**. It is never the source of truth, it never accumulates
 - assumptions you recorded for minor ambiguities
 
 No narrative of what succeeded — commit messages carry that. If there are no issues, say so in one line.
+
+**Unsigned items are carried over, never regenerated away.** Every `- [ ]` item already in the file —
+from this run or an earlier one — stays word for word until a person signs it; then tick it in place
+(`- [x]`). The Runtime stops a run whose Iteration lowers the count of open items by more than it
+ticks. Earned: an Iteration regenerated the file from its own run and dropped five items an earlier
+run had left unsigned.
 
 ---
 

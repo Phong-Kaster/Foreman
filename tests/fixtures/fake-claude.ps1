@@ -33,6 +33,13 @@
                                   re-recording a screenshot baseline would, then behaves as
                                   <directive>. Chain it before COMMIT to commit the change.
                                   (e.g. SETMODE:Autonomous|CONTINUE|more work)
+      CLEAR:<path>|<directive> -> rewrites <path> as "# ISSUES" and one line, as Kanso's Run 2
+                                  rewrote .harness/ISSUES.md in 0670172 and dropped five unsigned
+                                  items, then behaves as <directive>
+      TICK:<path>|<directive>  -> ticks every "- [ ]" box in <path>, as closing signed items in
+                                  place would, then behaves as <directive>
+      LINGER|<directive>       -> behaves as <directive>, then stays alive for five minutes after its
+                                  result, as an engine whose background shell hung would
 
     An empty or missing queue writes nothing (a crash), so an unconfigured test fails loudly
     rather than silently looping.
@@ -172,6 +179,20 @@ if ($directive -match '^TOUCH:([^|]+)\|(.+)$') {
     $directive = $Matches[2]
 }
 
+# CLEAR: regenerates an Issues Report from this run's knowledge alone - the field event of Kanso's
+# Run 2 (0670172), which dropped five unsigned items an earlier run had left.
+if ($directive -match '^CLEAR:([^|]+)\|(.+)$') {
+    Set-Content -Path (Join-Path (Get-Location) $Matches[1]) -Value @("# ISSUES", "", "- No abandoned or unreachable tasks.")
+    $directive = $Matches[2]
+}
+
+# TICK: closes every unsigned item in place, the way a signed item is meant to leave.
+if ($directive -match '^TICK:([^|]+)\|(.+)$') {
+    $tickPath = Join-Path (Get-Location) $Matches[1]
+    $directive = $Matches[2]
+    Set-Content -Path $tickPath -Value ((Get-Content $tickPath) -replace '^(\s*[-*]\s+)\[ \]', '$1[x]')
+}
+
 # COMMIT: stands in for the engine's Stable Checkpoint - stage everything and commit, exactly as a
 # real Iteration ends (ENGINE.md 6) - then behaves as the following directive.
 if ($directive -match '^COMMIT\|(.+)$') {
@@ -209,6 +230,11 @@ if ($directive -match '^QUOTA7?:([0-9.]+)\|(.+)$') {
 
 if ($emitQuota) { Emit-RateLimit -FiveHour $fiveHour -SevenDay $sevenDay }
 
+# LINGER: reports, then does not exit - Kanso's engine on 2026-10-07, whose result came while a
+# background shell it had started sat on a malformed heredoc and kept the process alive.
+$linger = $false
+if ($directive -match '^LINGER\|(.+)$') { $linger = $true; $directive = $Matches[1] }
+
 # ---------- reporting directives ----------
 $parts = $directive -split '\|', 2
 $word = $parts[0]
@@ -217,4 +243,5 @@ $reason = if ($parts.Count -gt 1) { $parts[1] } else { "fake-claude stub" }
 Emit-Activity "doing $word work"
 Write-Status -Word $word -Reason $reason
 Emit-Result
+if ($linger) { [Console]::Out.Flush(); Start-Sleep -Seconds 300 }
 exit 0

@@ -76,6 +76,19 @@ if (Test-Path $baselineDir) {
     }
 }
 
+# A baseline committed in git exists whether or not it is on disk right now. Kanso's Run 2, 2026-10-06:
+# the engine deleted two approved baselines and then called this script, which saw them as new and let
+# them be recorded again - deleting first was a way around the human's approval. The committed ones
+# missing from disk are put back from HEAD after recording, unless the human approved them.
+$prefix = $modulePath + "/src/test/screenshots/"
+$missingCommitted = @()
+$committed = & git -C $repoRoot ls-tree -r --name-only HEAD -- ($modulePath + "/src/test/screenshots") 2>$null
+foreach ($path in @($committed)) {
+    if (-not $path -or -not $path.StartsWith($prefix)) { continue }
+    $rel = $path.Substring($prefix.Length)
+    if (-not $before.ContainsKey($rel)) { $missingCommitted += $rel }
+}
+
 $task = ":" + ($Module.Trim(':')) + ":recordRoborazzi" + $Variant
 $gradleArgs = @($task)
 if ($Tests) { $gradleArgs += @("--tests", $Tests) }
@@ -87,6 +100,7 @@ $added = @(); $restored = @(); $rerecorded = @()
 if (Test-Path $baselineDir) {
     foreach ($file in @(Get-ChildItem -Path $baselineDir -Recurse -File)) {
         $rel = Get-RelativePath $file.FullName
+        if ($missingCommitted -contains $rel) { continue }
         if (-not $before.ContainsKey($rel)) { $added += $rel; continue }
         if ((Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash -eq $before[$rel]) { continue }
         if ($approved -contains ($modulePath + "/src/test/screenshots/" + $rel)) { $rerecorded += $rel; continue }
@@ -102,6 +116,12 @@ foreach ($rel in @($before.Keys)) {
         Copy-Item -LiteralPath (Join-Path $saved $rel) -Destination $path -Force
         $restored += $rel
     }
+}
+# A committed baseline that was deleted before recording comes back from HEAD, approved or not on disk.
+foreach ($rel in $missingCommitted) {
+    if ($approved -contains ($prefix + $rel) -and (Test-Path -LiteralPath (Join-Path $baselineDir $rel))) { $rerecorded += $rel; continue }
+    & git -C $repoRoot checkout HEAD -- ($prefix + $rel) 2>$null
+    $restored += $rel
 }
 Remove-Item -LiteralPath $saved -Recurse -Force -ErrorAction SilentlyContinue
 

@@ -36,6 +36,9 @@ param(
     # Idle timeout: no stream event for this long means a hung invocation. Must exceed the longest
     # legitimate single tool call, because one Bash call emits no events while it runs.
     [int]$MaxIdleMinutes = 20,
+    # After the engine has reported its result, how long its process may stay silent before the
+    # Runtime ends it. A background shell it left running keeps the process alive (Kanso, 2026-10-07).
+    [int]$ResultGraceSeconds = 120,
     # Hard timeout: backstop for an invocation that emits events forever without converging.
     [int]$MaxIterationMinutes = 90,
     # Quota ceiling: stop (or wait) at this utilization percentage, on WHICHEVER usage window
@@ -277,7 +280,19 @@ function Compile-PermissionSettings {
         "Bash(*gradlew*recordRoborazzi*)",
         "Bash(*gradlew*RecordRoborazzi*)",
         "Bash(*gradlew*clearRoborazzi*)",
-        "Bash(*gradlew*roborazzi.test.record*)"
+        "Bash(*gradlew*roborazzi.test.record*)",
+        # Gradle state the whole machine shares is never the run's to change. Kanso's Run 3,
+        # 2026-10-07: after a build was killed mid-write, the engine ran `./gradlew --stop`, which
+        # stops every daemon of that Gradle version on the machine, other projects' builds
+        # included, then moved 264 entries and finally the whole transforms directory out of
+        # ~/.gradle/caches. Measured against the real matcher the same day: these deny --stop
+        # through gradlew, `cd &&` and `sh`, and every rm, mv or wrapper call naming the cache in
+        # either slash direction; ordinary builds with --no-daemon still run. No rule here may
+        # contain a backslash: one rule with a backslash makes the CLI ignore the whole settings
+        # file, every other deny with it, silently (measured the same day).
+        "Bash(*gradlew*--stop*)",
+        "Bash(*gradle *--stop*)",
+        "Bash(*.gradle*caches*)"
     )
 
     # Autonomous mode inverts the model (ADR-027): every tool allowed, minus the Deny List shipped in
@@ -307,6 +322,18 @@ function Compile-PermissionSettings {
                 foreach ($rule in $entry.deny) { $denyRules += $rule }
             }
         }
+    }
+
+    # One rule with a backslash in it makes the CLI ignore the whole settings file - every deny above
+    # with it, the Deny List and the protection of DECISIONS.md included - and nothing says so
+    # (measured 2026-10-07: a deny on `git log` stopped working the moment a second rule held
+    # `\caches`). A Windows path in a ledger is the easy way to write one, so refuse to run instead.
+    $backslashed = @(@($allowRules) + @($denyRules) | Where-Object { "$_".Contains('\') })
+    if ($backslashed.Count -gt 0) {
+        $message = "A permission rule contains a backslash, which would make Claude Code ignore every rule: " + ($backslashed -join ", ") + ". Write paths in capability ledgers with forward slashes."
+        Write-Host $message -ForegroundColor Red
+        Write-RunLog $message
+        Stop-Run 4 "FAILED" $message
     }
 
     $settings = @{
@@ -664,6 +691,7 @@ function Invoke-EngineOnce {
     $stdoutFile = Join-Path $env:TEMP ("loop-engine-" + [System.Guid]::NewGuid().ToString("N") + ".out")
     $stderrFile = "$stdoutFile.err"
     $timeoutKind = ""
+    $script:LastResultAt = $null
     # Cleared per invocation. Set only when the process could not be STARTED, which is a different
     # condition from one that started and died - see the classification at the crash block.
     $script:LaunchError = $null
@@ -740,6 +768,15 @@ function Invoke-EngineOnce {
                 Write-Warning ("No engine event for {0} minutes - treating as a hung invocation." -f $MaxIdleMinutes)
                 break
             }
+            # The engine has answered, but its process will not end. Kanso's Run 3, 2026-10-07: the result
+            # came at 16:04:46 while a background shell it had started sat on a malformed heredoc, and the
+            # Runtime would have waited for the 20-minute idle bound. The status file is already written,
+            # so ending the leftover process loses nothing; a missing status is still a crash below.
+            if ($null -ne $script:LastResultAt -and -not $proc.HasExited -and ((Get-Date) - $lastEventAt).TotalSeconds -gt $ResultGraceSeconds) {
+                $timeoutKind = "after-result"
+                Write-Warning ("The engine reported its result but its process did not end within {0} s - ending it." -f $ResultGraceSeconds)
+                break
+            }
             if (((Get-Date) - $IterStart) -gt $hardLimit) {
                 $timeoutKind = "hard"
                 Write-Warning ("Iteration exceeded {0} minutes - hard timeout." -f $MaxIterationMinutes)
@@ -802,7 +839,7 @@ function Read-EngineEvent {
         Register-RateLimit $evt.rate_limit_info
     }
     # Same reasoning as quota: a measurement is not output, so -QuietEngine must not suppress it.
-    if ($evt.type -eq "result") { Register-ResultUsage $evt }
+    if ($evt.type -eq "result") { Register-ResultUsage $evt; $script:LastResultAt = Get-Date }
     if (-not $Stream) { return }
 
     $stamp = "$(Get-Date -Format 'HH:mm:ss') +$(Format-Elapsed $IterStart)"
@@ -1282,10 +1319,27 @@ function Get-PendingDecisions {
 # (ENGINE.md 14.2). $null when the section is missing or holds only its empty table header.
 function Get-AwaitingPerson {
     $issues = [regex]::Replace((Read-RunArtifact ".harness/ISSUES.md"), '(?s)<!--.*?-->', '')
-    # \r? because the engine's files are CRLF on Windows, and $ does not match before a \r.
-    $m = [regex]::Match($issues, '(?ms)^##[ \t]+Awaiting a person[ \t]*\r?$(.*?)(?=^##[ \t]|\z)')
-    if (-not $m.Success) { return $null }
-    $body = $m.Groups[1].Value
+    # Every section whose heading starts "Awaiting a person", at any level. Engines wrote
+    # "## Awaiting a person (unsigned)" (Kanso Run 1) and "### Awaiting a person, Run 3"; the old exact
+    # match on "## Awaiting a person" counted neither, so the page said nothing was waiting while 17
+    # checks were. A section runs to the next heading at its own level or above; one nested inside a
+    # section already taken is part of it, not counted twice. \r? because the files are CRLF.
+    $headings = [regex]::Matches($issues, '(?m)^(#{2,6})[ \t]+(.*?)[ \t]*\r?$')
+    $parts = @(); $takenUntil = -1
+    for ($i = 0; $i -lt $headings.Count; $i++) {
+        $h = $headings[$i]
+        if ($h.Index -lt $takenUntil -or $h.Groups[2].Value -notmatch '^(?i)Awaiting a person') { continue }
+        $level = $h.Groups[1].Value.Length
+        $end = $issues.Length
+        for ($j = $i + 1; $j -lt $headings.Count; $j++) {
+            if ($headings[$j].Groups[1].Value.Length -le $level) { $end = $headings[$j].Index; break }
+        }
+        $start = $h.Index + $h.Length
+        $parts += $issues.Substring($start, $end - $start)
+        $takenUntil = $end
+    }
+    if ($parts.Count -eq 0) { return $null }
+    $body = $parts -join "`n"
     $lines = @($body -split "`r?`n")
     $rows = @($lines | Where-Object { $_ -match '^\s*\|' -and $_ -notmatch '^\s*\|[\s:|-]+\|\s*$' })
     # A ticked box is signed, so it is not waiting; an unticked box or a plain item is.
@@ -1427,7 +1481,13 @@ $script:BaselineSnapshot = $null
 
 function Get-BaselineSnapshot {
     $snapshot = @{}
-    $files = & git ls-files -c -o --exclude-standard -- $BaselinePathspec 2>$null
+    # A git that could not answer is not an empty directory. Kanso's Run 3, 2026-10-07: as the
+    # machine shut the run down, git failed and the guard logged all 16 baselines as removed while
+    # every one was still on disk. And a git that prints an error kills the whole Runtime here,
+    # because Windows PowerShell 5.1 turns a native command's stderr into a terminating error under
+    # ErrorActionPreference Stop. $null means "unknown"; the guard compares nothing this time.
+    try { $files = & git ls-files -c -o --exclude-standard -- $BaselinePathspec 2>$null } catch { return $null }
+    if ($LASTEXITCODE -ne 0) { return $null }
     foreach ($rel in @($files)) {
         if (-not $rel) { continue }
         $full = Join-Path $RepoRoot $rel
@@ -1450,8 +1510,9 @@ function Get-ApprovedBaselines {
 }
 
 function Assert-BaselinesUnmoved {
-    if ($null -eq $script:BaselineSnapshot) { return }
     $now = Get-BaselineSnapshot
+    if ($null -eq $now) { Write-RunLog "baseline guard: git could not list the baselines; nothing compared this time"; return }
+    if ($null -eq $script:BaselineSnapshot) { $script:BaselineSnapshot = $now; return }
     $approved = Get-ApprovedBaselines
     $moved = @(); $gone = @()
     foreach ($rel in @($script:BaselineSnapshot.Keys)) {
@@ -1470,6 +1531,44 @@ function Assert-BaselinesUnmoved {
     $script:BaselineSnapshot = $now
 }
 
+# ---------- Checklist guard ----------
+# An unsigned item in .harness/ISSUES.md is a claim of "done" that nobody has checked yet, and it
+# leaves only by being ticked. Kanso's Run 2 (0670172) regenerated the Issues Report from its own run
+# and dropped five items Run 1 had left unsigned; nothing noticed until a person went looking. The
+# count is what is compared, not the wording: open items may only go down by as many as get ticked.
+$script:ChecklistSnapshot = $null
+
+function Get-ChecklistSnapshot {
+    $path = Join-Path $RepoRoot ".harness/ISSUES.md"
+    $open = @(); $done = 0
+    if (Test-Path $path) {
+        $text = [regex]::Replace((Get-Content $path -Raw -Encoding UTF8), '(?s)<!--.*?-->', '')
+        foreach ($line in ($text -split "`r?`n")) {
+            if ($line -match '^\s*[-*]\s+\[ \]\s*(.*)$') { $open += $Matches[1].Trim() }
+            elseif ($line -match '^\s*[-*]\s+\[[xX]\]') { $done++ }
+        }
+    }
+    return [pscustomobject]@{ Open = $open; Done = $done }
+}
+
+function Assert-ChecklistKept {
+    $now = Get-ChecklistSnapshot
+    if ($null -ne $script:ChecklistSnapshot) {
+        $before = $script:ChecklistSnapshot
+        $lost = ($before.Open.Count - $now.Open.Count) - ($now.Done - $before.Done)
+        if ($lost -gt 0) {
+            $gone = @($before.Open | Where-Object { $now.Open -notcontains $_ })
+            $list = ($gone | ForEach-Object { if ($_.Length -gt 70) { $_.Substring(0, 70) + "..." } else { $_ } }) -join " / "
+            $message = "$lost unsigned item(s) left .harness/ISSUES.md without being ticked: $list"
+            Write-Host $message -ForegroundColor Red
+            Write-RunLog "checklist guard: $message"
+            Stop-Run 4 "FAILED" ($message + ". An unsigned item leaves only by being ticked. Put the items back " +
+                "(git show HEAD~1:.harness/ISSUES.md), then re-run.")
+        }
+    }
+    $script:ChecklistSnapshot = $now
+}
+
 # ---------- The loop ----------
 $consecutiveCrashes = 0
 $quotaWaits = 0
@@ -1480,6 +1579,7 @@ if ($priorIterations -gt 0) {
 }
 
 $script:BaselineSnapshot = Get-BaselineSnapshot
+$script:ChecklistSnapshot = Get-ChecklistSnapshot
 
 try {
 for ($iteration = $priorIterations + 1; $iteration -le $MaxIterations; $iteration++) {
@@ -1516,6 +1616,12 @@ for ($iteration = $priorIterations + 1; $iteration -le $MaxIterations; $iteratio
         $settingsPath = Compile-PermissionSettings
         $claudeArgs += @("--settings", $settingsPath)
     }
+    # No MCP server reaches the engine. Without this it inherits every server the person running
+    # Foreman configured for themselves: measured 2026-10-07 on Kanso's Run 3, 22 servers and 21 MCP
+    # tools, among them a phone-control server that bypasses foreman-device.ps1 (ADR-033) and the
+    # person's connected claude.ai Google Drive. Autonomous mode allows every tool not on the Deny
+    # List, so each one was reachable. Nothing Foreman does needs MCP (library docs: ctx7, ADR-032).
+    $claudeArgs += "--strict-mcp-config"
     # The Iteration is the Orchestrator, and at ENGINE.md 11 it is the Verifier. Pick its tier here:
     # one --model is fixed for the whole invocation, so this is the last moment a choice exists.
     # An explicit -Model still wins - a human overriding the map is not the map being ignored.
@@ -1551,6 +1657,8 @@ for ($iteration = $priorIterations + 1; $iteration -le $MaxIterations; $iteratio
     $status = Read-ExecutionStatus
     # Before anything else reacts to this iteration: a moved baseline is a changed exam.
     Assert-BaselinesUnmoved
+    # ...and an unsigned item that vanished is a question made to disappear.
+    Assert-ChecklistKept
 
     # ---- Quota comes first: it is neither a Crash nor an engineering outcome (ADR-012) ----
     # A rejected invocation never ran, so the Watchdog counter must not move. Checking this before

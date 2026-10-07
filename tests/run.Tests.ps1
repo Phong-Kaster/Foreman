@@ -302,6 +302,24 @@ Describe "run.ps1 timeout bounds (ADR-012)" {
             $exit | Should Be 0
         } finally { Remove-TestRepo -TestRepo $repo }
     }
+
+    # Kanso's Run 3, 2026-10-07: the engine's result came at 16:04:46, but a background shell it had
+    # started sat on a malformed heredoc and kept its process alive. The Runtime would have waited
+    # for the 20-minute idle bound before reading a status that was already written.
+    It "ends an engine that reported its result but whose process lingers, and keeps its status" {
+        $repo = New-TestRepo
+        try {
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("LINGER|DONE|reported, then a shell kept the process alive")
+            $clock = [System.Diagnostics.Stopwatch]::StartNew()
+            $exit = Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "2", "-ResultGraceSeconds", "3")
+            $clock.Stop()
+            $exit | Should Be 0
+            ($clock.Elapsed.TotalSeconds -lt 120) | Should Be $true
+            $log = Get-Content (Join-Path $env:TEMP ("loop-run-" + (Split-Path $repo -Leaf) + ".log")) -Raw
+            $log | Should Match 'Timeout \(after-result\) killed the engine process tree'
+            $log | Should Match '=== Status: DONE ==='
+        } finally { Remove-TestRepo -TestRepo $repo }
+    }
 }
 
 Describe "run.ps1 engine invocation contract" {
@@ -324,6 +342,32 @@ Describe "run.ps1 engine invocation contract" {
         } finally {
             Remove-Item Env:\FAKE_CLAUDE_ARGLOG -ErrorAction SilentlyContinue
             Remove-TestRepo -TestRepo $repo
+        }
+    }
+
+    # Kanso's Run 3, 2026-10-07: the engine process had the owner's phone-control MCP server and
+    # browser server as children, and its init event listed 22 MCP servers - the owner's own, their
+    # plugins' and their claude.ai connectors, Google Drive among them. Autonomous mode allows every
+    # tool not on the Deny List. Measured on the real CLI the same day: --strict-mcp-config with no
+    # --mcp-config leaves 0 servers and 0 MCP tools.
+    It "gives the engine no MCP server of the person running it, in either Run Mode" {
+        foreach ($mode in @("Collaborative", "Autonomous")) {
+            $repo = New-TestRepo
+            try {
+                $argLog = Join-Path $repo "args.txt"
+                $env:FAKE_CLAUDE_ARGLOG = $argLog
+                # Autonomous mode refuses to start without the Deny List (ADR-027).
+                New-Item -ItemType Directory -Path (Join-Path $repo ".harness/loop/capabilities") -Force | Out-Null
+                Copy-Item (Join-Path $RepoRootDir ".harness/loop/capabilities/baseline.json") (Join-Path $repo ".harness/loop/capabilities/baseline.json")
+                Set-FakeClaudeQueue -TestRepo $repo -Directives @("DONE|ok")
+                Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "2", "-Mode", $mode) | Out-Null
+                $recorded = Get-Content $argLog -Raw
+                $recorded | Should Match "--strict-mcp-config"
+                $recorded | Should Not Match "--mcp-config"
+            } finally {
+                Remove-Item Env:\FAKE_CLAUDE_ARGLOG -ErrorAction SilentlyContinue
+                Remove-TestRepo -TestRepo $repo
+            }
         }
     }
 }
@@ -785,6 +829,32 @@ Describe "run.ps1 surfaces an ESCALATE to the human" {
             $html | Should Match 'class="count hot">2<'
             $html | Should Match '<span class="box">'
             $html | Should Match '<span class="box done">'
+        } finally {
+            Remove-TestRepo -TestRepo $repo
+        }
+    }
+
+    # The headings Kanso's engines actually wrote: Run 1 "## Awaiting a person (unsigned)", Run 3 a
+    # "### Awaiting a person, Run 3" nested in another section. The page counted none of them.
+    It "counts every Awaiting-a-person section as the engine titles it, and a nested one once" {
+        $repo = New-TestRepo
+        try {
+            Copy-PageTemplate $repo
+            New-Item -ItemType Directory -Path (Join-Path $repo ".harness") -Force | Out-Null
+            Set-Content -Path (Join-Path $repo ".harness/ISSUES.md") -Value @(
+                "# ISSUES", "", "## Awaiting a person (unsigned)", "",
+                "- [ ] Run 1 12 - the splash, then Home",
+                "- [ ] Run 1 19 - the accent follows the wallpaper", "",
+                "## Awaiting a person", "",
+                "- [ ] 5 Gallery scroll with 2,000 photos", "",
+                "### Awaiting a person, Run 3", "",
+                "- [ ] Run 3 10 - the app looks as it did after Run 2", "",
+                "## Review notes recorded, not fixed", "", "- T-002: a probe class lives in main")
+            Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-Page", "-NoOpenEscalation") | Should Be 0
+            $html = Get-Content (Join-Path $repo "FOREMAN.html") -Raw -Encoding UTF8
+            $html | Should Match 'class="count hot">4<'
+            $html | Should Match 'the accent follows the wallpaper'
+            $html | Should Match 'looks as it did after Run 2'
         } finally {
             Remove-TestRepo -TestRepo $repo
         }
@@ -2087,6 +2157,32 @@ Describe "Roborazzi is the default UI check for Android, and its baselines are o
         } finally { Remove-TestRepo -TestRepo $repo }
     }
 
+    # Kanso's Run 2, 2026-10-06: the engine deleted 16_tool_photo_light.png and 17_tool_photo_dark.png,
+    # approved baselines, then called the wrapper, which recorded them as new. Deleting first was a
+    # way around the human's approval; only the Runtime's guard caught it, and only after the fact.
+    It "puts back a committed baseline deleted before recording, so deleting first gets around nothing" {
+        $repo = New-BaselineRepo
+        try {
+            Set-Content -Path (Join-Path $repo "gradlew.bat") -Encoding ASCII -Value @(
+                "@echo off",
+                "echo rewritten > app\src\test\screenshots\1_library.png",
+                "echo rewritten > app\src\test\screenshots\2_playing.png",
+                "exit /b 0")
+            Remove-Item (Join-Path $repo "app/src/test/screenshots/1_library.png")
+            Remove-Item (Join-Path $repo "app/src/test/screenshots/2_playing.png")
+            Set-Approvals $repo @("app/src/test/screenshots/2_playing.png")
+            Push-Location $repo
+            try {
+                $out = & powershell -NoProfile -ExecutionPolicy Bypass -File $Wrapper -Module app 2>$null | Out-String
+            } finally { Pop-Location }
+            (Get-Content (Join-Path $repo "app/src/test/screenshots/1_library.png") -Raw).Trim() | Should Be "approved library"
+            # The human listed this one, so its re-recording stands even though it was deleted first.
+            (Get-Content (Join-Path $repo "app/src/test/screenshots/2_playing.png") -Raw).Trim() | Should Be "rewritten"
+            $out | Should Match 'new baselines recorded: 0'
+            $out | Should Match 'existing baselines put back unchanged: 1'
+        } finally { Remove-TestRepo -TestRepo $repo }
+    }
+
     It "refuses a module, variant or test filter that could carry shell syntax" {
         $repo = New-BaselineRepo
         try {
@@ -2164,5 +2260,126 @@ Describe "Foreman declares what it installs, for itself and for the consumer, an
         $Deps.consumer.android | Where-Object { $_.default } | ForEach-Object {
             (Test-Path (Join-Path $RepoRootDir $_.pack)) | Should Be $true
         }
+    }
+}
+
+Describe "The engine never changes what other projects on the machine share" {
+    # Kanso's Run 3, 2026-10-07: after a killed build left the global Gradle cache half-written, the
+    # engine ran `./gradlew --stop` (every daemon of that Gradle version on the machine, other
+    # projects' builds included) and moved 264 entries, then the whole transforms directory, out of
+    # ~/.gradle/caches. The same day it showed it inherits the owner's own MCP servers.
+
+    function Get-SettingsFor([string]$repo, [string]$mode) {
+        $argLog = Join-Path $repo "args.txt"
+        $env:FAKE_CLAUDE_ARGLOG = $argLog
+        try {
+            New-Item -ItemType Directory -Path (Join-Path $repo ".harness/loop/capabilities") -Force | Out-Null
+            Copy-Item (Join-Path $RepoRootDir ".harness/loop/capabilities/baseline.json") (Join-Path $repo ".harness/loop/capabilities/baseline.json")
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("DONE|ok")
+            $exit = Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "2", "-Mode", $mode)
+            $recorded = if (Test-Path $argLog) { Get-Content $argLog -Raw } else { "" }
+            return [pscustomobject]@{ Exit = $exit; Args = $recorded }
+        } finally { Remove-Item Env:\FAKE_CLAUDE_ARGLOG -ErrorAction SilentlyContinue }
+    }
+
+    It "denies stopping Gradle daemons and touching the Gradle cache, in both Run Modes" {
+        foreach ($mode in @("Collaborative", "Autonomous")) {
+            $repo = New-TestRepo
+            try {
+                $run = Get-SettingsFor $repo $mode
+                $settingsPath = ($run.Args -split '--settings\s+')[1].Split(' ')[0].Trim()
+                $settings = Get-Content $settingsPath -Raw | ConvertFrom-Json
+                foreach ($rule in @("Bash(*gradlew*--stop*)", "Bash(*gradle *--stop*)", "Bash(*.gradle*caches*)")) {
+                    ($settings.permissions.deny -contains $rule) | Should Be $true
+                }
+            } finally { Remove-TestRepo -TestRepo $repo }
+        }
+    }
+
+    # Measured 2026-10-07: one rule holding a backslash makes the CLI ignore the whole settings file,
+    # so every deny - DECISIONS.md, the Deny List, adb - stops applying, and nothing reports it.
+    It "refuses to run when a ledger rule holds a backslash, instead of silently losing every rule" {
+        $repo = New-TestRepo
+        try {
+            New-Item -ItemType Directory -Path (Join-Path $repo ".harness/knowledge") -Force | Out-Null
+            Set-Content -Path (Join-Path $repo ".harness/knowledge/capabilities.json") -Value '{"entries":[{"intent":"keep the build cache","deny":["Bash(*C:\\Users\\me\\.cache*)"]}]}'
+            $run = Get-SettingsFor $repo "Collaborative"
+            $run.Exit | Should Be 4
+            $run.Args | Should Be ""
+            (Get-Content (Join-Path $env:TEMP ("loop-run-" + (Split-Path $repo -Leaf) + ".log")) -Raw) | Should Match 'backslash'
+        } finally { Remove-TestRepo -TestRepo $repo }
+    }
+
+    It "ships no backslash in any rule of its own" {
+        $baseline = Get-Content (Join-Path $RepoRootDir ".harness/loop/capabilities/baseline.json") -Raw
+        $baseline.Contains('\') | Should Be $false
+        $runtime = Get-Content (Join-Path $RepoRootDir ".harness/loop/run.ps1") -Raw
+        @([regex]::Matches($runtime, '"(?:Bash|Edit|Write|Read)\([^"]*\)"') | Where-Object { $_.Value.Contains('\') }).Count | Should Be 0
+    }
+}
+
+Describe "Nothing a person still has to check disappears, and a git that cannot answer proves nothing" {
+    function New-ChecklistRepo {
+        $repo = New-TestRepo
+        New-Item -ItemType Directory -Path (Join-Path $repo ".harness") -Force | Out-Null
+        Set-Content -Path (Join-Path $repo ".harness/ISSUES.md") -Value @(
+            "# ISSUES", "", "## Awaiting a person", "",
+            "- [ ] Run 1 12 - kill the app, open it from the launcher: the splash, then Home",
+            "- [ ] Run 1 22 - back from a tool goes Home; back again closes the app")
+        Push-Location $repo
+        try {
+            & git add -A 2>$null | Out-Null
+            & git -c user.email=t@l -c user.name=t commit --quiet -m "an earlier run left two unsigned items" 2>$null | Out-Null
+        } finally { Pop-Location }
+        return $repo
+    }
+
+    # Kanso's Run 2, 0670172: the Issues Report was regenerated from the run's own knowledge and the
+    # five items Run 1 had left unsigned were gone. Nobody noticed until the owner went looking.
+    It "stops a run whose iteration drops unsigned items from ISSUES.md" {
+        $repo = New-ChecklistRepo
+        try {
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("CLEAR:.harness/ISSUES.md|COMMIT|CONTINUE|regenerated the report", "DONE|never reached")
+            Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "3") | Should Be 4
+            $log = Get-Content (Join-Path $env:TEMP ("loop-run-" + (Split-Path $repo -Leaf) + ".log")) -Raw
+            $log | Should Match 'checklist guard: 2 unsigned item\(s\) left \.harness/ISSUES\.md without being ticked'
+            $log | Should Match 'Run 1 12 - kill the app'
+        } finally { Remove-TestRepo -TestRepo $repo }
+    }
+
+    It "lets an item leave by being ticked in place" {
+        $repo = New-ChecklistRepo
+        try {
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("TICK:.harness/ISSUES.md|COMMIT|DONE|the person signed both")
+            Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "2") | Should Be 0
+        } finally { Remove-TestRepo -TestRepo $repo }
+    }
+
+    It "has ENGINE.md carry unsigned items over instead of regenerating them away" {
+        $engine = Get-Content (Join-Path $RepoRootDir ".harness/loop/ENGINE.md") -Raw
+        $engine | Should Match 'Unsigned items are carried over, never regenerated away'
+        $engine | Should Not Match 'ISSUES\.md` — regenerated'
+    }
+
+    # Kanso's Run 3, 2026-10-07: the machine was shutting the run down, git failed, and the guard
+    # logged all 16 baselines as removed while every one was still on disk.
+    It "does not report baselines as removed when git cannot list them" {
+        $repo = New-TestRepo
+        try {
+            $dir = Join-Path $repo "app/src/test/screenshots"
+            New-Item -ItemType Directory -Path $dir -Force | Out-Null
+            Set-Content -Path (Join-Path $dir "1_home.png") -Value "approved home" -Encoding ASCII
+            Push-Location $repo
+            try {
+                & git add -A 2>$null | Out-Null
+                & git -c user.email=t@l -c user.name=t commit --quiet -m "approved baseline" 2>$null | Out-Null
+            } finally { Pop-Location }
+            # Overwriting the index with text makes `git ls-files` fail (appending a byte does not).
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("CLEAR:.git/index|CONTINUE|git is broken now", "DONE|ok")
+            Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "3") | Out-Null
+            $log = Get-Content (Join-Path $env:TEMP ("loop-run-" + (Split-Path $repo -Leaf) + ".log")) -Raw
+            $log | Should Not Match 'baseline guard: removed'
+            $log | Should Match 'baseline guard: git could not list the baselines'
+        } finally { Remove-TestRepo -TestRepo $repo }
     }
 }
