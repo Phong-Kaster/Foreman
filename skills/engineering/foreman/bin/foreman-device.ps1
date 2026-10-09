@@ -214,8 +214,26 @@ function Get-UiDump {
 # app's screen: focus can move between the check and the dump.
 function Assert-DumpIsOurs($doc) {
     $allowed = @($script:Pkg) + $DialogPackages + @("com.android.systemui")
-    $foreign = @($doc.SelectNodes("//node") | ForEach-Object { $_.GetAttribute("package") } | Where-Object { $_ -and ($allowed -notcontains $_) } | Select-Object -Unique)
+    $packages = @($doc.SelectNodes("//node") | ForEach-Object { $_.GetAttribute("package") } | Where-Object { $_ } | Select-Object -Unique)
+    $foreign = @($packages | Where-Object { $allowed -notcontains $_ })
     if ($foreign.Count -gt 0) { Deny "the screen changed to $($foreign -join ', ') while it was being read; nothing was kept." }
+    # com.android.systemui is allowed for the bars, but the notification shade and quick settings are
+    # systemui too. Kanso's Run 4, 2026-10-09: a person pulled the shade down between the focus check
+    # and the dump, every node in the file was systemui, and the owner's notifications - email
+    # senders, a bank notice - passed this check. A dump of the app holds at least one of its nodes.
+    $own = @($packages | Where-Object { (@($script:Pkg) + $DialogPackages) -contains $_ })
+    if ($own.Count -eq 0) { Deny "nothing on the screen belonged to $($script:Pkg) - it was the system's (the notification shade?) while it was being read; nothing was kept." }
+}
+
+# Focus checked again once the screen has been read: focus can move during the read, and what was read
+# after it moved is not the app's.
+function Assert-StillOurs([string]$discard) {
+    $focus = Get-FocusPackage
+    if ((@($script:Pkg) + $DialogPackages) -notcontains $focus) {
+        if ($discard -and (Test-Path -LiteralPath $discard)) { Remove-Item -LiteralPath $discard -Force }
+        if (-not $focus) { $focus = "nothing" }
+        Deny "the screen moved to $focus while it was being read; nothing was kept."
+    }
 }
 
 function Find-TargetNode($doc, [string[]]$owners) {
@@ -353,6 +371,7 @@ switch ($Op) {
         Assert-Focus -AllowDialog | Out-Null
         $dump = Get-UiDump
         Assert-DumpIsOurs $dump[1]
+        Assert-StillOurs ""
         if ($Out) { $path = Assert-InsideRepo $Out "dump"; Set-Content -Path $path -Value $dump[0] -Encoding UTF8; Write-Output $path }
         else { Write-Output $dump[0] }
     }
@@ -365,6 +384,7 @@ switch ($Op) {
         $pulled = $script:AdbExit
         Invoke-Adb @("shell", "rm", "-f", "/sdcard/foreman-shot.png") -Quiet | Out-Null
         if ($pulled -ne 0) { Broke "the screenshot could not be copied off the device." }
+        Assert-StillOurs $path
         Write-Output $path
     }
 

@@ -422,8 +422,11 @@ function Test-DoneCandidate {
         foreach ($line in @(Get-Content $StateFile)) {
             # Tolerates the bold/colon shapes STATE.md actually uses: "**DONE-candidate:** yes",
             # "- DONE-candidate: yes". Only space, colon and asterisk may sit between the two words,
-            # so "DONE-candidate: no" cannot match.
-            if ($line -match '(?i)DONE-candidate[\s:*]*yes') { return $true }
+            # so "DONE-candidate: no" cannot match. A PARTIAL-candidate (ENGINE.md 14.4) is the same
+            # signal: the next invocation is the Verifier. Missing it ran the final Verifier of Kanso's
+            # Runs 1, 2 and 4 at the Fast tier (TELEMETRY.tsv: fast, sonnet), against POLICIES.md's
+            # "Always Capable, no exception".
+            if ($line -match '(?i)(DONE|PARTIAL)-candidate[\s:*]*yes') { return $true }
         }
     } catch { }
     return $false

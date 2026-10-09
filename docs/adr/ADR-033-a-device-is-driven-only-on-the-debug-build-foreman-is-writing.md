@@ -123,3 +123,10 @@ a dump were all refused — the rule meeting the case it exists for, unplanned.
   `com.android.permissioncontroller:id/permission_allow_button` found no node. Whether the resource-id
   differs on that image or the other harness had changed the screen was not established, because the
   check stopped as soon as the emulator was found to be shared.
+
+**Found in the field, 2026-10-09 (Kanso Run 4):** allowing `com.android.systemui` for the bars also
+allowed the notification shade, which is the same package. A person pulled the shade down between the
+focus check and the dump, every node in the dump was `systemui`, and the owner's notifications (email
+senders, a bank notice) passed the check. The engine caught it and deleted the file before any commit.
+The wrapper now refuses a dump that holds no node of the app or its dialog. It also reads focus again
+after every dump and screenshot, and keeps nothing when the screen moved while it was read.
