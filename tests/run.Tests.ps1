@@ -735,6 +735,29 @@ Describe "run.ps1 pins the top-level Iteration's Model Tier" {
         }
     }
 
+    # Kanso's Runs 1, 2 and 4 ended Autonomous runs through a PARTIAL-candidate (ENGINE.md 14.4), and
+    # their final Verifier ran at the Fast tier (TELEMETRY.tsv: fast, sonnet) - the same Verifier.
+    It "raises the Verifier iteration to Capable for a PARTIAL-candidate too, in the shape Kanso's STATE.md used" {
+        $repo = New-TestRepo
+        try {
+            Set-TestModels -TestRepo $repo
+            New-Item -ItemType Directory -Path (Join-Path $repo ".harness/run") -Force | Out-Null
+            Set-Content -Path (Join-Path $repo ".harness/run/STATE.md") -Value @(
+                "- **DONE-candidate:** no",
+                "- **PARTIAL-candidate:** yes (Autonomous mode, ENGINE 14.4): every task is complete, but two criteria need a person")
+            $argLog = Join-Path $repo "args.txt"
+            $env:FAKE_CLAUDE_ARGLOG = $argLog
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("DONE|ok")
+            Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "2") | Out-Null
+            $recorded = Get-Content $argLog -Raw
+            $recorded | Should Match "tier-capable"
+            $recorded | Should Not Match "tier-fast"
+        } finally {
+            Remove-Item Env:\FAKE_CLAUDE_ARGLOG -ErrorAction SilentlyContinue
+            Remove-TestRepo -TestRepo $repo
+        }
+    }
+
     It "raises the Verifier iteration to Capable when STATE.md records a DONE-candidate" {
         $repo = New-TestRepo
         try {
