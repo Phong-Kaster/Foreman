@@ -1597,6 +1597,12 @@ Describe "The device wrapper acts only on the debug build of this repository (AD
 <?xml version='1.0' encoding='UTF-8' standalone='yes' ?><hierarchy rotation="0"><node index="0" text="Secret message from Bob" resource-id="com.whatsapp:id/message" class="android.widget.TextView" package="com.whatsapp" content-desc="" focused="false" bounds="[0,0][1080,2400]" /></hierarchy>
 '@
 
+    # What Kanso's Run 4 dumped on 2026-10-09 when the shade came down: every node systemui, carrying
+    # the owner's notifications. Made-up content here; the real one held email senders and a bank notice.
+    $ShadeScreen = @'
+<?xml version='1.0' encoding='UTF-8' standalone='yes' ?><hierarchy rotation="0"><node index="0" text="" resource-id="com.android.systemui:id/notification_stack_scroller" class="android.view.ViewGroup" package="com.android.systemui" content-desc="" focused="false" bounds="[0,0][1080,2400]"><node index="0" text="Example Bank: card ending 0000 was charged" resource-id="com.android.systemui:id/notification_text" class="android.widget.TextView" package="com.android.systemui" content-desc="" focused="false" bounds="[40,300][1040,380]" /></node></hierarchy>
+'@
+
     function New-AppRepo([switch]$Unbuilt) {
         $repo = New-TestRepo
         # What a Gradle debug build leaves behind, plus the test APK, which is not the app.
@@ -1636,7 +1642,7 @@ Describe "The device wrapper acts only on the debug build of this repository (AD
         $env:FAKE_ADB_FOCUS = $focus
     }
     function Clear-FakeAdb([string]$repo) {
-        foreach ($v in @("FAKE_ADB_LOG", "FAKE_ADB_DEVICES", "FAKE_ADB_INSTALLED", "FAKE_ADB_DEBUGGABLE", "FAKE_ADB_FOCUS", "FAKE_ADB_UIXML", "FAKE_ADB_NOTIF", "FAKE_ADB_MEDIA")) {
+        foreach ($v in @("FAKE_ADB_LOG", "FAKE_ADB_DEVICES", "FAKE_ADB_INSTALLED", "FAKE_ADB_DEBUGGABLE", "FAKE_ADB_FOCUS", "FAKE_ADB_FOCUS_AFTER", "FAKE_ADB_UIXML", "FAKE_ADB_NOTIF", "FAKE_ADB_MEDIA")) {
             Remove-Item "Env:\$v" -ErrorAction SilentlyContinue
         }
         Remove-TestRepo -TestRepo $repo
@@ -1725,6 +1731,40 @@ Describe "The device wrapper acts only on the debug build of this repository (AD
             $r = Invoke-Device $repo @("-Op", "dump")
             $r.Code | Should Be 3
             $r.Out | Should Not Match 'Secret message'
+        } finally { Clear-FakeAdb $repo }
+    }
+
+    # Kanso's Run 4, 2026-10-09: focus said the app, the shade came down before the dump, and a dump of
+    # nothing but systemui - the owner's notifications - passed because systemui is allowed for the bars.
+    It "drops a dump that holds nothing of the app, even when all of it is systemui" {
+        $repo = New-AppRepo
+        try {
+            Set-Screen $repo $ShadeScreen "com.example.app"
+            $r = Invoke-Device $repo @("-Op", "dump", "-Out", "shade.xml")
+            $r.Code | Should Be 3
+            $r.Out | Should Not Match 'Example Bank'
+            (Test-Path (Join-Path $repo "shade.xml")) | Should Be $false
+        } finally { Clear-FakeAdb $repo }
+    }
+
+    It "drops a dump or a screenshot when the screen moves away while it is read" {
+        $repo = New-AppRepo
+        try {
+            Set-Screen $repo $OwnScreen "com.example.app"
+            $env:FAKE_ADB_FOCUS_AFTER = "NotificationShade"
+            $r = Invoke-Device $repo @("-Op", "dump", "-Out", "own.xml")
+            $r.Code | Should Be 3
+            (Test-Path (Join-Path $repo "own.xml")) | Should Be $false
+
+            Remove-Item (Join-Path $repo "screen.xml.read") -ErrorAction SilentlyContinue
+            Set-Content -Path (Join-Path $repo "shot.png") -Value "stand-in for what adb pull wrote"
+            $r = Invoke-Device $repo @("-Op", "screenshot", "-Out", "shot.png")
+            $r.Code | Should Be 3
+            (Test-Path (Join-Path $repo "shot.png")) | Should Be $false
+
+            # The same reads, with the app still holding the screen, go through.
+            Remove-Item Env:\FAKE_ADB_FOCUS_AFTER
+            (Invoke-Device $repo @("-Op", "dump", "-Out", "own.xml")).Code | Should Be 0
         } finally { Clear-FakeAdb $repo }
     }
 
