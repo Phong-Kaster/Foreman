@@ -1,14 +1,18 @@
 {
   "_comment": "The Model Tier Map (ADR-013). ENGINE.md and POLICIES.md speak only in tier names ('Fast tier', 'Capable tier') and never a vendor model identifier - this file is the ONE place that mapping lives, so porting to another engine means editing this file, not the specification. The engine can read this file but never write it (covered by the .harness/loop/** deny rule). Human-editable at install or port time.",
 
+  "_comment_effort": "Each tier's effort level (low, medium, high, xhigh, max), passed as --effort. Until ADR-038 the engine read the operator's own settings and inherited their effortLevel; every run so far ran at xhigh that way, so both tiers keep it. Delete the key to use the CLI default.",
+
   "fast": {
     "_comment": "Worker dispatch for tasks classified Fast, and the top-level Iteration in its ordinary orchestrating capacity. NOT the Reviewer and NOT the Verifier.",
     "_why_not_the_cheapest_model": "This tier was 'haiku' for the Calendar-Note alarms run and fired exactly zero times: all 7 of 7 tasks were classified Capable and haiku consumed 6,363 input tokens and one cent across the whole run. A tier the planning roles are never willing to choose is not a tier, it is a comment. The criteria in POLICIES.md were not the problem - they are correctly cautious - so the tier moved to a model that a cautious planner can actually pick for real Kotlin/Compose work.",
-    "model": "sonnet"
+    "model": "sonnet",
+    "effort": "xhigh"
   },
 
   "capable": {
     "_comment": "The Reviewer, the Verifier, all bootstrap fan-out analysis roles (ADR-009), and any Worker whose task was not classified Fast, or that escalated to this tier after a failed Fast-tier attempt.",
-    "model": "opus"
+    "model": "opus",
+    "effort": "xhigh"
   }
 }

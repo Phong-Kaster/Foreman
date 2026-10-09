@@ -155,6 +155,20 @@ Describe "run.ps1 prerequisites" {
             (Test-Path (Join-Path $repo ".harness/run/STATUS.md")) | Should Be $false
         } finally { Remove-TestRepo -TestRepo $repo }
     }
+
+    # Windows PowerShell 5.1 turns a native command's stderr into a terminating error under
+    # ErrorActionPreference Stop, `2>$null` or not (ADR-037). Reproduced 2026-10-08: an origin/HEAD
+    # pointing at a remote branch that is not there made `git rev-list --count origin/main..HEAD` print
+    # an error, and the Runtime exited 1 before the first iteration.
+    It "survives a git that prints an error, such as an origin/HEAD pointing at a missing branch" {
+        $repo = New-TestRepo
+        try {
+            Push-Location $repo
+            try { & git symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main 2>$null | Out-Null } finally { Pop-Location }
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("DONE|ok")
+            Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "2") | Should Be 0
+        } finally { Remove-TestRepo -TestRepo $repo }
+    }
 }
 
 Describe "run.ps1 quota bound (ADR-012)" {
@@ -301,6 +315,30 @@ Describe "run.ps1 timeout bounds (ADR-012)" {
             $exit = Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "5", "-MaxIdleMinutes", "1")
             $exit | Should Be 0
         } finally { Remove-TestRepo -TestRepo $repo }
+    }
+
+    # Kanso's Run 3, 2026-10-07: one Robolectric test spun for 35 minutes on a preview that never
+    # settled; the iteration polled the build log, so the idle bound never fired, and the operator
+    # ended the JVM by hand. Stand-ins carry a Gradle test worker's command line: one of this
+    # repository, one of another project's, which must be left alone.
+    It "ends a Gradle test worker of this repository that runs past its bound, and nobody else's" {
+        $repo = New-TestRepo
+        $mine = $null; $theirs = $null
+        try {
+            $marker = "-Dorg.gradle.internal.worker.tmpdir=$repo\app\build\tmp\testDebugUnitTest\work"
+            $other = "-Dorg.gradle.internal.worker.tmpdir=D:\elsewhere\app\build\tmp\testDebugUnitTest\work"
+            $mine = Start-Process cmd.exe -ArgumentList "/c ping -n 90 127.0.0.1 >nul & rem $marker" -WindowStyle Hidden -PassThru
+            $theirs = Start-Process cmd.exe -ArgumentList "/c ping -n 90 127.0.0.1 >nul & rem $other" -WindowStyle Hidden -PassThru
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("LINGER|DONE|a test in the build never finishes")
+            Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "2", "-ResultGraceSeconds", "8", "-MaxTestWorkerMinutes", "0.02") | Should Be 0
+            $mine.HasExited | Should Be $true
+            $theirs.HasExited | Should Be $false
+            $log = Get-Content (Join-Path $env:TEMP ("loop-run-" + (Split-Path $repo -Leaf) + ".log")) -Raw
+            $log | Should Match "test guard: ended Gradle test worker $($mine.Id) of this repository"
+        } finally {
+            foreach ($p in @($mine, $theirs)) { if ($p -and -not $p.HasExited) { & taskkill /PID $p.Id /T /F 2>$null | Out-Null } }
+            Remove-TestRepo -TestRepo $repo
+        }
     }
 
     # Kanso's Run 3, 2026-10-07: the engine's result came at 16:04:46, but a background shell it had
@@ -641,6 +679,41 @@ Describe "run.ps1 pins the top-level Iteration's Model Tier" {
         param([string]$TestRepo)
         $json = '{ "fast": { "model": "tier-fast" }, "capable": { "model": "tier-capable" } }'
         Set-Content -Path (Join-Path $TestRepo ".harness/loop/models.json") -Value $json
+    }
+
+    # Measured 2026-10-08: by default the engine loaded the operator's six plugins, 92 skills and a
+    # SessionStart hook injecting their personal formatting rules; their effortLevel set the engine's.
+    It "leaves the operator's own settings out, and takes each tier's effort from models.json" {
+        $repo = New-TestRepo
+        try {
+            Set-Content -Path (Join-Path $repo ".harness/loop/models.json") -Value '{ "fast": { "model": "tier-fast", "effort": "high" }, "capable": { "model": "tier-capable", "effort": "xhigh" } }'
+            $argLog = Join-Path $repo "args.txt"
+            $env:FAKE_CLAUDE_ARGLOG = $argLog
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("DONE|ok")
+            Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "2") | Out-Null
+            $recorded = Get-Content $argLog -Raw
+            $recorded | Should Match "--setting-sources project,local"
+            $recorded | Should Match "--effort high"
+            $recorded | Should Match "CLAUDE_CODE_DISABLE_AUTO_MEMORY=1"
+        } finally {
+            Remove-Item Env:\FAKE_CLAUDE_ARGLOG -ErrorAction SilentlyContinue
+            Remove-TestRepo -TestRepo $repo
+        }
+    }
+
+    It "passes no effort when the tier names none, and ignores one that is not an effort level" {
+        $repo = New-TestRepo
+        try {
+            Set-Content -Path (Join-Path $repo ".harness/loop/models.json") -Value '{ "fast": { "model": "tier-fast", "effort": "turbo" }, "capable": { "model": "tier-capable" } }'
+            $argLog = Join-Path $repo "args.txt"
+            $env:FAKE_CLAUDE_ARGLOG = $argLog
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("DONE|ok")
+            Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "2") | Out-Null
+            (Get-Content $argLog -Raw) | Should Not Match "--effort"
+        } finally {
+            Remove-Item Env:\FAKE_CLAUDE_ARGLOG -ErrorAction SilentlyContinue
+            Remove-TestRepo -TestRepo $repo
+        }
     }
 
     It "dispatches an ordinary iteration at the Fast tier from models.json" {
@@ -2344,6 +2417,27 @@ Describe "Nothing a person still has to check disappears, and a git that cannot 
             $log = Get-Content (Join-Path $env:TEMP ("loop-run-" + (Split-Path $repo -Leaf) + ".log")) -Raw
             $log | Should Match 'checklist guard: 2 unsigned item\(s\) left \.harness/ISSUES\.md without being ticked'
             $log | Should Match 'Run 1 12 - kill the app'
+        } finally { Remove-TestRepo -TestRepo $repo }
+    }
+
+    # Counting alone passed an iteration that removed one item and added an unrelated one (ADR-037,
+    # "Not solved"). An item's id has to survive, open or ticked.
+    It "stops a run that swaps an unsigned item for a different one" {
+        $repo = New-ChecklistRepo
+        try {
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("REPLACE:.harness/ISSUES.md:Run 1 12 - kill the app=>Run 9 99 - something else entirely|COMMIT|CONTINUE|swapped", "DONE|never reached")
+            Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "3") | Should Be 4
+            $log = Get-Content (Join-Path $env:TEMP ("loop-run-" + (Split-Path $repo -Leaf) + ".log")) -Raw
+            $log | Should Match 'checklist guard: 1 unsigned item\(s\)'
+            $log | Should Match 'Run 1 12 - kill the app'
+        } finally { Remove-TestRepo -TestRepo $repo }
+    }
+
+    It "lets an item be reworded as long as it keeps its id" {
+        $repo = New-ChecklistRepo
+        try {
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("REPLACE:.harness/ISSUES.md:kill the app=>not driven: close the app fully|COMMIT|DONE|reworded")
+            Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "2") | Should Be 0
         } finally { Remove-TestRepo -TestRepo $repo }
     }
 
