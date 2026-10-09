@@ -40,6 +40,8 @@
                                   place would, then behaves as <directive>
       LINGER|<directive>       -> behaves as <directive>, then stays alive for five minutes after its
                                   result, as an engine whose background shell hung would
+      REPLACE:<path>:<old>=><new>|<directive> -> replaces the text <old> with <new> in <path>, then
+                                  behaves as <directive>
 
     An empty or missing queue writes nothing (a crash), so an unconfigured test fails loudly
     rather than silently looping.
@@ -65,7 +67,7 @@ if ($env:FAKE_CLAUDE_STDINLOG) {
 # Optional: record the exact argument vector run.ps1 passed, so a test can assert the
 # invocation contract (e.g. that the engine spec travels by file, not inline).
 if ($env:FAKE_CLAUDE_ARGLOG) {
-    try { Add-Content -Path $env:FAKE_CLAUDE_ARGLOG -Value ($args -join ' ') } catch {}
+    try { Add-Content -Path $env:FAKE_CLAUDE_ARGLOG -Value (($args -join ' ') + " [env CLAUDE_CODE_DISABLE_AUTO_MEMORY=$($env:CLAUDE_CODE_DISABLE_AUTO_MEMORY)]") } catch {}
 }
 
 # Optional: record the working tree as the engine finds it on entry - what ENGINE.md 6.1 inspects
@@ -184,6 +186,13 @@ if ($directive -match '^TOUCH:([^|]+)\|(.+)$') {
 if ($directive -match '^CLEAR:([^|]+)\|(.+)$') {
     Set-Content -Path (Join-Path (Get-Location) $Matches[1]) -Value @("# ISSUES", "", "- No abandoned or unreachable tasks.")
     $directive = $Matches[2]
+}
+
+# REPLACE: a literal edit, for a report rewritten so one item stands where another was.
+if ($directive -match '^REPLACE:([^:]+):(.+?)=>([^|]*)\|(.+)$') {
+    $replacePath = Join-Path (Get-Location) $Matches[1]
+    $old = $Matches[2]; $new = $Matches[3]; $directive = $Matches[4]
+    Set-Content -Path $replacePath -Value ((Get-Content $replacePath -Raw).Replace($old, $new)) -NoNewline
 }
 
 # TICK: closes every unsigned item in place, the way a signed item is meant to leave.

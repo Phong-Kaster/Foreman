@@ -122,3 +122,7 @@ since its exit no longer reaches the session by itself.
   engine keeps producing events.
 - **Open:** whether `--setting-sources project,local` isolates the plugins and hooks without
   breaking the login or the compiled `--settings`.
+
+**Followed by [ADR-038](./ADR-038-the-engine-runs-on-foremans-settings-alone-and-the-runtime-ends-what-it-would-wait-on-forever.md)**,
+which closes the plugins, skills and hooks, every remaining git call, the swap, the unenforced test
+bound and the unmeasured launch, and keeps the operator's personal memory as the one thing open.

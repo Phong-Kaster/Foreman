@@ -39,6 +39,9 @@ param(
     # After the engine has reported its result, how long its process may stay silent before the
     # Runtime ends it. A background shell it left running keeps the process alive (Kanso, 2026-10-07).
     [int]$ResultGraceSeconds = 120,
+    # A Gradle test JVM of this repository still running after this many minutes is ended, so a test that
+    # never finishes fails the build instead of holding the iteration (Kanso, 2026-10-07).
+    [double]$MaxTestWorkerMinutes = 30,
     # Hard timeout: backstop for an invocation that emits events forever without converging.
     [int]$MaxIterationMinutes = 90,
     # Quota ceiling: stop (or wait) at this utilization percentage, on WHICHEVER usage window
@@ -88,6 +91,18 @@ $TelemetryFile = Join-Path (Join-Path $RepoRoot ".harness") "TELEMETRY.tsv"
 
 $EngineSpecPath = Join-Path $LoopDir "ENGINE.md"
 if (-not (Test-Path $EngineSpecPath)) { Write-Error ".harness/loop/ENGINE.md not found. Run from the consumer repository root."; exit 1 }
+
+# Every `git` below runs through this function, which PowerShell prefers over git.exe. Under
+# ErrorActionPreference Stop, Windows PowerShell 5.1 turns whatever a native command writes to stderr
+# into a terminating error, `2>$null` or not, so one git that failed ended the whole Runtime with
+# exit 1 (reproduced 2026-10-07 with a broken index; ADR-037). Here stderr is only a stream again:
+# the caller's redirection still discards it, and the caller still reads $LASTEXITCODE.
+$script:GitExe = (Get-Command git -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1).Source
+if (-not $script:GitExe) { Write-Error "git was not found on PATH."; exit 1 }
+function git {
+    $ErrorActionPreference = "Continue"
+    & $script:GitExe @args
+}
 
 # The engine creates the Loop Branch from HEAD and persists every checkpoint as a commit, so a
 # repository with no commit yet cannot be worked in at all. Found in the field: a fresh repo with
@@ -379,6 +394,21 @@ function Resolve-TierModel([string]$tier) {
             if ((Test-HasProperty $entry "model") -and "$($entry.model)" -ne "") { return [string]$entry.model }
         }
     } catch { Write-Warning "models.json unreadable ($_). Falling back to the CLI default model." }
+    return ""
+}
+
+# The tier's effort level, or "" for the CLI default. It has to be Foreman's to set: the engine no
+# longer reads the operator's own settings (ADR-038), which is where it used to come from.
+function Resolve-TierEffort([string]$tier) {
+    if (-not (Test-Path $ModelsPath)) { return "" }
+    try {
+        $map = Get-Content $ModelsPath -Raw | ConvertFrom-Json
+        if ((Test-HasProperty $map $tier) -and (Test-HasProperty $map.$tier "effort")) {
+            $effort = "$($map.$tier.effort)"
+            if ($effort -match '^(low|medium|high|xhigh|max)$') { return $effort }
+            if ($effort -ne "") { Write-Warning "models.json: '$effort' is not an effort level. Using the CLI default." }
+        }
+    } catch { }
     return ""
 }
 
@@ -680,6 +710,29 @@ function Remove-EmptyRunDir {
     Remove-Item -LiteralPath $RunDir -Force
 }
 
+# ---------- Hung test workers ----------
+# One Robolectric test spun for 35 minutes at 100% of a core on a preview that never settled (Kanso's
+# Run 3, 2026-10-07). The iteration kept polling the build log, so the idle bound never fired, and the
+# operator ended the JVM by hand. This ends a Gradle test worker of THIS repository - its work
+# directory sits under the repository and under a test task's build/tmp - once it has run longer than
+# -MaxTestWorkerMinutes; the build then fails and names the test. Another project's JVMs never match.
+function Stop-HungTestWorkers {
+    $root = ($RepoRoot -replace '/', '\').TrimEnd('\') + '\'
+    try { $procs = @(Get-CimInstance Win32_Process -ErrorAction Stop | Where-Object { $_.CommandLine }) } catch { return }
+    foreach ($p in $procs) {
+        $cmd = $p.CommandLine
+        if ($cmd.IndexOf('-Dorg.gradle.internal.worker.tmpdir=', [StringComparison]::OrdinalIgnoreCase) -lt 0) { continue }
+        if ($cmd.IndexOf($root, [StringComparison]::OrdinalIgnoreCase) -lt 0) { continue }
+        if ($cmd -notmatch '(?i)\\build\\tmp\\[^\\\s]*test[^\\\s]*\\work') { continue }
+        $age = (Get-Date) - $p.CreationDate
+        if ($age.TotalMinutes -le $MaxTestWorkerMinutes) { continue }
+        try { & taskkill /PID $p.ProcessId /T /F 2>$null | Out-Null } catch { }
+        $line = "test guard: ended Gradle test worker $($p.ProcessId) of this repository after $([Math]::Floor($age.TotalMinutes)) min - a test never finished"
+        Write-Warning $line
+        Write-RunLog $line
+    }
+}
+
 # ---------- Engine invocation with idle + hard timeout (ADR-012) ----------
 # Run as a tracked child process rather than a pipeline, so a hung invocation can actually be
 # killed. An engine doing work emits tool_use events continuously; silence is the hang signal -
@@ -692,6 +745,8 @@ function Invoke-EngineOnce {
     $stderrFile = "$stdoutFile.err"
     $timeoutKind = ""
     $script:LastResultAt = $null
+    $lastWorkerCheck = Get-Date
+    $workerCheckSeconds = [Math]::Max(1, [Math]::Min(30, $MaxTestWorkerMinutes * 30))
     # Cleared per invocation. Set only when the process could not be STARTED, which is a different
     # condition from one that started and died - see the classification at the crash block.
     $script:LaunchError = $null
@@ -762,6 +817,11 @@ function Invoke-EngineOnce {
             }
 
             if ($proc.HasExited -and -not $sawOutput) { break }
+
+            if (((Get-Date) - $lastWorkerCheck).TotalSeconds -ge $workerCheckSeconds) {
+                $lastWorkerCheck = Get-Date
+                Stop-HungTestWorkers
+            }
 
             if (((Get-Date) - $lastEventAt) -gt $idleLimit) {
                 $timeoutKind = "idle"
@@ -1538,17 +1598,30 @@ function Assert-BaselinesUnmoved {
 # count is what is compared, not the wording: open items may only go down by as many as get ticked.
 $script:ChecklistSnapshot = $null
 
+# The id an item opens with - "Run 1 12", "5", "Run 3 7" - or $null when it has none. Identity is what
+# lets the guard see an item swapped for another: counting alone passes a swap.
+function Get-ChecklistKey([string]$item) {
+    $t = $item -replace '^[\s*_]+', ''
+    if ($t -match '^((?:Run\s+\d+\s+)?\d+)(?=[\s:.)-]|$)') { return ($Matches[1] -replace '\s+', ' ') }
+    return $null
+}
+
 function Get-ChecklistSnapshot {
     $path = Join-Path $RepoRoot ".harness/ISSUES.md"
-    $open = @(); $done = 0
+    $open = @(); $done = 0; $openKeys = @(); $doneKeys = @()
     if (Test-Path $path) {
         $text = [regex]::Replace((Get-Content $path -Raw -Encoding UTF8), '(?s)<!--.*?-->', '')
         foreach ($line in ($text -split "`r?`n")) {
-            if ($line -match '^\s*[-*]\s+\[ \]\s*(.*)$') { $open += $Matches[1].Trim() }
-            elseif ($line -match '^\s*[-*]\s+\[[xX]\]') { $done++ }
+            if ($line -match '^\s*[-*]\s+\[ \]\s*(.*)$') {
+                $open += $Matches[1].Trim()
+                $key = Get-ChecklistKey $open[-1]; if ($key) { $openKeys += $key }
+            } elseif ($line -match '^\s*[-*]\s+\[[xX]\]\s*(.*)$') {
+                $done++
+                $key = Get-ChecklistKey $Matches[1].Trim(); if ($key) { $doneKeys += $key }
+            }
         }
     }
-    return [pscustomobject]@{ Open = $open; Done = $done }
+    return [pscustomobject]@{ Open = $open; Done = $done; OpenKeys = $openKeys; DoneKeys = $doneKeys }
 }
 
 function Assert-ChecklistKept {
@@ -1556,8 +1629,11 @@ function Assert-ChecklistKept {
     if ($null -ne $script:ChecklistSnapshot) {
         $before = $script:ChecklistSnapshot
         $lost = ($before.Open.Count - $now.Open.Count) - ($now.Done - $before.Done)
+        # An item with an id must still be there, open or ticked, whatever the counts say.
+        $missing = @($before.OpenKeys | Where-Object { $now.OpenKeys -notcontains $_ -and $now.DoneKeys -notcontains $_ })
+        if ($missing.Count -gt $lost) { $lost = $missing.Count }
         if ($lost -gt 0) {
-            $gone = @($before.Open | Where-Object { $now.Open -notcontains $_ })
+            $gone = @($before.Open | Where-Object { $now.Open -notcontains $_ -and ($missing.Count -eq 0 -or $missing -contains (Get-ChecklistKey $_)) })
             $list = ($gone | ForEach-Object { if ($_.Length -gt 70) { $_.Substring(0, 70) + "..." } else { $_ } }) -join " / "
             $message = "$lost unsigned item(s) left .harness/ISSUES.md without being ticked: $list"
             Write-Host $message -ForegroundColor Red
@@ -1622,6 +1698,15 @@ for ($iteration = $priorIterations + 1; $iteration -le $MaxIterations; $iteratio
     # person's connected claude.ai Google Drive. Autonomous mode allows every tool not on the Deny
     # List, so each one was reachable. Nothing Foreman does needs MCP (library docs: ctx7, ADR-032).
     $claudeArgs += "--strict-mcp-config"
+    # Nor does the rest of the operator's own configuration. Measured 2026-10-08 on Claude Code 2.1.292:
+    # by default the engine loaded the person's six plugins, 92 skills, 127 slash commands and their
+    # SessionStart hook, which injects a personal formatting ruleset into every invocation. Without the
+    # user layer: the four built-in plugins, 22 skills, 57 commands, no hook; the login, the deny rules
+    # from --settings, and what `sonnet` and `opus` resolve to are unchanged (ADR-038).
+    $claudeArgs += @("--setting-sources", "project,local")
+    # The user layer was also where auto-memory was turned off. Left on, the engine could carry notes
+    # from one invocation to the next outside the repository, and iterations are stateless (ADR-001).
+    $env:CLAUDE_CODE_DISABLE_AUTO_MEMORY = "1"
     # The Iteration is the Orchestrator, and at ENGINE.md 11 it is the Verifier. Pick its tier here:
     # one --model is fixed for the whole invocation, so this is the last moment a choice exists.
     # An explicit -Model still wins - a human overriding the map is not the map being ignored.
@@ -1636,6 +1721,9 @@ for ($iteration = $priorIterations + 1; $iteration -le $MaxIterations; $iteratio
         $claudeArgs += @("--model", $iterModel)
         Write-RunLog "iteration tier: $iterTier -> $iterModel"
     }
+    # The effort level used to come from the operator's settings; it is the tier's now (models.json).
+    $iterEffort = Resolve-TierEffort $(if (Test-DoneCandidate) { "capable" } else { "fast" })
+    if ($iterEffort -ne "") { $claudeArgs += @("--effort", $iterEffort) }
     # Worker/Reviewer definitions come from .harness/loop/, which is deny-listed against the engine's own
     # edits: a Worker's tool restriction must be enforced by the harness, not by instruction the
     # engine could reason around. Omitting Bash from its tools is what makes "no git, no build,

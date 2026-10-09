@@ -382,8 +382,7 @@ No narrative of what succeeded — commit messages carry that. If there are no i
 
 **Unsigned items are carried over, never regenerated away.** Every `- [ ]` item already in the file —
 from this run or an earlier one — stays word for word until a person signs it; then tick it in place
-(`- [x]`). The Runtime stops a run whose Iteration lowers the count of open items by more than it
-ticks. Earned: an Iteration regenerated the file from its own run and dropped five items an earlier
+(`- [x]`). The Runtime stops a run whose Iteration drops an open item without ticking it. Earned: an Iteration regenerated the file from its own run and dropped five items an earlier
 run had left unsigned.
 
 ---
