@@ -115,6 +115,8 @@ An **Iteration** is *not* one task. It is: reconstruct context from durable arti
 
 Because each iteration is a fresh process, the principle "the agent forgets, the repository doesn't" is **tested every iteration** rather than trusted. If `.harness/run/` were insufficient to resume, iteration 2 would fail visibly — not a rare crash months later ([ADR-002](./adr/ADR-002-stateless-iteration-dumb-runtime.md)).
 
+Inside an iteration, a Worker's cost is its context re-read on every call, so a Worker writes at most six files: a task with a larger scope is dispatched as sequential slices, one fresh Worker each, and every Brief quotes the DoD criteria its task cites so no Worker opens `DoD.md` ([ADR-039](./adr/ADR-039-a-worker-writes-at-most-six-files-and-reads-only-what-it-needs.md)).
+
 ---
 
 ## 5. The status contract

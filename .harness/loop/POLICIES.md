@@ -207,6 +207,8 @@ failure.
 - A Worker's Brief carries the *status* of other tasks, never their content or implementation reasoning, plus pointers to interfaces earlier Phases created. It reads the repository itself when it needs an interface.
 - A Worker's report is a **manifest, not a payload**: files written, behavior now working, what it could not do, what it learned. The Iteration reads the diff from git, never from the report.
 - Scope is verified, not trusted: reported file sets must be pairwise disjoint, contained in their Declared File Scope, and their union must match `git status`. A violation means the plan was wrong to call the tasks independent.
+- **One Worker writes at most 6 files.** A task whose Declared File Scope is larger is dispatched as sequential **slices** of at most 6 files each, one fresh Worker per slice (`ENGINE.md` §6.5). The task, its attempts and its checkpoint stay one; only the Worker context is cut. Earned by Kanso Run 7: T-003 gave one Opus Worker 18 files, its context climbed to 258K in 12 minutes, and it re-read 7.9M cached tokens to write 79K — 94% of the Iteration's cost, and most of a five-hour window (ADR-039).
+- **A Worker reads narrowly.** The Brief quotes the text of every DoD criterion the task cites, so the Worker never opens `DoD.md`. It finds a line with Grep before reading, reads a range rather than a whole file when the file is long, and never re-reads a file it has not changed. Every token read is paid again on every later call of that Worker. The same Worker read `DoD.md` three times and 15 whole files before writing its first line (ADR-039).
 
 ## Verification Class Criteria
 

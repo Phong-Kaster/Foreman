@@ -36,7 +36,8 @@ The login, the deny rules from the compiled `--settings`, and what `sonnet` and 
 come from Foreman:
 
 - Each tier in `models.json` names its effort level, passed as `--effort`. Both tiers are `xhigh`,
-  the level every run so far actually ran at.
+  the level every run so far actually ran at. **Changed by the human, 2026-10-13:** both tiers are now
+  `medium`, after Kanso Run 7's Iteration 3 took a five-hour window from 14% to 95% in 30 minutes.
 - `run.ps1` sets `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` for the engine. The operator had it set; left
   on, the engine could carry notes from one invocation to the next outside the repository, and
   iterations are stateless (ADR-001).
