@@ -230,6 +230,9 @@ For each task in the Phase, dispatch one Worker subagent with a **Worker Brief**
   is exactly what shipped a delete icon rendered invisible against its own background, one commit after
   the trap had been written down correctly.
 - the Reference conventions from `.harness/knowledge/` this task needs — those you may filter
+- the **text** of every DoD criterion the task cites, quoted — never a pointer to `DoD.md` (`POLICIES.md`, Worker Standards)
+
+**A task with more than 6 files of scope is dispatched in slices** (`POLICIES.md`, Worker Standards; ADR-039). Cut its Declared File Scope into slices of at most 6 files, production files before the tests that exercise them, and dispatch one fresh Worker per slice, **sequentially**. Each Brief carries the whole task, its slice as the Declared File Scope, `Slice k of n`, and pointers to the files earlier slices wrote. Slices of one task never run concurrently: a later slice reads what an earlier one wrote. Build and test once, after the last slice. A failure is attributed to the slice whose file it names; re-dispatching that slice is one attempt against the task, and the slice's files are reverted first like any Worker scope.
 
 A Worker **holds no git, build, or test capability**. It edits files and reports back. Its report is a **manifest, not a payload**: the files it wrote, the behavior now working, anything it could not do, anything it learned. You read the diff from git — never from the Worker's report.
 

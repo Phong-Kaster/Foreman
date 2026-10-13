@@ -7,10 +7,18 @@
 
 <!-- Description and acceptance criteria, copied from the task file. -->
 
+- **Slice:** k of n <!-- only when the task's scope exceeds 6 files and is dispatched in slices
+     (ENGINE.md §6.5, ADR-039); omit the line otherwise. -->
 - **Attempt:** N of 3
 - **Model Tier:** Fast | Capable <!-- assigned at planning; escalates to Capable after a failed Fast attempt -->
 - **Previous attempt failed with:** <!-- error tail, when this is a re-dispatch. Your scope has been
      reverted to the last checkpoint, so you are starting clean, not on top of the failed work. -->
+
+## DoD criteria this task cites
+
+<!-- The TEXT of each criterion, quoted from DoD.md - never a pointer to it. The Worker does not open
+     DoD.md: every token it reads is re-sent on every later call (POLICIES.md, Worker Standards). -->
+- **DoD N:** …
 
 ## Library documentation
 
@@ -27,6 +35,9 @@ You may write **only** these files. Writing outside this list is a violation and
 reverted:
 
 - `src/...`
+
+<!-- At most 6 files. When this is one slice of a larger task, list only the slice here and the files
+     earlier slices wrote under Pointers. -->
 
 Files shared with other tasks (navigation tables, route registries, manifests, dependency files) are
 deliberately excluded. The Iteration wires those itself after your work is merged. Do not touch them.
