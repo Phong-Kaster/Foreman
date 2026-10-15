@@ -951,24 +951,27 @@ function Format-Elapsed([datetime]$since) {
 #
 # ENGINE.md 6 requires every non-crashed Iteration to end at "exactly one Stable Checkpoint...
 # persisted as one atomic git commit" - so commits already on the branch ARE the count of
-# iterations already spent, and that count survives a process exit because git does. No new file:
-# the default branch is resolved the same way a human would (origin's HEAD, then a local main or
-# master), and if none can be found the count is 0 - identical to today's behavior, never worse.
-function Resolve-DefaultBranchRef {
-    $ref = & git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>$null
-    if ($LASTEXITCODE -eq 0 -and $ref) { return $ref }
-    foreach ($name in @("main", "master")) {
-        & git show-ref --verify --quiet "refs/heads/$name" 2>$null
-        if ($LASTEXITCODE -eq 0) { return $name }
-    }
-    return $null
-}
+# iterations already spent, and that count survives a process exit because git does. No new file.
+#
+# Counted from the run's own bootstrap, not from the default branch. Counting `main..HEAD` charged
+# a new run for every commit of an earlier run that was never merged: Kanso's Run 8 started on
+# Run 7's unmerged branch at "Iteration 26 / 50" (2026-10-14), half its budget gone before its first
+# iteration. A run is born in the commit that adds .harness/run/DoD.md (Get-DodHistory reads runs
+# the same way), so its iterations are that commit and everything after it. With no DoD at HEAD the
+# run has not bootstrapped - a new goal, or the previous run already cleared - and the count is 0.
+# `git ls-tree` and `git log` print nothing rather than an error for a missing path, which matters
+# under $ErrorActionPreference = "Stop" (ADR-037); the try/catch covers a repo with no commits.
 function Get-PriorIterationCount {
-    $base = Resolve-DefaultBranchRef
-    if (-not $base) { return 0 }
-    $countText = & git rev-list --count "$base..HEAD" 2>$null
-    if ($LASTEXITCODE -ne 0 -or -not $countText) { return 0 }
-    return [int]$countText.Trim()
+    try {
+        $present = & git ls-tree --name-only HEAD -- ".harness/run/DoD.md" 2>$null
+        if ($LASTEXITCODE -ne 0 -or -not $present) { return 0 }
+        $birth = ("" + (& git log -1 --diff-filter=A --format=%H HEAD -- ".harness/run/DoD.md" 2>$null)).Trim()
+        if ($LASTEXITCODE -ne 0 -or -not $birth) { return 0 }
+        $countText = & git rev-list --count "$birth..HEAD" 2>$null
+        if ($LASTEXITCODE -ne 0 -or -not $countText) { return 0 }
+        # The bootstrap commit is the run's first iteration; rev-list excludes it.
+        return [int]$countText.Trim() + 1
+    } catch { return 0 }
 }
 
 # ---------- Stopping, and the Run Report (ADR-027) ----------

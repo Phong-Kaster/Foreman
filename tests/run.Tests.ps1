@@ -581,6 +581,10 @@ Describe "run.ps1 iteration budget survives a restart" {
                 $initialBranch = (& git rev-parse --abbrev-ref HEAD).Trim()
                 if ($initialBranch -ne "main") { & git branch -m $initialBranch main | Out-Null }
                 & git checkout -b loop/restart-budget --quiet | Out-Null
+                # The first checkpoint is the bootstrap: it adds DoD.md, which is where the count
+                # of this run's iterations starts.
+                New-Item -ItemType Directory -Force -Path (Join-Path $repo ".harness/run") | Out-Null
+                Set-Content -Path (Join-Path $repo ".harness/run/DoD.md") -Value "# DoD"
                 1..3 | ForEach-Object {
                     Set-Content -Path (Join-Path $repo "checkpoint-$_.txt") -Value "iteration $_"
                     & git add -A | Out-Null
@@ -595,6 +599,72 @@ Describe "run.ps1 iteration budget survives a restart" {
             Set-FakeClaudeQueue -TestRepo $repo -Directives @("CONTINUE|d")
             $exit = Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "4")
             $exit | Should Be 5
+        } finally { Remove-TestRepo -TestRepo $repo }
+    }
+
+    # Counting `main..HEAD` charged a new run for an earlier run's unmerged commits: Kanso's Run 8
+    # started on Run 7's branch at "Iteration 26 / 50" (2026-10-14). A run's iterations start at the
+    # commit that adds DoD.md, so these two build an earlier run on the branch first.
+
+    It "does not charge a new run for an earlier unmerged run's commits" {
+        $repo = New-TestRepo
+        try {
+            Push-Location $repo
+            try {
+                $initialBranch = (& git rev-parse --abbrev-ref HEAD).Trim()
+                if ($initialBranch -ne "main") { & git branch -m $initialBranch main | Out-Null }
+                & git checkout -b loop/earlier-run --quiet | Out-Null
+                New-Item -ItemType Directory -Force -Path (Join-Path $repo ".harness/run") | Out-Null
+                # The earlier run: bootstrap, four iterations, then its run folder cleared.
+                Set-Content -Path (Join-Path $repo ".harness/run/DoD.md") -Value "# DoD, earlier run"
+                1..5 | ForEach-Object {
+                    Set-Content -Path (Join-Path $repo "earlier-$_.txt") -Value "earlier $_"
+                    & git add -A | Out-Null
+                    & git -c user.email=test@local -c user.name=LoopTest commit --quiet -m "earlier $_" | Out-Null
+                }
+                & git rm -r --quiet .harness/run | Out-Null
+                & git -c user.email=test@local -c user.name=LoopTest commit --quiet -m "clear the earlier run" | Out-Null
+                # The new run: its bootstrap and one more iteration.
+                New-Item -ItemType Directory -Force -Path (Join-Path $repo ".harness/run") | Out-Null
+                Set-Content -Path (Join-Path $repo ".harness/run/DoD.md") -Value "# DoD, new run"
+                1..2 | ForEach-Object {
+                    Set-Content -Path (Join-Path $repo "new-$_.txt") -Value "new $_"
+                    & git add -A | Out-Null
+                    & git -c user.email=test@local -c user.name=LoopTest commit --quiet -m "new $_" | Out-Null
+                }
+            } finally { Pop-Location }
+
+            # Two iterations spent: with a budget of 4, iterations 3 and 4 run and the second ends
+            # DONE. Unfixed, the eight commits since main already exceed the budget: exit 5.
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("CONTINUE|c", "DONE|d")
+            $exit = Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "4")
+            $exit | Should Be 0
+        } finally { Remove-TestRepo -TestRepo $repo }
+    }
+
+    It "starts at iteration 1 when the earlier run was cleared and the new one has not bootstrapped" {
+        $repo = New-TestRepo
+        try {
+            Push-Location $repo
+            try {
+                $initialBranch = (& git rev-parse --abbrev-ref HEAD).Trim()
+                if ($initialBranch -ne "main") { & git branch -m $initialBranch main | Out-Null }
+                & git checkout -b loop/earlier-run --quiet | Out-Null
+                New-Item -ItemType Directory -Force -Path (Join-Path $repo ".harness/run") | Out-Null
+                Set-Content -Path (Join-Path $repo ".harness/run/DoD.md") -Value "# DoD, earlier run"
+                1..3 | ForEach-Object {
+                    Set-Content -Path (Join-Path $repo "earlier-$_.txt") -Value "earlier $_"
+                    & git add -A | Out-Null
+                    & git -c user.email=test@local -c user.name=LoopTest commit --quiet -m "earlier $_" | Out-Null
+                }
+                & git rm -r --quiet .harness/run | Out-Null
+                & git -c user.email=test@local -c user.name=LoopTest commit --quiet -m "clear the earlier run" | Out-Null
+            } finally { Pop-Location }
+
+            # Unfixed, four commits since main exceed a budget of 2 before anything runs: exit 5.
+            Set-FakeClaudeQueue -TestRepo $repo -Directives @("CONTINUE|a", "DONE|b")
+            $exit = Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "2")
+            $exit | Should Be 0
         } finally { Remove-TestRepo -TestRepo $repo }
     }
 
