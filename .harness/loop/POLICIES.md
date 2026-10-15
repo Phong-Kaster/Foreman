@@ -114,8 +114,9 @@ be wrong?**
 - **Constraint** — yes. A trap: "never X here, because Y". Carried **verbatim into every Worker
   Brief**, never filtered (ADR-016). The Fresh-Context Review checks the diff against every one, and
   a violation is a blocking finding rather than an opinion.
-- **Reference** — no. Build commands, layout, naming, conventions. Violating one is untidy. Filtered
-  into a Brief as the task needs.
+- **Reference** — no. Build commands, layout, naming, conventions. Violating one is untidy. Lives in a
+  topic file under `.harness/knowledge/reference/`, never in `PROJECT.md` itself (Knowledge Layout,
+  below); a Brief names the topics its task touches.
 
 Rules that keep the mechanism working:
 
@@ -134,6 +135,32 @@ Rules that keep the mechanism working:
 A Constraint outranks a literal reading of an acceptance criterion. Where they conflict, the Worker
 follows the Constraint and says so — complying with the words while producing something broken is
 not compliance.
+
+## Knowledge Layout
+
+`.harness/knowledge/` survives every run, so whatever it holds is read again by every later run. Kept as
+one file it only grows: Kanso's `PROJECT.md` reached 72 KB by Run 7, 55 KB of it Reference, and every
+Worker that opened it re-sent all 72 KB on each of its later calls (ADR-040). So it is laid out to be read
+in parts:
+
+| File | Holds | Who reads it |
+|---|---|---|
+| `PROJECT.md` | the Constraints, the verified commands, and the **Reference index** | the Iteration, every time |
+| `reference/<topic>.md` | one topic of Reference: a module's conventions, an API digest, an environment fact | whoever's task touches the topic |
+| `DOMAIN.md` | human-owned domain truth | as before |
+| `.harness/archive/` | settled sections of earlier runs' `ISSUES.md` | a person; never the engine |
+
+- **The index is one line per topic:** `reference/<topic>.md` — what it covers — when to read it. A topic
+  nobody can find from the index is lost; a line for a deleted topic misleads.
+- **A topic stays under 12 KB.** Past that, split it by subject. Kanso's `api-digest.md` was 43 KB and the
+  T-003 Worker read it three times for one section.
+- **Name the topic by what a task touches** (`compose-ui.md`, `media-store.md`, `gradle-build.md`), not
+  by when it was learned, so the Iteration can match a task's scope to its topics.
+- **Constraints stay in `PROJECT.md`.** They go verbatim into every Brief, so they are read every time
+  anyway; moving them would hide them.
+
+The read guard enforces the reading side (ADR-040): a subagent may open `reference/` and `DOMAIN.md`,
+never `PROJECT.md` itself, so a Reference left in `PROJECT.md` is invisible to the Workers it was written for.
 
 ### A lesson that is true beyond this repository goes in the Suggestion Box
 
@@ -209,6 +236,13 @@ failure.
 - Scope is verified, not trusted: reported file sets must be pairwise disjoint, contained in their Declared File Scope, and their union must match `git status`. A violation means the plan was wrong to call the tasks independent.
 - **One Worker writes at most 6 files.** A task whose Declared File Scope is larger is dispatched as sequential **slices** of at most 6 files each, one fresh Worker per slice (`ENGINE.md` §6.5). The task, its attempts and its checkpoint stay one; only the Worker context is cut. Earned by Kanso Run 7: T-003 gave one Opus Worker 18 files, its context climbed to 258K in 12 minutes, and it re-read 7.9M cached tokens to write 79K — 94% of the Iteration's cost, and most of a five-hour window (ADR-039).
 - **A Worker reads narrowly.** The Brief quotes the text of every DoD criterion the task cites, so the Worker never opens `DoD.md`. It finds a line with Grep before reading, reads a range rather than a whole file when the file is long, and never re-reads a file it has not changed. Every token read is paid again on every later call of that Worker. The same Worker read `DoD.md` three times and 15 whole files before writing its first line (ADR-039).
+- **A subagent reads only the part of `.harness/` its role was given, and the Runtime enforces it.** A
+  `PreToolUse` hook, `bin/foreman-read-guard.ps1`, refuses a Worker — and any subagent not named below —
+  every file under `.harness/` except `knowledge/reference/` and `knowledge/DOMAIN.md`; a Reviewer also
+  gets `run/evidence/` and `POLICIES.md`; a bootstrap analyst gets all of `.harness/` but the archive. It
+  rewrites a repository-wide Grep to skip `.harness/`. Earned by Kanso Run 7: over five iterations,
+  Workers and Reviewers opened `DoD.md` whole 15 times and `PROJECT.md` 9 times though their Briefs
+  already carried what they needed (ADR-040).
 
 ## Verification Class Criteria
 

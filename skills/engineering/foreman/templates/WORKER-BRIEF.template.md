@@ -64,9 +64,23 @@ deliberately excluded. The Iteration wires those itself after your work is merge
 
 - **Never** ... because ... — evidence: `path/to/File.kt:NN`
 
-## Conventions
+## Reference topics
 
-<!-- The relevant subset of .harness/knowledge/PROJECT.md. -->
+<!-- Paths from PROJECT.md's Reference index, only the topics this task touches. The Worker reads them
+     itself; it cannot open PROJECT.md (ADR-040). -->
+- `.harness/knowledge/reference/<topic>.md` - <what it covers>
+
+## Open issues touching your files
+
+<!-- Every open item of .harness/ISSUES.md that names a file in your scope, quoted with its id. The
+     Worker cannot open ISSUES.md. "None" when there are none. -->
+- none
+
+## What you cannot read
+
+The Runtime's read guard refuses you every file under `.harness/` except the reference topics above and
+`.harness/knowledge/DOMAIN.md`, and a Grep over the repository skips `.harness/` (ADR-040). Everything
+you need from there is in this Brief. If something is missing, say so in your report.
 
 ## Report back
 

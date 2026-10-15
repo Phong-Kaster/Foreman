@@ -307,7 +307,12 @@ function Compile-PermissionSettings {
         # file, every other deny with it, silently (measured the same day).
         "Bash(*gradlew*--stop*)",
         "Bash(*gradle *--stop*)",
-        "Bash(*.gradle*caches*)"
+        "Bash(*.gradle*caches*)",
+        # Settled sections of earlier runs' ISSUES.md, kept for a person (ADR-040). The engine writes
+        # each archive file once, as a new file, and never reads one back: Kanso's ISSUES.md had grown
+        # to 49 KB, 43 KB of it about Runs 3-6, read again by every Iteration.
+        "Read(.harness/archive/**)",
+        "Edit(.harness/archive/**)"
     )
 
     # Autonomous mode inverts the model (ADR-027): every tool allowed, minus the Deny List shipped in
@@ -351,16 +356,29 @@ function Compile-PermissionSettings {
         Stop-Run 4 "FAILED" $message
     }
 
+    # Every Read, Grep and Glob passes the read guard first, which keeps a subagent out of the parts of
+    # .harness/ its role was not given (ADR-040). The hook input names the subagent, so one hook covers
+    # Workers, Reviewers, analysts and any generic agent the engine might dispatch instead. Forward
+    # slashes, like every rule above.
+    $guard = (Join-Path $LoopDir "bin\foreman-read-guard.ps1") -replace '\\', '/'
     $settings = @{
         permissions = @{
             allow = $allowRules
             deny  = $denyRules
         }
+        hooks = @{
+            PreToolUse = @(
+                @{
+                    matcher = "Read|Grep|Glob"
+                    hooks   = @(@{ type = "command"; command = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$guard`"" })
+                }
+            )
+        }
     }
 
     # The compiled settings file is a BUILD artifact: regenerated every iteration, stored outside the repo.
     $settingsPath = Join-Path $env:TEMP ("loop-permissions-" + [System.Guid]::NewGuid().ToString("N") + ".json")
-    $settings | ConvertTo-Json -Depth 5 | Out-File -FilePath $settingsPath -Encoding utf8
+    $settings | ConvertTo-Json -Depth 8 | Out-File -FilePath $settingsPath -Encoding utf8
     return $settingsPath
 }
 
