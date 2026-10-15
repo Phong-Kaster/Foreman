@@ -174,6 +174,8 @@ the run's raw stream (`%TEMP%\loop-run-Kanso.raw.jsonl`, 14 MB) and the reposito
   section at its end. No Iteration of Run 8 applied "a settled earlier run leaves the file for the
   archive", so the cost this ADR removed from `PROJECT.md` is still being paid in `ISSUES.md`.
 
+The whole run is written up in [the Run 8 field trial](../field-trial-2026-10-14-kanso-run-8.md).
+
 **Not solved by this section, recorded so it is not lost:** the analyst's row and the Worker's evidence
 scope need a change to the guard and its tests. The archive step is either unclear in `POLICIES.md` or is
 not reached by an Iteration that has work to do; that needs a reading of Run 8's iterations, not a guess.
