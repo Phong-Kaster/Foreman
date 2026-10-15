@@ -2610,3 +2610,111 @@ Describe "Nothing a person still has to check disappears, and a git that cannot 
         } finally { Remove-TestRepo -TestRepo $repo }
     }
 }
+
+Describe "A subagent reads only the part of .harness/ its role was given (ADR-040)" {
+    # Kanso Run 7, 2026-10-13: across five iterations Workers and Reviewers opened DoD.md whole 15
+    # times and PROJECT.md 9 times, though the Brief already carried what they needed; the T-003
+    # Worker read DoD.md three times before writing a line. The hook input names the subagent
+    # (agent_type) and names nothing on the main engine's own calls - measured on Claude Code 2.1.296.
+    $Guard = Join-Path $RepoRootDir ".harness/loop/bin/foreman-read-guard.ps1"
+    $Root = "D:/consumer"
+
+    function Invoke-Guard([string]$agent, [string]$tool, [hashtable]$toolInput) {
+        $hook = @{ hook_event_name = "PreToolUse"; tool_name = $tool; tool_input = $toolInput; cwd = $Root }
+        if ($agent) { $hook.agent_type = $agent }
+        $errFile = [System.IO.Path]::GetTempFileName()
+        try {
+            $out = ($hook | ConvertTo-Json -Depth 5 -Compress) | & powershell -NoProfile -ExecutionPolicy Bypass -File $Guard 2> $errFile
+            return [pscustomobject]@{ Exit = $LASTEXITCODE; Out = ($out -join "`n"); Err = (Get-Content $errFile -Raw) }
+        } finally { Remove-Item $errFile -Force -ErrorAction SilentlyContinue }
+    }
+
+    It "lets the main engine read anything" {
+        (Invoke-Guard "" "Read" @{ file_path = "$Root/.harness/run/DoD.md" }).Exit | Should Be 0
+    }
+
+    It "refuses a Worker DoD.md, PROJECT.md, ISSUES.md, the run files and the archive, and says where to look" {
+        foreach ($p in @(".harness/run/DoD.md", ".harness/knowledge/PROJECT.md", ".harness/ISSUES.md",
+                         ".harness/run/PLAN.md", ".harness/run/TASKS/T-003.md", ".harness/archive/ISSUES-run-6.md",
+                         ".harness/loop/ENGINE.md")) {
+            $r = Invoke-Guard "loop-worker" "Read" @{ file_path = "$Root/$p" }
+            $r.Exit | Should Be 2
+            $r.Err | Should Match 'read guard'
+        }
+        (Invoke-Guard "loop-worker" "Read" @{ file_path = "$Root/.harness/run/DoD.md" }).Err | Should Match 'quoted in your Brief'
+    }
+
+    It "refuses a Windows path, a relative path and a different letter case the same way" {
+        (Invoke-Guard "loop-worker" "Read" @{ file_path = "D:\consumer\.harness\run\DoD.md" }).Exit | Should Be 2
+        (Invoke-Guard "loop-worker" "Read" @{ file_path = ".harness/run/DoD.md" }).Exit | Should Be 2
+        (Invoke-Guard "loop-worker" "Read" @{ file_path = "$Root/.Harness/Run/dod.MD" }).Exit | Should Be 2
+    }
+
+    It "lets a Worker read the code, the reference topics and DOMAIN.md" {
+        foreach ($p in @("app/src/main/Main.kt", ".harness/knowledge/reference/compose.md", ".harness/knowledge/DOMAIN.md")) {
+            (Invoke-Guard "loop-worker" "Read" @{ file_path = "$Root/$p" }).Exit | Should Be 0
+        }
+    }
+
+    It "holds a generic subagent to the Worker's set, so dispatching one does not dodge the guard" {
+        (Invoke-Guard "general-purpose" "Read" @{ file_path = "$Root/.harness/run/DoD.md" }).Exit | Should Be 2
+        (Invoke-Guard "Explore" "Read" @{ file_path = "$Root/.harness/knowledge/PROJECT.md" }).Exit | Should Be 2
+    }
+
+    It "lets a Reviewer read the evidence and POLICIES.md, but not DoD.md" {
+        (Invoke-Guard "loop-reviewer" "Read" @{ file_path = "$Root/.harness/run/evidence/p1a-run5.log" }).Exit | Should Be 0
+        (Invoke-Guard "loop-reviewer" "Read" @{ file_path = "$Root/.harness/loop/POLICIES.md" }).Exit | Should Be 0
+        (Invoke-Guard "loop-reviewer" "Read" @{ file_path = "$Root/.harness/run/DoD.md" }).Exit | Should Be 2
+    }
+
+    It "lets a bootstrap analyst read the run and knowledge files, but never the archive" {
+        (Invoke-Guard "loop-analyst" "Read" @{ file_path = "$Root/.harness/knowledge/PROJECT.md" }).Exit | Should Be 0
+        (Invoke-Guard "loop-analyst" "Read" @{ file_path = "$Root/.harness/archive/ISSUES-run-6.md" }).Exit | Should Be 2
+    }
+
+    It "refuses a Grep or Glob aimed at .harness/" {
+        (Invoke-Guard "loop-worker" "Grep" @{ pattern = "x"; path = ".harness" }).Exit | Should Be 2
+        (Invoke-Guard "loop-worker" "Glob" @{ pattern = ".harness/**/*.md" }).Exit | Should Be 2
+        (Invoke-Guard "loop-worker" "Grep" @{ pattern = "x"; path = ".harness/knowledge/reference" }).Exit | Should Be 0
+    }
+
+    # Measured: a Worker's pattern-only Grep printed lines of DoD.md, PROJECT.md and the archive.
+    It "rewrites a Worker's repository-wide Grep to skip .harness/, keeping its own glob" {
+        $plain = Invoke-Guard "loop-worker" "Grep" @{ pattern = "SECRET" }
+        $plain.Exit | Should Be 0
+        ($plain.Out | ConvertFrom-Json).hookSpecificOutput.updatedInput.glob | Should Be '!.harness/**'
+        $kt = Invoke-Guard "loop-worker" "Grep" @{ pattern = "SECRET"; glob = "*.kt"; path = "app" }
+        ($kt.Out | ConvertFrom-Json).hookSpecificOutput.updatedInput.glob | Should Be '*.kt,!.harness/**'
+        ($kt.Out | ConvertFrom-Json).hookSpecificOutput.updatedInput.pattern | Should Be 'SECRET'
+        ($kt.Out | ConvertFrom-Json).hookSpecificOutput.PSObject.Properties.Name -contains 'permissionDecision' | Should Be $false
+    }
+
+    It "lets the call through when it cannot read its input, rather than breaking every Read" {
+        $errFile = [System.IO.Path]::GetTempFileName()
+        "not json" | & powershell -NoProfile -ExecutionPolicy Bypass -File $Guard 2> $errFile | Out-Null
+        $LASTEXITCODE | Should Be 0
+        Remove-Item $errFile -Force
+    }
+
+    It "is wired into the engine's settings in both Run Modes, with forward slashes, and keeps the engine out of the archive" {
+        foreach ($mode in @("Collaborative", "Autonomous")) {
+            $repo = New-TestRepo
+            $argLog = Join-Path $repo "args.txt"
+            $env:FAKE_CLAUDE_ARGLOG = $argLog
+            try {
+                New-Item -ItemType Directory -Path (Join-Path $repo ".harness/loop/capabilities") -Force | Out-Null
+                Copy-Item (Join-Path $RepoRootDir ".harness/loop/capabilities/baseline.json") (Join-Path $repo ".harness/loop/capabilities/baseline.json")
+                Set-FakeClaudeQueue -TestRepo $repo -Directives @("DONE|ok")
+                Invoke-RunPs1 -TestRepo $repo -ExtraArgs @("-MaxIterations", "2", "-Mode", $mode) | Out-Null
+                $settingsPath = ((Get-Content $argLog -Raw) -split '--settings\s+')[1].Split(' ')[0].Trim()
+                $settings = Get-Content $settingsPath -Raw | ConvertFrom-Json
+                $entry = @($settings.hooks.PreToolUse)[0]
+                $entry.matcher | Should Be "Read|Grep|Glob"
+                $command = @($entry.hooks)[0].command
+                $command | Should Match 'bin/foreman-read-guard\.ps1'
+                $command.Contains('\') | Should Be $false
+                ($settings.permissions.deny -contains "Read(.harness/archive/**)") | Should Be $true
+            } finally { Remove-Item Env:\FAKE_CLAUDE_ARGLOG -ErrorAction SilentlyContinue; Remove-TestRepo -TestRepo $repo }
+        }
+    }
+}

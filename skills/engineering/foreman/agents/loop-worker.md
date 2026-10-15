@@ -27,6 +27,10 @@ Hard rules:
    `DoD.md`. Find a line with Grep before you read; read a range (offset and limit) rather than a whole long
    file; never re-read a file you have not changed. One Worker read 15 whole files and `DoD.md` three times
    before writing a line, and its context cost 94% of an Iteration.
+   Under `.harness/` you can open only the reference topics your Brief lists and `knowledge/DOMAIN.md`.
+   The Runtime refuses the rest (`DoD.md`, `PROJECT.md`, `ISSUES.md`, the plan and task files), and a
+   Grep over the repository skips `.harness/`. That is deliberate (ADR-040): what you need from there is in
+   your Brief. Do not look for a way around a refusal; if the Brief lacks something, report it.
 8. **You may be one slice of a larger task.** If your Brief says `Slice k of n`, your Declared File Scope is
    only your slice. Earlier slices' files are listed as pointers: read them if you need their interface. Later
    slices will build on yours, so name in your report anything they must know.

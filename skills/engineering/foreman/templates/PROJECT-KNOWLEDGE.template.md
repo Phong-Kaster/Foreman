@@ -34,18 +34,22 @@
 | Unit tests | … | yes/no |
 | Lint | … | yes/no |
 
-## Architecture Conventions
+## Reference index
 
-<!-- Reference, not Constraints: where code goes and what shape it takes. Filtered into a Worker
-     Brief as needed. Violating one is untidy; violating a Constraint is wrong. -->
-- …
+<!-- One line per topic file under .harness/knowledge/reference/ (POLICIES.md, Knowledge Layout;
+     ADR-040). The Reference itself never lives in this file: a subagent cannot open PROJECT.md, so
+     Reference written here is invisible to the Workers it was written for.
 
-## Environmental Facts
+     Reference is what is not a trap: where code goes and what shape it takes (architecture
+     conventions), and hard-won lessons such as JDK/SDK versions, emulator requirements, flaky suites,
+     slow modules, proxy quirks (environmental facts). If ignoring one would make a Worker's result
+     WRONG rather than untidy or slow, it is a Constraint and belongs above.
 
-<!-- Hard-won lessons that are not traps: JDK/SDK versions, emulator requirements, flaky suites,
-     slow modules, proxy quirks. If one of these means a Worker would produce a WRONG result rather
-     than a slow one, it belongs in Constraints instead. -->
-- …
+     Name a topic by what a task touches, keep each under 12 KB, and keep this index current. -->
+| Topic | Covers | Read when |
+|---|---|---|
+| `reference/architecture.md` | … | … |
+| `reference/environment.md` | … | … |
 
 ## Sources Consulted
 

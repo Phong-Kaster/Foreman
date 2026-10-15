@@ -112,7 +112,7 @@ If `.harness/run/` does not exist, this invocation is the Bootstrap. Do not impl
 
    **Then read `.harness/loop/dependencies.json`'s `consumer` entries for the repository's stack.** In an Android app, Roborazzi is the default UI check (ADR-036; read `.harness/loop/packs/android/roborazzi.md`). If the build lacks the `default` entries, adding them is the first task of the first Phase, without asking: the human made them Foreman's standing toolchain (2026-10-05), so they are not an approval item at the DoD gate. Record them in `PROJECT.md`. Only a `PRD.md` or `DOMAIN.md` that forbids new dependencies overrides this, and an entry that is not `default` is proposed in the DoD like any other change. Every screen a criterion names gets a Roborazzi test that drives it to the state the criterion names. You judge its first image yourself, then commit it as the baseline, and `verifyRoborazzi<Variant>` joins the test commands of every Iteration. Earned by Calendar-Note `loop/music-player-v3`, where 12 screen criteria could be driven only at the Verifier gate, on an emulator, because the phone was in use, and the 2026-10-05 spike on the same app, which caught an injected contrast defect on the JVM in 21 s.
 3. **Fan out for analysis, converge to a single author.** For any PRD beyond a couple of tasks, dispatch parallel analysis subagents — one surveying conventions and structure, one proposing DoD criteria, one proposing a task decomposition, one independently critiquing that decomposition (missing tasks, wrong dependencies, tasks not shaped as observable behavior) **and the DoD's Verification Classes** (a criterion classed `machine` that only a person could judge, or a user-facing capability with no `human` criterion at all), and one **conflict analysis** mapping each candidate task to the files it would touch **and proposing a Model Tier per task** (ADR-013, criteria in `POLICIES.md`). The critique role also sanity-checks tier assignments, not only the decomposition — a task misclassified as Fast by the role that proposed it would defeat the point of arm's-length judgment. All fan-out analysis roles dispatch as the read-only **analyst** role defined in `.harness/loop/agents/` (it has no write, edit or shell access, because it proposes and you alone author), and all of them run at the **Capable** tier, being review/planning work. They propose. **You alone write** `DoD.md`, `PLAN.md` and the task files. Never let two contexts author the plan: neither would see the whole, so neither could establish the dependency graph that everything else depends on.
-4. If `.harness/knowledge/` does not exist, create `.harness/knowledge/PROJECT.md` from the template: verified build/test/lint commands (run them to verify where capabilities allow), architecture conventions, environmental facts.
+4. If `.harness/knowledge/` does not exist, create `.harness/knowledge/PROJECT.md` from the template: Constraints, verified build/test/lint commands (run them to verify where capabilities allow), and the Reference index. Architecture conventions and environmental facts go in topic files under `.harness/knowledge/reference/` (`POLICIES.md`, Knowledge Layout).
 5. Create the Loop Branch: `loop/<prd-slug>` from current HEAD.
 6. Generate `.harness/run/` from `.harness/loop/templates/`:
    - `DoD.md` — testable acceptance criteria derived from the PRD. This is the exam the whole run will be
@@ -196,11 +196,19 @@ This file is read exactly once, right here, at the start of the Iteration — ne
 Read `.harness/run/RESUME.md` first: it names the current Stage, the next Phase's tasks with their Declared File Scopes, the queued-decision count, abandoned task ids, the verified build/test commands, and the **resolved Model Tier identifiers** you dispatch with. Then read only what it does not cover:
 
 - the task files **of the current Phase only** — never completed tasks, never future ones
-- `.harness/knowledge/PROJECT.md` for commands and conventions
-- `DoD.md` **only if** you are the Verifier (§11)
+- `.harness/knowledge/PROJECT.md`: its Constraints and its Reference **index**. Open a topic under
+  `.harness/knowledge/reference/` only when a task of this Phase touches it (ADR-040)
+- `DoD.md` **only if** you are the Verifier (§11). Otherwise `RESUME.md` quotes the criteria this Phase
+  cites; if one is missing there, find it in `DoD.md` with Grep by its number — never read the file whole
 - `PLAN.md` **only if** you are re-grouping Phases
 
-Do **not** read `HISTORY.md`, `AMENDMENTS.md`, or the capability ledgers. They are audit and enforcement artifacts, not execution inputs. If `RESUME.md` disagrees with a task file or with git, `RESUME.md` is wrong: correct it and trust the source.
+Do **not** read `HISTORY.md`, `AMENDMENTS.md`, the capability ledgers, or anything under `.harness/archive/`. They are audit and enforcement artifacts, not execution inputs. If `RESUME.md` disagrees with a task file or with git, `RESUME.md` is wrong: correct it and trust the source.
+
+**Before you dispatch anything, check the knowledge layout** (`POLICIES.md`, Knowledge Layout; ADR-040).
+If `PROJECT.md` still holds Reference text rather than an index, or a topic file sits directly under
+`.harness/knowledge/` (anything but `PROJECT.md`, `DOMAIN.md`, `ISSUES.md` and `capabilities.json`), move
+it into `.harness/knowledge/reference/` now, in this Iteration's checkpoint. A subagent cannot read it
+where it is: the read guard allows it only `reference/` and `DOMAIN.md`.
 
 If `STATE.md` records a DONE-candidate, skip to §11.
 
@@ -229,8 +237,15 @@ For each task in the Phase, dispatch one Worker subagent with a **Worker Brief**
   summarised, not judged relevant — you do not get to decide which traps a Worker needs. That judgement
   is exactly what shipped a delete icon rendered invisible against its own background, one commit after
   the trap had been written down correctly.
-- the Reference conventions from `.harness/knowledge/` this task needs — those you may filter
+- the **paths** of the reference topics this task touches (`.harness/knowledge/reference/<topic>.md`), from
+  `PROJECT.md`'s index — those you may filter, and the Worker reads them itself
 - the **text** of every DoD criterion the task cites, quoted — never a pointer to `DoD.md` (`POLICIES.md`, Worker Standards)
+- every open item of `.harness/ISSUES.md` that names a file in its scope, quoted
+
+That is everything a Worker gets from `.harness/`. The Runtime's read guard refuses a subagent every other
+file there — `DoD.md`, `PLAN.md`, `PROJECT.md`, `ISSUES.md`, the task files, the archive — and rewrites a
+repository-wide Grep to skip `.harness/` (ADR-040). A Brief that leaves something out is not repaired by
+the Worker reading it: the refusal tells the Worker it is in the Brief, so put it there.
 
 **A task with more than 6 files of scope is dispatched in slices** (`POLICIES.md`, Worker Standards; ADR-039). Cut its Declared File Scope into slices of at most 6 files, production files before the tests that exercise them, and dispatch one fresh Worker per slice, **sequentially**. Each Brief carries the whole task, its slice as the Declared File Scope, `Slice k of n`, and pointers to the files earlier slices wrote. Slices of one task never run concurrently: a later slice reads what an earlier one wrote. Build and test once, after the last slice. A failure is attributed to the slice whose file it names; re-dispatching that slice is one attempt against the task, and the slice's files are reverted first like any Worker scope.
 
@@ -266,7 +281,7 @@ Give the reviewer the **Constraints** list from `.harness/knowledge/PROJECT.md` 
 the combined diff against every entry. A Constraint violation is a **blocking** finding, not an opinion:
 it is the one review category comparing against a written rule rather than exercising taste.
 
-Spawn a review subagent with a **clean context**, always at the **Capable** tier regardless of the tasks' own tiers — the Reviewer's job is exactly the judgment-heavy work that tier exists for. Give it only: the combined diff, the task descriptions, `DoD.md`, project standards (`POLICIES.md` + `.harness/knowledge/` conventions), and evidence (build/test output). Never give it your implementation reasoning — that reasoning may contain the original mistake. Its findings flow into Reconcile.
+Spawn a review subagent with a **clean context**, always at the **Capable** tier regardless of the tasks' own tiers — the Reviewer's job is exactly the judgment-heavy work that tier exists for. Give it only: the path of the combined diff (write it to `.harness/run/evidence/` first), the task descriptions, the **text** of every DoD criterion the tasks cite **and** of the DoD's Removals section, quoted, the paths of the reference topics the tasks touch, and the paths of the evidence (build/test output under `.harness/run/evidence/`). It reads `.harness/loop/POLICIES.md` for the review standards itself, by section. It cannot open `DoD.md`, `PROJECT.md` or `PLAN.md`: the read guard refuses them (ADR-040), so whatever it needs from them must be in the prompt. Never give it your implementation reasoning — that reasoning may contain the original mistake. Its findings flow into Reconcile.
 
 ## 6.9 Reconcile
 
@@ -281,7 +296,7 @@ Update, in one atomic checkpoint commit (code + `.harness/run/` + `.harness/know
 - `RESUME.md` — regenerated for the next Iteration, including the resolved Model Tier identifiers
 - `HISTORY.md` — one entry for this Iteration
 - `PLAN.md` and `AMENDMENTS.md` if amended
-- `.harness/knowledge/PROJECT.md` for operational discoveries
+- `.harness/knowledge/` for operational discoveries: a Constraint in `PROJECT.md`, anything else in its `reference/` topic, with the index kept current
 - `.harness/ISSUES.md` — updated (§10)
 
 Commit message: first line `loop(phase-<n>): <what a human would call this>` — a plain summary, not a task id list. Body: what each Worker did, evidence for build/test/lint, and amendments made. Successful evidence lives here; `git log` is the execution history.
@@ -329,7 +344,8 @@ Every discovery — build failure, test failure, review finding, hidden dependen
 
 - **No action** (noted in `HISTORY.md`)
 - **Task amendment** (Tier 1, logged)
-- **Knowledge update** (operational truth → `.harness/knowledge/PROJECT.md`). If the discovery is a
+- **Knowledge update** (operational truth → a topic under `.harness/knowledge/reference/`, listed in
+  `PROJECT.md`'s index; `POLICIES.md`, Knowledge Layout). If the discovery is a
   **trap** — something a future Worker could do that would be *wrong* rather than merely untidy — record
   it as a **Constraint** in that file, with its evidence, **in this same checkpoint**. Not next Phase:
   the run that produced this rule had a one-commit window between writing the trap down and violating it.
@@ -364,6 +380,8 @@ Abandonment is not failure of the run. It is how the loop keeps making progress 
 - count of queued decisions, and which tasks they block
 - abandoned and unreachable task ids
 - the verified build / test / lint commands
+- the **text** of every DoD criterion the next Phase's tasks cite, quoted, so the next Iteration can write its Briefs without opening `DoD.md` (ADR-040)
+- every open item of `.harness/ISSUES.md` that names a file in the next Phase's scopes, quoted
 - the Model Tier identifiers resolved from `.harness/loop/models.json` (fast and capable), so a fresh Iteration can dispatch at a task's assigned tier without reading that file itself. Omit these and the tier label survives in the task file while nothing can resolve it: every dispatch inherits the Runtime's `-Model`, Capable-tier work silently runs below Capable, and the Reviewer is downgraded to the builder's model. Observed in the field.
 
 It is a **derived cache**. It is never the source of truth, it never accumulates history, and on any disagreement with the task files or git it is the thing that is wrong. Keep it small: every Iteration pays to read it, and unlike this specification it is not served from a prompt cache.
@@ -387,6 +405,14 @@ No narrative of what succeeded — commit messages carry that. If there are no i
 from this run or an earlier one — stays word for word until a person signs it; then tick it in place
 (`- [x]`). The Runtime stops a run whose Iteration drops an open item without ticking it. Earned: an Iteration regenerated the file from its own run and dropped five items an earlier
 run had left unsigned.
+
+**A settled earlier run leaves the file for the archive** (ADR-040). When `ISSUES.md` holds a section
+about an earlier run, move it to a **new** file `.harness/archive/ISSUES-run-<n>.md`, written once with
+Write and never edited, in the checkpoint that moves it. Only settled content moves: before moving a
+section, carry every `- [ ]` item in it, word for word with its id, into this file's **Awaiting a person**
+section. An open item never reaches the archive; the Runtime's checklist guard stops the run if one does.
+Nothing reads the archive: it is for a person, and the read guard refuses it to every subagent. Earned:
+Kanso's `ISSUES.md` reached 49 KB in Run 7, 43 KB of it about Runs 3–6, read again by every Iteration.
 
 ---
 

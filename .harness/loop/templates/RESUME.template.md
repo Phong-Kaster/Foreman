@@ -17,6 +17,12 @@
 - **Abandoned:** none <!-- task ids -->
 - **Unreachable:** none <!-- task ids, and the abandonment blocking each -->
 - **Verified commands:** build: `...` | test: `...` | lint: `...`
+- **Criteria the next Phase cites (quoted from DoD.md):**
+  <!-- The TEXT, so the next Iteration writes its Briefs without opening DoD.md (ADR-040). -->
+  - **DoD N:** …
+- **Open issues touching the next Phase's files (quoted from ISSUES.md):** none
+  <!-- One line each, with its id. Only items naming a file in a next-Phase scope. -->
+- **Reference topics the next Phase touches:** `reference/<topic>.md`
 - **Model tiers (resolved from `.harness/loop/models.json`):** fast: `<identifier>` | capable: `<identifier>`
   <!-- Resolved here so a fresh Iteration can dispatch at a task's assigned tier without reading
        models.json itself. Without this the tier LABEL survives in the task file but nothing can
