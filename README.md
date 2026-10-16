@@ -10,6 +10,37 @@ That is the whole idea. The rest of this page explains it slowly — small words
 
 📖 **Prefer to read this as a web page?** [**phong-kaster.github.io/Foreman**](https://phong-kaster.github.io/Foreman/) — the same content, bilingual (English / Tiếng Việt), with a navigable sidebar. This README stays the source of truth.
 
+## Contents
+
+- [1. What is it?](#1-what-is-it)
+  - [Explain it like I'm five](#explain-it-like-im-five)
+  - [Now the grown-up version](#now-the-grown-up-version)
+- [2. How to use it](#2-how-to-use-it)
+  - [Before you start](#before-you-start)
+  - [Install once per repository](#install-once-per-repository)
+  - [Then start a run](#then-start-a-run)
+  - [Choosing a mode: collaborative or autonomous](#choosing-a-mode-collaborative-or-autonomous)
+  - [What happens next](#what-happens-next)
+  - [Watching it work](#watching-it-work)
+  - [When it stops — and what to do](#when-it-stops--and-what-to-do)
+  - [Reviewing and merging](#reviewing-and-merging)
+  - [A real run (not a hypothetical)](#a-real-run-not-a-hypothetical)
+  - [When *not* to use it](#when-not-to-use-it)
+- [3. How this repo applies loop engineering](#3-how-this-repo-applies-loop-engineering)
+  - [a) The forgetful builder with a notebook](#a-the-forgetful-builder-with-a-notebook)
+  - [b) A timer that knows four words](#b-a-timer-that-knows-four-words)
+  - [c) The exam you write, and they can't touch](#c-the-exam-you-write-and-they-cant-touch)
+  - [d) Three different minds](#d-three-different-minds)
+  - [e) A keyring where every key has a note on it](#e-a-keyring-where-every-key-has-a-note-on-it)
+  - [And everything leaves a paper trail](#and-everything-leaves-a-paper-trail)
+  - [Word swaps](#word-swaps)
+- [What's in this repo](#whats-in-this-repo)
+  - [What appears in *your* repo when you use it](#what-appears-in-your-repo-when-you-use-it)
+- [What Foreman depends on](#what-foreman-depends-on)
+  - [Foreman's own tools](#foremans-own-tools)
+  - [Libraries Foreman adds to your repository](#libraries-foreman-adds-to-your-repository)
+- [Status](#status)
+
 ---
 
 ## 1. What is it?
